@@ -36,6 +36,7 @@ const ACTIONS = {
   shareInvite: () => navigator.share({ text: `Join ${S.company} accounts: ${$('#inviteLink').value}` }).catch(() => {}),
   disconnect: () => disconnect(),
   importOld: () => importSheet(),
+  howUpdate: () => howUpdateSheet(),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport };
 

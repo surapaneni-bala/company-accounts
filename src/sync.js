@@ -16,7 +16,8 @@ const VALID = {
 };
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
-const OUTDATED_MSG = 'The Google Sheet script needs updating before cash ↔ bank moves can reach the sheet (see the guide: “Updating the sync script”). Everything else is syncing; the moves are kept safe on this device.';
+const OUTDATED_MSG = 'The Google Sheet script needs updating before cash ↔ bank moves can reach the sheet. Everything else is syncing; the moves are kept safe on this device.';
+const SCRIPT_URL = 'https://raw.githubusercontent.com/surapaneni-bala/company-accounts/main/apps-script/Code.gs';
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error
 let syncBusy = false, syncAgain = false, syncTimer = 0;
 
@@ -190,11 +191,26 @@ function syncCard() {
     <button class="btn in" data-act="connect">Connect to Google Sheet 🔒</button></section>`;
   return `<section class="card pad" id="syncCard"><h3>📊 Company Google Sheet</h3>
     <p class="muted">${esc(syncText())}</p>
+    ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>' : ''}
     ${S.link.sheet ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
     <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="syncNow">Sync now</button><button class="btn ghost" data-act="invite">📲 Add a phone 🔒</button></div>
     <p class="center"><button class="link" data-act="disconnect">Disconnect this device 🔒</button></p></section>`;
 }
 
+function howUpdateSheet() {
+  openSheet(`${head('Update the Google Sheet script')}
+    <p class="hint">About 2 minutes, on a computer. Your records are safe while you do this.</p>
+    <ol class="steps">
+      <li>Open your company <b>Google Sheet</b> → menu <b>Extensions → Apps Script</b>.</li>
+      <li>Open the new script: <a href="${SCRIPT_URL}" target="_blank" rel="noopener">new Code.gs</a>. Select all (<b>Ctrl+A</b>, Mac <b>Cmd+A</b>) and copy (<b>Ctrl+C</b> / <b>Cmd+C</b>).</li>
+      <li>In Apps Script click inside the code, select all, press <b>Delete</b>, then paste (<b>Ctrl+V</b> / <b>Cmd+V</b>). Click <b>💾 Save</b>.</li>
+      <li>Click the blue <b>Deploy</b> button → <b>Manage deployments</b> → the ✏️ <b>pencil</b>.</li>
+      <li>Under <b>Version</b> choose <b>New version</b>. Leave “Execute as: Me” and “Who has access: Anyone”. Click <b>Deploy</b>.<br><em>Not “New deployment” — that makes a different link.</em></li>
+      <li>Come back here and tap <b>Sync now</b>.</li>
+    </ol>
+    <p class="note">Check: open your web app link (ends in /exec) in a browser. After the update it shows <b>"version":2</b>.</p>
+    <button class="btn in" data-act="syncNow">Sync now</button>`);
+}
 function connectForm() {
   openSheet(`${head('Connect to Google Sheet')}
     <p class="hint">Do this once, on the main computer. The setup guide shows where to find these two things.</p>

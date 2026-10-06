@@ -14,6 +14,7 @@ const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves',
 const KINDS = ['E', 'R', 'P', 'L', 'S', 'T'];
 const ACCOUNTS = ['Cash', 'Bank'];
 const LOCK_WAIT_MS = 25000;
+const VERSION = 2; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -62,7 +63,7 @@ function setup() {
 
 /* ---------- web app ---------- */
 function doGet() {
-  return json_({ ok: true, app: 'company-accounts' });
+  return json_({ ok: true, app: 'company-accounts', version: VERSION, kinds: KINDS });
 }
 
 // Body: { key, since, push: [{ id, k, u, d }] }  →  { ok, seq, sheet, pull: [{ id, k, u, d }] }
@@ -83,7 +84,7 @@ function doPost(e) {
       sh.getRange(2, 1, result.rows.length, 5).setValues(result.rows);
       rebuild_(ss, result.rows.map(toRec_));
     }
-    return json_({ ok: true, seq: result.seq, sheet: ss.getUrl(), kinds: KINDS, pull: result.pull });
+    return json_({ ok: true, version: VERSION, seq: result.seq, sheet: ss.getUrl(), kinds: KINDS, pull: result.pull });
   } finally {
     lock.releaseLock();
   }
