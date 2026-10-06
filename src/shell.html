@@ -87,17 +87,18 @@ button { font: inherit; color: inherit; }
 .card { background: var(--card); border-radius: var(--r-md); box-shadow: var(--shadow); }
 .pad { padding: 20px; }
 .list { overflow: hidden; }
-.row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; cursor: pointer; transition: background .15s; }
+.row { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 14px 16px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; cursor: pointer; transition: background .15s; }
 .row:first-child { border-top: 0; }
 .row:hover { background: #FAF8F3; }
 .dot { width: 40px; height: 40px; flex: none; border-radius: 13px; display: grid; place-items: center; font-weight: 800; font-size: 22px; }
 .row.out .dot { background: var(--out-soft); color: var(--out); }
 .row.in .dot { background: var(--in-soft); color: var(--in); }
 .main { flex: 1; min-width: 0; }
-.t { display: flex; align-items: center; gap: 6px; font-weight: 700; }
-.tt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.s { display: block; color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.amt { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.t { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-weight: 700; line-height: 1.3; }
+/* long reasons and names wrap onto more lines instead of being cut off */
+.tt { overflow-wrap: anywhere; }
+.s { display: block; color: var(--muted); font-size: 14px; line-height: 1.35; margin-top: 3px; overflow-wrap: anywhere; }
+.amt { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 1px; }
 .row.out .amt { color: var(--out); } .row.in .amt { color: var(--in); }
 .tag { font-style: normal; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 6px; background: var(--paper); color: var(--muted); flex: none; }
 .tag.warn { background: var(--warn-soft); color: var(--warn); }
@@ -117,8 +118,9 @@ button { font: inherit; color: inherit; }
 /* projects */
 .proj { display: block; width: 100%; border: 0; text-align: left; cursor: pointer; padding: 18px; margin-bottom: 12px; transition: transform .2s var(--ease); }
 .proj:hover { transform: translateY(-2px); }
-.ph { display: flex; justify-content: space-between; align-items: center; font-size: 19px; margin-bottom: 12px; }
-.ph b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 19px; margin-bottom: 12px; }
+.ph b:first-child { overflow-wrap: anywhere; } /* the name may wrap anywhere; amounts only between parts, never inside a number */
+.ph b.out { text-align: right; font-variant-numeric: tabular-nums; }
 .chev { color: var(--muted); font-size: 26px; line-height: 1; }
 .bar { height: 10px; border-radius: 99px; background: var(--paper); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--in); border-radius: inherit; }
