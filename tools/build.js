@@ -9,7 +9,7 @@ const root = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(root, 'src', f), 'utf8');
 const out = path.join(root, 'docs');
 
-const js = ['core.js', 'sync.js', 'import.js', 'main.js'].map(read).join('\n');
+const js = ['core.js', 'sync.js', 'import.js', 'update.js', 'main.js'].map(read).join('\n');
 const page = read('shell.html').replace('<!--APP-->', () => `<script>\n${js}</script>`);
 const version = crypto.createHash('sha256').update(page).digest('hex').slice(0, 10);
 const html = page.replace('__VERSION__', version);
@@ -17,5 +17,6 @@ const html = page.replace('__VERSION__', version);
 fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(path.join(out, 'index.html'), html);
 fs.writeFileSync(path.join(out, 'sw.js'), read('sw.js').replace('__VERSION__', version));
+fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify({ version }) + '\n'); // the app asks for this to spot updates
 for (const f of ['manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png']) fs.copyFileSync(path.join(root, 'src', f), path.join(out, f));
 console.log(`built docs/ — index.html ${(html.length / 1024).toFixed(0)} KB, version ${version}`);

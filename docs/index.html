@@ -172,6 +172,8 @@ details.manual { margin: 4px 0 12px; } details.manual summary { cursor: pointer;
 .stack { display: grid; gap: 14px; }
 .banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--warn-soft); color: var(--warn); font-weight: 700; padding: 12px 14px; border-radius: var(--r-sm); margin-bottom: 14px; font-size: 15px; }
 .banner .btn { background: var(--warn); color: #fff; }
+.banner.new { background: #E8ECF6; color: var(--ink); }
+.banner.new .btn { background: var(--ink); }
 
 /* buttons */
 .btn { border: 0; cursor: pointer; width: 100%; font-weight: 800; font-size: 18px; padding: 16px 20px; border-radius: 16px; transition: transform .15s var(--ease), filter .15s; }
@@ -329,7 +331,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 <script>
 'use strict';
-const APP_VERSION = 'e1d1a5e301'; // filled in by tools/build.js
+const APP_VERSION = '00c9d3218d'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -595,7 +597,7 @@ function viewHome() {
   const spent = byCur(E), recv = byCur(R), bal = balances();
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
-  return `${lookalikeBanner()}${backupBanner()}
+  return `${updateBanner()}${lookalikeBanner()}${backupBanner()}
   <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances">
     <div class="lbl">Balance</div>
     ${CURS.map(c => `<div class="balrow">
@@ -702,7 +704,8 @@ function viewSheet() {
       </section>
       <section class="card pad">
         <h3>⚙️ Settings</h3>
-        <div class="setrow"><span>${esc(S.company)}<br><span class="muted">Company name, password · this device: ${esc(S.dev)} · app version ${APP_VERSION.slice(0, 7)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow"><span>${esc(S.company)}<br><span class="muted">Company name, password · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
       </section>
     </div>`;
@@ -1544,6 +1547,37 @@ function lookalikeBanner() {
   return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${e.id}">Show it</button></div>`;
 }
 
+/* ---------- app updates ---------- */
+// GitHub Pages lets phones keep the app files for 10 minutes, so the app asks for version.json
+// (never cached) to learn about a newer version, and "Update now" fetches a completely fresh copy.
+let newerVersion = '';
+async function latestVersion() {
+  const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('version check failed');
+  return (await res.json()).version;
+}
+async function checkForUpdate() {
+  if (location.protocol === 'file:') return;
+  let v;
+  try { v = await latestVersion(); } catch { return; } // offline: check again later
+  const was = newerVersion;
+  newerVersion = v && v !== APP_VERSION ? v : '';
+  if (newerVersion !== was && S && (tab === 'home' || tab === 'sheet') && !typing()) render();
+}
+async function updateApp() {
+  let v;
+  try { v = await latestVersion(); } catch { return alert('No internet. Connect to the internet to update the app.'); }
+  if (v === APP_VERSION) { newerVersion = ''; render(); return toast(`You have the newest version ✓ (${APP_VERSION.slice(0, 7)})`); }
+  toast('Updating the app…');
+  // only the saved app files are removed — your records are stored separately and stay
+  try {
+    await Promise.all((await caches.keys()).map(k => caches.delete(k)));
+    await Promise.all((await navigator.serviceWorker.getRegistrations()).map(r => r.unregister()));
+  } catch (e) { console.warn('Could not clear the old app files:', e.message); }
+  location.replace(`${location.pathname}?v=${v}`); // a new address, so no stored copy can be used
+}
+const updateBanner = () => (newerVersion ? `<div class="banner new"><span>🆕 A new version of the app is ready.</span><button class="btn small" data-act="updateApp">Update now</button></div>` : '');
+
 /* ---------- events ---------- */
 const ACTIONS = {
   tab: b => { tab = b.dataset.tab; render(); scrollTo(0, 0); },
@@ -1583,6 +1617,7 @@ const ACTIONS = {
   disconnect: () => disconnect(),
   importOld: () => importSheet(),
   howUpdate: () => howUpdateSheet(),
+  updateApp: () => updateApp(),
   assignPick: b => assignSheet(b.dataset.id),
   pickAll: b => { const f = b.closest('form'); $$('.pick:not([hidden]) input', f).forEach(i => (i.checked = true)); updatePick(f); },
   pickNone: b => { const f = b.closest('form'); $$('input[name=pick]', f).forEach(i => (i.checked = false)); updatePick(f); },
@@ -1637,13 +1672,15 @@ document.addEventListener('paste', e => {
 addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
 // sync as soon as the internet comes back, when the app is reopened, and every few minutes
 addEventListener('online', () => scheduleSync(0));
-document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleSync(0); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { scheduleSync(0); checkForUpdate(); } });
 setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
 setInterval(renderLock, 10000);
 
 if (S) { S = migrate(S); save(); repairImportedMoves(); }
 if (S && location.hash) history.replaceState(null, '', location.pathname);
+if (location.search) history.replaceState(null, '', location.pathname + location.hash); // drop ?v= left by an update
 render();
+checkForUpdate();
 if ($('form[data-form=join]')) inviteHint($('form[data-form=join]'));
 scheduleSync(0);
 // offline support: the service worker keeps a copy of the app on the device

@@ -37,6 +37,7 @@ const ACTIONS = {
   disconnect: () => disconnect(),
   importOld: () => importSheet(),
   howUpdate: () => howUpdateSheet(),
+  updateApp: () => updateApp(),
   assignPick: b => assignSheet(b.dataset.id),
   pickAll: b => { const f = b.closest('form'); $$('.pick:not([hidden]) input', f).forEach(i => (i.checked = true)); updatePick(f); },
   pickNone: b => { const f = b.closest('form'); $$('input[name=pick]', f).forEach(i => (i.checked = false)); updatePick(f); },
@@ -91,13 +92,15 @@ document.addEventListener('paste', e => {
 addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
 // sync as soon as the internet comes back, when the app is reopened, and every few minutes
 addEventListener('online', () => scheduleSync(0));
-document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleSync(0); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { scheduleSync(0); checkForUpdate(); } });
 setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
 setInterval(renderLock, 10000);
 
 if (S) { S = migrate(S); save(); repairImportedMoves(); }
 if (S && location.hash) history.replaceState(null, '', location.pathname);
+if (location.search) history.replaceState(null, '', location.pathname + location.hash); // drop ?v= left by an update
 render();
+checkForUpdate();
 if ($('form[data-form=join]')) inviteHint($('form[data-form=join]'));
 scheduleSync(0);
 // offline support: the service worker keeps a copy of the app on the device
