@@ -1,0 +1,660 @@
+'use strict';
+const KEY = 'company-accounts-v1';
+const UNLOCK_MS = 5 * 60 * 1000;
+const BACKUP_NAG_DAYS = 7;
+const MODES = ['Cash', 'Mobile money', 'Bank', 'Card', 'Cheque'];
+// Two separate money accounts. They are never added together: the rate moves too much.
+const CURS = ['USD', 'SSP'];
+const CUR_NAME = { USD: 'US Dollar', SSP: 'S. Sudan Pound' };
+const SYM = { USD: '$', SSP: 'SSP ' };
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const AT_RE = /^\d{4}-\d\d-\d\dT\d\d:\d\d$/;
+
+let S = load();
+let tab = 'home', histKind = 'E', histQuery = '', histMonth = '';
+let unlockedUntil = 0;
+
+/* ---------- storage ---------- */
+function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch (e) { alert('⚠️ Could not save!\nYour browser storage may be full or blocked.\nOpen the Sheet tab and save a backup now.\n\n' + e.message); }
+}
+// Every change goes through here. Changed records get a fresh time stamp (u); when this device
+// is connected to the Google Sheet they are also queued (dirty) for the next sync.
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L' };
+const recId = (key, r) => key === 'log' ? r.lid : r.id;
+function update(patch) {
+  const now = Date.now(), dirty = new Set(S.dirty || []), stamped = {};
+  for (const key of Object.keys(SYNC_KEYS)) {
+    if (!patch[key]) continue;
+    const before = new Set(S[key]);
+    stamped[key] = patch[key].map(r => { if (before.has(r)) return r; dirty.add(recId(key, r)); return { ...r, u: now }; });
+  }
+  if ('company' in patch || 'pass' in patch) { dirty.add('settings'); stamped.settingsU = now; }
+  S = { ...S, ...patch, ...stamped, dirty: S.link ? [...dirty] : [] };
+  save(); scheduleSync();
+}
+
+/* ---------- helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const stamp = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+// seconds keep same-minute entries in the order they were made
+const stampSec = (d = new Date()) => `${stamp(d)}:${pad(d.getSeconds())}`;
+const clean = v => String(v ?? '').trim().replace(/\s+/g, ' ');
+const live = a => a.filter(x => !x.deleted);
+// money is summed in whole cents so 0.1 + 0.2 never drifts
+const cents = n => Math.round(Number(n || 0) * 100);
+const total = a => a.reduce((t, x) => t + cents(x.amount), 0) / 100;
+const minus = (a, b) => (cents(a) - cents(b)) / 100;
+const byCur = items => Object.fromEntries(CURS.map(c => [c, total(items.filter(x => x.cur === c))]));
+const byAt = (a, b) => a.at.localeCompare(b.at) || (a.createdAt || '').localeCompare(b.createdAt || '') || a.id.localeCompare(b.id);
+const projName = id => id ? (S.projects.find(p => p.id === id)?.name || 'Unknown project') : 'General (no project)';
+const fileSafe = s => s.replace(/[\\/:*?"<>|]+/g, '').trim() || 'Company';
+const randHex = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+const defCur = () => S.lastCur || 'USD';
+
+function money(n, cur) {
+  const s = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+  return (n < 0 ? '−' : '') + SYM[cur] + s;
+}
+// "$1,200 · SSP 50,000" — only the currencies that have money in them
+function sumText(items) {
+  const parts = Object.entries(byCur(items)).filter(([, v]) => v).map(([c, v]) => money(v, c));
+  return parts.length ? parts.join(' · ') : money(0, defCur());
+}
+function parseAmount(v) {
+  const n = Number(String(v ?? '').replace(/[,\s$]/g, '').replace(/^SSP/i, ''));
+  return Number.isFinite(n) && n > 0 && n < 1e12 ? Math.round(n * 100) / 100 : null;
+}
+function fmtTime(at) { const [h, m] = at.slice(11, 16).split(':').map(Number); return `${h % 12 || 12}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`; }
+function fmtDate(date) { const [y, m, d] = date.split('-').map(Number); return `${d} ${MON[m - 1]} ${y}`; }
+function fmtDay(date) {
+  if (date === stamp().slice(0, 10)) return 'Today';
+  if (date === stamp(new Date(Date.now() - 864e5)).slice(0, 10)) return 'Yesterday';
+  const [y, m, d] = date.split('-').map(Number);
+  return `${DAYS[new Date(y, m - 1, d).getDay()]}, ${fmtDate(date)}`;
+}
+const fmtWhen = at => `${fmtDay(at.slice(0, 10))}, ${fmtTime(at)}`;
+const fmtAbs = at => `${fmtDate(at.slice(0, 10))}, ${fmtTime(at)}`;
+const monthName = ym => `${MONTHS[+ym.slice(5, 7) - 1]} ${ym.slice(0, 4)}`;
+
+function nextIds(prefix, n, seq) {
+  const start = seq[prefix] || 0;
+  // the device code keeps ids unique when several phones add entries offline
+  const list = Array.from({ length: n }, (_, i) => `${prefix}-${S.dev}-${String(start + i + 1).padStart(4, '0')}`);
+  return [list, { ...seq, [prefix]: start + n }];
+}
+const logWith = (entries, by = S.lastBy || '') => [...S.log, ...entries.map(([action, id, text], i) => ({ lid: `L-${S.dev}-${Date.now().toString(36)}${i}`, at: stampSec(), action, id, text, by }))];
+
+const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Paid by', note: 'Note', at: 'Date' };
+function showVal(k, r) { const v = r[k]; return k === 'amount' ? money(+v, r.cur) : k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : (v || '(empty)'); }
+function diff(a, b) { return Object.keys(LABELS).filter(k => k in b && String(a[k] ?? '') !== String(b[k] ?? '')).map(k => `${LABELS[k]}: ${showVal(k, a)} → ${showVal(k, b)}`); }
+function describe(k, r) {
+  return k === 'E'
+    ? `${money(r.amount, r.cur)} paid to ${r.paidTo} for ${r.reason}${r.location ? ' at ' + r.location : ''} · ${r.mode} · ${projName(r.project)} · dated ${fmtAbs(r.at)}`
+    : `${money(r.amount, r.cur)} received for ${projName(r.project)} · ${r.mode}${r.note ? ' · ' + r.note : ''} · dated ${fmtAbs(r.at)}`;
+}
+function projStats(id) {
+  const p = S.projects.find(x => x.id === id) || {};
+  const recv = byCur(live(S.credits).filter(c => c.project === id));
+  const spent = byCur(live(S.expenses).filter(e => e.project === id));
+  const bal = Object.fromEntries(CURS.map(c => [c, minus(recv[c], spent[c])]));
+  const value = p.value || 0, vc = p.valueCur || 'USD';
+  const curs = CURS.filter(c => recv[c] || spent[c] || (value && c === vc));
+  return { recv, spent, bal, value, vc, curs: curs.length ? curs : [vc], pending: value ? Math.max(0, minus(value, recv[vc])) : 0, pct: value ? Math.min(100, recv[vc] / value * 100) : 0 };
+}
+
+/* ---------- password ---------- */
+async function hashPw(pw, salt) {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + '|' + pw));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+const isUnlocked = () => Date.now() < unlockedUntil;
+function unlock(why) {
+  if (isUnlocked()) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const d = $('#pw');
+    $('#pwWhy').textContent = why; $('#pwIn').value = ''; $('#pwErr').textContent = '';
+    d.returnValue = '';
+    d.showModal(); $('#pwIn').focus();
+    $('#pwCancel').onclick = () => d.close();
+    $('#pwForm').onsubmit = async e => {
+      e.preventDefault();
+      if (await hashPw($('#pwIn').value, S.pass.salt) === S.pass.hash) {
+        unlockedUntil = Date.now() + UNLOCK_MS; d.close('ok'); renderLock(); resolve(true);
+      } else {
+        $('#pwErr').textContent = 'Wrong password. Try again.';
+        $('#pwIn').select(); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake');
+      }
+    };
+    d.onclose = () => { if (d.returnValue !== 'ok') resolve(false); };
+  });
+}
+function renderLock() { const p = $('#lockPill'); if (p) p.hidden = !isUnlocked(); }
+
+/* ---------- ui bits ---------- */
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2600); }
+function openSheet(html) {
+  const d = $('#sheet'); $('#sheetIn').innerHTML = html;
+  if (!d.open) d.showModal();
+  d.scrollTop = 0;
+  ($('[autofocus]', d) || $('.close', d))?.focus();
+}
+const closeSheet = () => $('#sheet').close();
+const head = (title, tone = '', sub = '') => `<div class="sh-head ${tone ? 'tone-' + tone : ''}"><div><h2>${esc(title)}</h2>${sub ? `<small>${esc(sub)}</small>` : ''}</div><button type="button" class="close" data-act="close" aria-label="Close">×</button></div>`;
+const empty = (title, text) => `<div class="card empty"><strong>${title}</strong>${text}</div>`;
+const curLines = (vals, curs = CURS) => curs.map(c => `<b>${money(vals[c], c)}</b>`).join('');
+function formErr(f, name, msg) {
+  const el = name && f.elements[name];
+  if (el && el.classList) { el.classList.add('bad'); el.focus(); }
+  $('.err', f).textContent = msg;
+}
+const formCur = f => (f && f.elements.cur && f.elements.cur.value) || defCur();
+
+function suggestions(field) {
+  const seen = new Set(), out = [];
+  for (const e of [...S.credits, ...S.expenses].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))) {
+    const v = clean(e[field]);
+    if (v && !seen.has(v.toLowerCase())) { seen.add(v.toLowerCase()); out.push(v); }
+    if (out.length >= 80) break;
+  }
+  return out;
+}
+const datalists = () => ['paidTo', 'reason', 'location', 'by'].map(f => `<datalist id="dl-${f}">${suggestions(f).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('');
+const textField = (name, label, ph, val, req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input name="${name}" placeholder="${ph}" value="${esc(val)}" ${['paidTo', 'reason', 'location'].includes(name) ? `list="dl-${name}"` : ''} autocomplete="off" maxlength="160" ${req ? 'required' : ''}></label>`;
+const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${c}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
+const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${val || ''}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
+const byField = () => `<label class="fld"><span>Your name <em>(who is entering this)</em></span><input name="by" placeholder="Type your name" value="${esc(S.lastBy || '')}" list="dl-by" autocomplete="off" maxlength="60" required></label>`;
+const modeChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="chips">${MODES.map(m => `<label><input type="radio" name="mode" value="${m}" ${m === cur ? 'checked' : ''}><span>${m}</span></label>`).join('')}</div></div>`;
+function projectSelect(cur, optional) {
+  const ps = S.projects.filter(p => !p.deleted);
+  const isNew = !optional && (!ps.length || cur === '__new');
+  return `<label class="fld"><span>Project${optional ? ' <em>(optional)</em>' : ''}</span><select name="project">
+    ${optional ? `<option value="">No project — general</option>` : ''}
+    ${ps.map(p => `<option value="${p.id}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+    ${optional ? '' : `<option value="__new" ${isNew ? 'selected' : ''}>＋ New project…</option>`}
+  </select></label>
+  ${optional ? '' : `<label class="fld newp" ${isNew ? '' : 'hidden'}><span>New project name</span><input name="newProject" placeholder="e.g. Warehouse — Juba" maxlength="80"></label>`}`;
+}
+function whenField(at, editable) {
+  if (editable) return `<label class="fld"><span>Date &amp; time</span><input type="datetime-local" name="at" value="${at}" required></label>`;
+  return `<div class="fld"><span>Date &amp; time</span><div class="when"><div><b>${fmtWhen(stamp())}</b><small>Set automatically</small></div><button type="button" class="btn small ghost" data-act="unlockDate">🔒 Change</button></div></div>`;
+}
+
+/* ---------- views ---------- */
+function render() {
+  const main = $('#main');
+  const ready = !!S;
+  $('#hdr').hidden = $('#tabs').hidden = !ready;
+  if (!ready) { main.innerHTML = viewSetup(); $('[autofocus]', main)?.focus(); return; }
+  $('#coName').textContent = S.company;
+  $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
+  main.innerHTML = { home: viewHome, hist: viewHistory, proj: viewProjects, sheet: viewSheet }[tab]();
+  renderLock(); paintSync();
+}
+
+let setupMode = ''; // '' = decide when drawn: an invite link in the address opens 'join'
+const isPhone = () => matchMedia('(pointer: coarse)').matches;
+const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+function viewSetup() {
+  const mode = setupMode || (inviteFromHash() ? 'join' : 'choose');
+  const logo = `<div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>`;
+  const tip = isPhone() && !isInstalled() ? `<p class="note">📲 <b>First install the app:</b> iPhone — in Safari tap <b>Share → Add to Home Screen</b>. Android — in Chrome tap <b>⋮ → Add to Home screen</b>. Then open <b>Accounts</b> from your home screen.</p>` : '';
+  const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="choose">← Back</button></p>`;
+  if (mode === 'join') return `<section class="setup card pad">${logo}
+    <h1>Join my company</h1>
+    <p>Paste the invite link you were sent. Joining needs internet once — after that the app works offline.</p>${tip}
+    <form data-form="join">
+      <label class="fld"><span>Invite link</span><input name="invite" required autocomplete="off" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" autofocus></label>
+      <p class="err"></p>
+      <button class="btn in">Join</button>
+    </form>${back}</section>`;
+  if (mode === 'new') return `<section class="setup card pad">${logo}
+    <h1>New company</h1>
+    <p>Set up your company accounts. It takes 30 seconds.</p>
+    <form data-form="setup">
+      <label class="fld"><span>Company name</span><input name="company" required maxlength="80" placeholder="e.g. ABC Constructions" autofocus></label>
+      <label class="fld"><span>Create a password</span><input type="password" name="pw" required minlength="4" autocomplete="new-password" placeholder="At least 4 letters or numbers"></label>
+      <label class="fld"><span>Type the password again</span><input type="password" name="pw2" required minlength="4" autocomplete="new-password"></label>
+      <p class="note">🔑 The password is needed to <b>edit</b> or <b>delete</b> entries, and to add entries with an <b>old date</b>. Anyone can add new entries. <b>Write it down — it can't be recovered.</b></p>
+      <p class="err"></p>
+      <button class="btn primary">Start</button>
+    </form>${back}</section>`;
+  return `<section class="setup card pad">${logo}
+    <h1>Welcome!</h1>
+    <p>Company accounts in USD and SSP. Works without internet.</p>${tip}
+    <div class="stack">
+      <button class="btn primary" data-act="setupMode" data-mode="new">Start a new company</button>
+      <button class="btn ghost" data-act="setupMode" data-mode="join">Join my company<small class="sub">I have an invite link</small></button>
+    </div>
+    <p class="center"><button class="link" data-act="restore">Have a backup file? Restore it</button></p>
+    <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+  </section>`;
+}
+
+function viewHome() {
+  const E = live(S.expenses), R = live(S.credits);
+  const spent = byCur(E), recv = byCur(R);
+  const bal = Object.fromEntries(CURS.map(c => [c, minus(recv[c], spent[c])]));
+  const today = stamp().slice(0, 10), month = today.slice(0, 7);
+  const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
+  return `${backupBanner()}
+  <section class="balance ${CURS.some(c => bal[c] < 0) ? 'neg' : ''}" aria-label="Account balance">
+    <div class="lbl">Account balance</div>
+    ${CURS.map(c => `<div class="bal ${bal[c] < 0 ? 'neg' : ''}"><span class="cur-tag">${c}</span><span class="big">${money(bal[c], c)}</span></div>`).join('')}
+    <div class="split"><div class="i"><small>Money received</small>${curLines(recv)}</div><div class="o"><small>Money spent</small>${curLines(spent)}</div></div>
+  </section>
+  <div class="actions">
+    <button class="tile out" data-act="addExpense"><span class="ic">−</span><span><b>Add expense</b><small>Money paid out</small></span></button>
+    <button class="tile in" data-act="addCredit"><span class="ic">+</span><span><b>Money received</b><small>From a project</small></span></button>
+    <button class="tile bulk" data-act="addBulk"><span class="ic">☰</span><span><b>Add many at once</b><small>Several payments together, with a total</small></span></button>
+  </div>
+  <div class="minis">
+    <div class="mini"><small>Spent today</small>${curLines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
+    <div class="mini"><small>Spent this month</small>${curLines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
+  </div>
+  <div class="sec-head" style="margin-top:22px"><h2 class="sec">Recent</h2><button class="btn small ghost" data-act="tab" data-tab="hist">See all →</button></div>
+  ${recent.length ? `<div class="card list">${recent.map(([x, k]) => itemRow(x, k, true)).join('')}</div>` : empty('Nothing here yet', 'Tap <b>Add expense</b> or <b>Money received</b> to start.')}`;
+}
+
+function backupBanner() {
+  if (S.link || (!S.expenses.length && !S.credits.length)) return '';
+  const days = S.lastBackup ? Math.floor((Date.now() - new Date(S.lastBackup).getTime()) / 864e5) : null;
+  if (days !== null && days < BACKUP_NAG_DAYS) return '';
+  return `<div class="banner"><span>💾 ${days === null ? 'No backup saved yet.' : `Last backup was ${days} days ago.`}</span><button class="btn small" data-act="backup">Save backup</button></div>`;
+}
+
+function itemRow(x, k, showDate) {
+  const isE = k === 'E';
+  const title = isE ? x.reason : `From ${projName(x.project)}`;
+  const sub = [isE ? x.paidTo : x.note, isE ? x.location : x.mode, showDate ? fmtDay(x.at.slice(0, 10)) : '', fmtTime(x.at), x.by && 'by ' + x.by].filter(Boolean).map(esc).join(' · ');
+  const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '');
+  return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${x.id}">
+    <span class="dot">${isE ? '−' : '+'}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(title)}</span>${tags}</span><span class="s">${sub}</span></span>
+    <span class="amt">${isE ? '−' : '+'}${money(x.amount, x.cur)}</span></button>`;
+}
+
+function viewHistory() {
+  const all = live(histKind === 'E' ? S.expenses : S.credits);
+  const months = [...new Set(all.map(x => x.at.slice(0, 7)))].sort().reverse();
+  return `<div class="seg" role="tablist">
+      <button data-act="hist" data-k="E" class="${histKind === 'E' ? 'on' : ''}" role="tab" aria-selected="${histKind === 'E'}">− Money out</button>
+      <button data-act="hist" data-k="R" class="${histKind === 'R' ? 'on' : ''}" role="tab" aria-selected="${histKind === 'R'}">+ Money in</button>
+    </div>
+    <div class="filters">
+      <input type="search" id="q" placeholder="Search name, reason, place, USD/SSP…" value="${esc(histQuery)}" aria-label="Search">
+      <select id="month" aria-label="Month"><option value="">All time</option>${months.map(m => `<option value="${m}" ${m === histMonth ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select>
+    </div>
+    <div id="histRes">${histResults()}</div>`;
+}
+function histResults() {
+  const q = histQuery.trim().toLowerCase();
+  const items = live(histKind === 'E' ? S.expenses : S.credits)
+    .filter(x => !histMonth || x.at.startsWith(histMonth))
+    .filter(x => !q || [x.id, x.paidTo, x.reason, x.location, x.note, projName(x.project), x.mode, x.amount, x.by, x.cur].join(' ').toLowerCase().includes(q))
+    .sort((a, b) => byAt(b, a));
+  if (!items.length) return `<div style="height:14px"></div>` + empty('No entries', q || histMonth ? 'Try a different search or month.' : 'Entries you add will show here.');
+  const groups = new Map();
+  items.forEach(x => { const d = x.at.slice(0, 10); (groups.get(d) || groups.set(d, []).get(d)).push(x); });
+  return `<div class="sumline"><span>${items.length} ${items.length === 1 ? 'entry' : 'entries'}</span><b class="${histKind === 'E' ? 'out-c' : 'in-c'}">${sumText(items)}</b></div>` +
+    [...groups].map(([d, xs]) => `<div class="day"><span>${fmtDay(d)}</span><span>${sumText(xs)}</span></div><div class="card list">${xs.map(x => itemRow(x, histKind, false)).join('')}</div>`).join('');
+}
+
+const projBar = s => s.value ? `<div class="bar"><i style="width:${s.pct.toFixed(1)}%"></i></div><div class="pv"><span>${money(s.recv[s.vc], s.vc)} of ${money(s.value, s.vc)} received</span><span>${money(s.pending, s.vc)} pending</span></div>` : '';
+const projStatsGrid = s => `<div class="stats"><div><small>Received</small><span class="in">${curLines(s.recv, s.curs)}</span></div><div><small>Spent</small><span class="out">${curLines(s.spent, s.curs)}</span></div><div><small>Balance</small><span>${curLines(s.bal, s.curs)}</span></div></div>`;
+function viewProjects() {
+  const ps = S.projects.filter(p => !p.deleted);
+  const general = live(S.expenses).filter(e => !e.project);
+  return `<div class="sec-head"><h2 class="sec">Projects</h2><button class="btn small primary" data-act="addProject">＋ New project</button></div>
+    ${ps.length ? ps.map(projCard).join('') : empty('No projects yet', 'Add a project, then record the money you receive for it.')}
+    ${general.length ? `<div class="card pad" style="margin-top:12px"><div class="ph" style="margin:0"><span>General expenses <em class="muted">(no project)</em></span><b class="out">${sumText(general)}</b></div></div>` : ''}`;
+}
+function projCard(p) {
+  const s = projStats(p.id);
+  return `<button class="card proj" data-act="openProject" data-id="${p.id}">
+    <span class="ph"><b>${esc(p.name)}</b><span class="chev">›</span></span>
+    ${projBar(s)}${projStatsGrid(s)}
+  </button>`;
+}
+
+function viewSheet() {
+  return `<div class="stack">
+      ${syncCard()}
+      <section class="card pad">
+        <h3>💾 Backup file</h3>
+        <p class="muted">${S.lastBackup ? 'Last backup: <b>' + fmtAbs(S.lastBackup) + '</b>.' : '<b>No backup file yet.</b>'} ${S.link ? 'Your records are also kept in the company Google Sheet.' : 'Your records are saved on this device only — connect the Google Sheet above, or save a backup file every week.'}</p>
+        <div class="two"><button class="btn ghost" data-act="backup">Save backup</button><button class="btn ghost" data-act="restore">Restore 🔒</button></div>
+        <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+      </section>
+      <section class="card pad">
+        <h3>⚙️ Settings</h3>
+        <div class="setrow"><span>${esc(S.company)}<br><span class="muted">Company name, password · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
+      </section>
+    </div>`;
+}
+
+/* ---------- forms ---------- */
+function expenseForm(old) {
+  const d = old || { cur: defCur(), amount: '', paidTo: '', reason: '', location: S.lastLoc || '', project: S.lastExpProject || '', mode: S.lastMode || 'Cash' };
+  openSheet(`${head(old ? 'Edit expense' : 'Add expense', 'out', old?.id)}
+    <form data-form="expense" data-id="${old?.id || ''}">
+      ${curChips(d.cur)}
+      ${amountField(d.amount, d.cur)}
+      ${textField('paidTo', 'Paid to', 'Who did you pay?', d.paidTo)}
+      ${textField('reason', 'Reason', 'What was it for?', d.reason)}
+      ${textField('location', 'Location', 'Where?', d.location, false)}
+      ${projectSelect(d.project, true)}
+      ${modeChips(d.mode, 'Paid by')}
+      ${whenField(old?.at, !!old)}
+      ${byField()}
+      <p class="err"></p>
+      <button class="btn out">${old ? 'Save changes' : 'Save expense'}</button>
+    </form>${datalists()}`);
+}
+function creditForm(old, presetProject) {
+  const d = old || { cur: defCur(), amount: '', project: presetProject || S.lastProject || '', mode: 'Bank', note: '' };
+  openSheet(`${head(old ? 'Edit money received' : 'Money received', 'in', old?.id)}
+    <form data-form="credit" data-id="${old?.id || ''}">
+      ${curChips(d.cur)}
+      ${amountField(d.amount, d.cur)}
+      ${projectSelect(d.project, false)}
+      ${modeChips(d.mode, 'How did it come?')}
+      ${textField('note', 'Note', 'e.g. 2nd installment', d.note, false)}
+      ${whenField(old?.at, !!old)}
+      ${byField()}
+      <p class="err"></p>
+      <button class="btn in">${old ? 'Save changes' : 'Save money received'}</button>
+    </form>${datalists()}`);
+}
+const bulkRow = () => `<div class="brow"><span class="n"></span><input name="amount" inputmode="decimal" placeholder="Amount" autocomplete="off" aria-label="Amount"><input name="paidTo" placeholder="Paid to" list="dl-paidTo" autocomplete="off" maxlength="160" aria-label="Paid to"><input name="reason" placeholder="Reason" list="dl-reason" autocomplete="off" maxlength="160" aria-label="Reason"><button type="button" class="x" data-act="delRow" aria-label="Remove line">×</button></div>`;
+function bulkForm() {
+  openSheet(`${head('Add many expenses', 'out')}
+    <p class="hint">One line for each payment. Empty lines are skipped.</p>
+    <form data-form="bulk">
+      ${curChips(defCur(), 'Money type (for every line)')}
+      <div class="brows">${bulkRow().repeat(4)}</div>
+      <button type="button" class="btn small ghost" data-act="addRow">＋ Add another line</button>
+      <div class="shared"><h3>Same for every line</h3>
+        ${textField('location', 'Location', 'Where?', S.lastLoc || '', false)}
+        ${projectSelect(S.lastExpProject || '', true)}
+        ${modeChips(S.lastMode || 'Cash', 'Paid by')}
+        ${whenField('', false)}
+        ${byField()}
+      </div>
+      <div class="foot">
+        <div class="btotal"><span id="bcount">0 payments</span><b id="bsum">${money(0, defCur())}</b></div>
+        <p class="err"></p>
+        <button class="btn out">Save all</button>
+      </div>
+    </form>${datalists()}`);
+  $('.brow input', $('#sheet')).focus();
+}
+function projectForm(old) {
+  const vc = old?.valueCur || defCur();
+  openSheet(`${head(old ? 'Edit project' : 'New project', '', old?.id)}
+    <form data-form="project" data-id="${old?.id || ''}">
+      <label class="fld"><span>Project name</span><input name="name" required maxlength="80" value="${esc(old?.name)}" placeholder="e.g. Warehouse — Juba" autofocus></label>
+      ${curChips(vc, 'Project value is in')}
+      ${amountField(old?.value, vc, 'value', 'Total project value', false)}
+      <p class="muted" style="margin:-8px 0 14px">If you add the project value, the app shows how much is still pending from the client.</p>
+      ${byField()}
+      <p class="err"></p>
+      <button class="btn primary">${old ? 'Save changes' : 'Add project'}</button>
+      ${old ? `<p class="center"><button type="button" class="link" data-act="delProject" data-id="${old.id}">Delete this project</button></p>` : ''}
+    </form>${datalists()}`);
+}
+function settingsForm() {
+  openSheet(`${head('Settings')}
+    <form data-form="settings">
+      <label class="fld"><span>Company name</span><input name="company" required maxlength="80" value="${esc(S.company)}"></label>
+      <h3 class="subh">Change password <em>(leave empty to keep it)</em></h3>
+      <label class="fld"><span>New password</span><input type="password" name="pw" minlength="4" autocomplete="new-password"></label>
+      <label class="fld"><span>New password again</span><input type="password" name="pw2" minlength="4" autocomplete="new-password"></label>
+      <p class="err"></p>
+      <button class="btn primary">Save settings</button>
+    </form>`);
+}
+
+function detail(k, id) {
+  const isE = k === 'E';
+  const r = (isE ? S.expenses : S.credits).find(x => x.id === id);
+  if (!r) return;
+  const common = [['Date', fmtAbs(r.at)], ['Entered by', r.by], ['Recorded', fmtAbs(r.createdAt)], ['Last edited', r.editedAt && fmtAbs(r.editedAt)], ['Edited by', r.editedBy]];
+  const facts = isE
+    ? [['Money type', CUR_NAME[r.cur]], ['Paid to', r.paidTo], ['Reason', r.reason], ['Location', r.location], ['Project', projName(r.project)], ['Paid by', r.mode], ['Bulk group', r.batch], ...common]
+    : [['Money type', CUR_NAME[r.cur]], ['Project', projName(r.project)], ['How it came', r.mode], ['Note', r.note], ...common];
+  openSheet(`${head(isE ? 'Expense' : 'Money received', isE ? 'out' : 'in', r.id)}
+    <div class="dbig ${isE ? 'out' : 'in'}">${isE ? '−' : '+'}${money(r.amount, r.cur)}</div>
+    <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
+    <div class="two"><button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${id}">✏️ Edit 🔒</button><button class="btn danger" data-act="del" data-kind="${k}" data-id="${id}">🗑 Delete 🔒</button></div>`);
+}
+function projectDetail(id) {
+  const p = S.projects.find(x => x.id === id); if (!p) return;
+  const s = projStats(id);
+  const R = live(S.credits).filter(c => c.project === id).sort((a, b) => byAt(b, a));
+  const E = live(S.expenses).filter(e => e.project === id).sort((a, b) => byAt(b, a));
+  openSheet(`${head(p.name, '', p.id)}
+    ${projBar(s)}
+    <div style="margin-bottom:16px">${projStatsGrid(s)}</div>
+    <div class="two"><button class="btn in" data-act="addCredit" data-project="${id}">＋ Money received</button><button class="btn ghost" data-act="editProject" data-id="${id}">✏️ Edit 🔒</button></div>
+    <h3 class="subh">Money received (${R.length})</h3>
+    ${R.length ? `<div class="card list inset">${R.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}
+    <h3 class="subh">Spent on this project (${E.length})</h3>
+    ${E.length ? `<div class="card list inset">${E.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">No expenses linked to this project yet.</p>'}`);
+}
+
+/* ---------- saving ---------- */
+function dateFrom(v, old) {
+  const at = v.at && AT_RE.test(v.at) ? v.at : (old ? old.at : stamp());
+  const manualDate = old ? (old.manualDate || at !== old.at) : !!v.at && at.slice(0, 10) !== stamp().slice(0, 10);
+  return { at, manualDate };
+}
+function saveExpense(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const old = S.expenses.find(x => x.id === f.dataset.id);
+  const amount = parseAmount(v.amount);
+  if (amount === null) return formErr(f, 'amount', 'Type a correct amount, like 500');
+  const rec = { cur: formCur(f), amount, paidTo: clean(v.paidTo), reason: clean(v.reason), location: clean(v.location), project: v.project || '', mode: v.mode || 'Cash', ...dateFrom(v, old) };
+  if (!rec.paidTo) return formErr(f, 'paidTo', 'Who did you pay?');
+  if (!rec.reason) return formErr(f, 'reason', 'What was it for?');
+  const by = clean(v.by);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    update({ expenses: S.expenses.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
+    toast('Changes saved ✓');
+  } else {
+    const [[id], seq] = nextIds('E', 1, S.seq);
+    update({
+      expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq,
+      log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('E', rec)}`]], by) : S.log,
+      lastLoc: rec.location, lastMode: rec.mode, lastExpProject: rec.project, lastBy: by, lastCur: rec.cur,
+    });
+    toast(`Saved ✓ ${money(amount, rec.cur)} to ${rec.paidTo}`);
+  }
+  closeSheet(); render();
+}
+function projectFromForm(v) {
+  if (v.project !== '__new') return [v.project, S.projects, S.seq];
+  const name = clean(v.newProject);
+  if (!name) return [null];
+  const same = S.projects.find(p => !p.deleted && p.name.toLowerCase() === name.toLowerCase());
+  if (same) return [same.id, S.projects, S.seq];
+  const [[id], seq] = nextIds('P', 1, S.seq);
+  return [id, [...S.projects, { id, name, value: 0, valueCur: v.cur || 'USD', by: clean(v.by), createdAt: stampSec() }], seq];
+}
+function saveCredit(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const old = S.credits.find(x => x.id === f.dataset.id);
+  const amount = parseAmount(v.amount);
+  if (amount === null) return formErr(f, 'amount', 'Type a correct amount, like 50000');
+  const by = clean(v.by);
+  const [project, projects, seq0] = projectFromForm(v);
+  if (!project) return formErr(f, 'newProject', 'Type the new project name');
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const rec = { cur: formCur(f), amount, project, mode: v.mode || 'Bank', note: clean(v.note), ...dateFrom(v, old) };
+  if (projects !== S.projects) update({ projects, seq: seq0 }); // a new project must exist before describe()/log
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    update({ credits: S.credits.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
+    toast('Changes saved ✓');
+  } else {
+    const [[id], seq] = nextIds('R', 1, S.seq);
+    update({
+      credits: [...S.credits, { id, ...rec, by, createdAt: stampSec() }], seq, lastProject: project, lastBy: by, lastCur: rec.cur,
+      log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('R', rec)}`]], by) : S.log,
+    });
+    toast(`Saved ✓ ${money(amount, rec.cur)} received`);
+  }
+  closeSheet(); render();
+}
+function bulkRows(f) {
+  return $$('.brow', f).map(el => ({ el, amount: $('[name=amount]', el).value.trim(), paidTo: clean($('[name=paidTo]', el).value), reason: clean($('[name=reason]', el).value) }))
+    .filter(r => r.amount || r.paidTo || r.reason);
+}
+function updateBulk(f) {
+  const rows = bulkRows(f).filter(r => parseAmount(r.amount) !== null);
+  $('#bcount').textContent = `${rows.length} ${rows.length === 1 ? 'payment' : 'payments'}`;
+  $('#bsum').textContent = money(rows.reduce((t, r) => t + cents(parseAmount(r.amount)), 0) / 100, formCur(f));
+}
+function saveBulk(f) {
+  $$('.bad', f).forEach(x => x.classList.remove('bad'));
+  const rows = bulkRows(f);
+  if (!rows.length) return formErr(f, null, 'Fill at least one line.');
+  let ok = true;
+  rows.forEach(r => {
+    if (parseAmount(r.amount) === null) { $('[name=amount]', r.el).classList.add('bad'); ok = false; }
+    if (!r.paidTo) { $('[name=paidTo]', r.el).classList.add('bad'); ok = false; }
+    if (!r.reason) { $('[name=reason]', r.el).classList.add('bad'); ok = false; }
+  });
+  if (!ok) { $('.bad', f).focus(); return formErr(f, null, 'Fix the red boxes — every line needs an amount, paid to and reason.'); }
+  const by = clean(f.elements.by.value);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const v = { cur: formCur(f), location: clean(f.elements.location.value), project: f.elements.project.value, mode: f.elements.mode.value || 'Cash', at: f.elements.at?.value };
+  const { at, manualDate } = dateFrom(v);
+  let seq = S.seq, batch, ids;
+  [[batch], seq] = nextIds('B', 1, seq);
+  [ids, seq] = nextIds('E', rows.length, seq);
+  const recs = rows.map((r, i) => ({ id: ids[i], cur: v.cur, amount: parseAmount(r.amount), paidTo: r.paidTo, reason: r.reason, location: v.location, project: v.project, mode: v.mode, at, manualDate, by, createdAt: stampSec(), batch }));
+  update({
+    expenses: [...S.expenses, ...recs], seq,
+    log: manualDate ? logWith([['Old date', batch, `${recs.length} expenses (${ids[0]} to ${ids[ids.length - 1]}) added with date ${fmtAbs(at)} (password used), total ${money(total(recs), v.cur)}`]], by) : S.log,
+    lastLoc: v.location, lastMode: v.mode, lastExpProject: v.project, lastBy: by, lastCur: v.cur,
+  });
+  closeSheet(); render();
+  toast(`Saved ✓ ${recs.length} payments · ${money(total(recs), v.cur)}`);
+}
+function saveProject(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const old = S.projects.find(p => p.id === f.dataset.id);
+  const name = clean(v.name), valueCur = formCur(f);
+  const value = v.value.trim() ? parseAmount(v.value) : 0;
+  if (!name) return formErr(f, 'name', 'Type the project name');
+  if (value === null) return formErr(f, 'value', 'Type a correct amount, or leave it empty');
+  if (S.projects.some(p => !p.deleted && p.id !== old?.id && p.name.toLowerCase() === name.toLowerCase())) return formErr(f, 'name', 'A project with this name already exists');
+  const by = clean(v.by);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  if (old) {
+    const changes = [old.name !== name && `Name: ${old.name} → ${name}`, (old.value !== value || (old.valueCur || 'USD') !== valueCur) && `Project value: ${money(old.value || 0, old.valueCur || 'USD')} → ${money(value, valueCur)}`].filter(Boolean);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    update({ projects: S.projects.map(p => p.id === old.id ? { ...p, name, value, valueCur, editedAt: stampSec(), editedBy: by } : p), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
+  } else {
+    const [[id], seq] = nextIds('P', 1, S.seq);
+    update({ projects: [...S.projects, { id, name, value, valueCur, by, createdAt: stampSec() }], seq, lastBy: by });
+  }
+  closeSheet(); render(); toast('Project saved ✓');
+}
+async function saveSettings(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const company = clean(v.company) || S.company;
+  const entries = [];
+  let pass = S.pass;
+  if (v.pw || v.pw2) {
+    if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
+    const salt = randHex();
+    pass = { salt, hash: await hashPw(v.pw, salt) };
+    entries.push(['Password', '—', 'The password was changed']);
+  }
+  if (company !== S.company) entries.push(['Settings', '—', `Company name: ${S.company} → ${company}`]);
+  update({ company, pass, log: logWith(entries) });
+  closeSheet(); render(); toast('Settings saved ✓');
+}
+async function doSetup(f) {
+  const v = Object.fromEntries(new FormData(f));
+  if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
+  const salt = randHex();
+  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], projects: [], log: [], seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
+  save();
+  navigator.storage?.persist?.();
+  render(); scrollTo(0, 0); toast('All set! Add your first entry.');
+}
+
+async function deleteRecord(k, id) {
+  if (!await unlock('Enter the password to delete this entry.')) return;
+  const key = k === 'E' ? 'expenses' : 'credits';
+  const r = S[key].find(x => x.id === id);
+  const by = clean(prompt(`Delete ${id} — ${money(r.amount, r.cur)}?\n\nIt will be removed from all totals. A record stays in the Change Log.\n\nType your name to confirm:`, S.lastBy || ''));
+  if (!by) return;
+  update({ [key]: S[key].map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, describe(k, r)]], by), lastBy: by });
+  closeSheet(); render(); toast('Deleted');
+}
+async function deleteProject(id) {
+  const used = [...live(S.expenses), ...live(S.credits)].some(x => x.project === id);
+  if (used) return alert('This project has entries. Delete or move those entries first.');
+  if (!await unlock('Enter the password to delete this project.')) return;
+  const p = S.projects.find(x => x.id === id);
+  const by = clean(prompt(`Delete project "${p.name}"?\n\nType your name to confirm:`, S.lastBy || ''));
+  if (!by) return;
+  update({ projects: S.projects.map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, `Project "${p.name}"`]], by), lastBy: by });
+  closeSheet(); render(); toast('Project deleted');
+}
+
+/* ---------- backup ---------- */
+// Phones get the share sheet (Save to Files, WhatsApp, email…); computers get a normal download.
+async function download(blob, name) {
+  const file = new File([blob], name, { type: blob.type });
+  if (isPhone() && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+function doBackup() {
+  update({ lastBackup: stamp() });
+  download(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }), `${fileSafe(S.company)} backup ${stamp().slice(0, 10)}.json`);
+  render(); toast('Backup file ready ✓');
+}
+function validBackup(d) {
+  const okRec = x => x && typeof x.id === 'string' && Number.isFinite(x.amount) && AT_RE.test(x.at) && CURS.includes(x.cur);
+  return !!d && d.v === 2 && typeof d.company === 'string' && !!d.pass?.hash && !!d.pass?.salt &&
+    ['expenses', 'credits', 'projects', 'log'].every(k => Array.isArray(d[k])) && d.expenses.every(okRec) && d.credits.every(okRec);
+}
+async function doRestore(file) {
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { return alert('This file could not be read. Pick a backup file saved from this app.'); }
+  if (!validBackup(data)) return alert('This is not a backup file from this app.');
+  if (S) {
+    if (!await unlock('Enter the password to restore a backup. It replaces the data on this computer.')) return;
+    if (!confirm(`Replace ALL current data with this backup?\n\nBackup of: ${data.company}\n${live(data.expenses).length} expenses · ${live(data.credits).length} money received\n\nTip: save a backup of the current data first.`)) return;
+  }
+  // a fresh device code, so ids never clash with the device the backup came from
+  S = { ...data, seq: {}, dev: newDev(), dirty: data.link ? allIds(data) : [] };
+  update({ log: logWith([['Restored', '—', `Data restored from backup file "${file.name}"`]]) });
+  unlockedUntil = 0; tab = 'home';
+  closeSheet(); render(); scheduleSync(0); toast('Backup restored ✓ — use the password from the backup');
+}

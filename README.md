@@ -1,0 +1,80 @@
+# Company Accounts
+
+A simple app for company expenses and money received, in **USD and SSP**.
+It works **without internet** on phones and computers. Whenever there is internet, every device
+syncs with your **company Google Sheet**, so everyone sees the same records.
+
+**App address:** https://surapaneni-bala.github.io/company-accounts/
+
+---
+
+## One-time setup (about 10 minutes, on the main computer)
+
+### A. Make the Google Sheet
+1. Sign in to Google with your **company** account and open <https://sheets.google.com>.
+2. Click **Blank spreadsheet**. Name it **Company Accounts**.
+3. In the menu click **Extensions → Apps Script**. A code editor opens.
+4. Delete everything in the editor. Open [`apps-script/Code.gs`](apps-script/Code.gs), click the
+   **Copy raw file** button, and paste it into the editor. Click the **Save** icon (💾).
+5. At the top, in the box next to **Run**, choose **setup**, then click **Run**.
+   Google asks for permission → **Review permissions** → pick your account → **Allow**.
+   (If you see "Google hasn't verified this app": click **Advanced → Go to project**. It is your own script.)
+6. Go back to the Google Sheet. A new **Read me** tab shows your **Company code**. Keep it private.
+
+### B. Turn the sheet into a "web app" (so the app can reach it)
+7. In Apps Script click **Deploy → New deployment**. Click the ⚙️ next to "Select type" → **Web app**.
+8. Set **Execute as: Me** and **Who has access: Anyone**. Click **Deploy**.
+9. Copy the **Web app URL** (it ends with `/exec`).
+   *If "Anyone" is not in the list, your company's Google admin has blocked it — ask them to allow it,
+   or use another Google account for the sheet.*
+
+### C. Connect the main computer
+10. Open the app address in **Google Chrome**. (Tip: click the install icon ⊕ in the address bar to
+    get it as an app.) Tap **Start a new company**, type the company name and a password.
+11. Open the **Sheet** tab → **Connect to Google Sheet** → paste the **Web app URL** and the
+    **Company code** → **Connect**. Done — the sheet fills in by itself.
+
+### D. Add phones
+12. On the computer: **Sheet** tab → **Add a phone** → **Copy link** → send it by WhatsApp or email.
+13. **iPhone:** open the link in **Safari** → **Share → Add to Home Screen** → open **Accounts** from the
+    home screen → **Join my company** → paste the link → **Join**.
+    **Android:** open the link in **Chrome** → **⋮ → Add to Home screen** (or **Install app**) → open it →
+    **Join my company** → paste the link → **Join**.
+
+Joining needs internet once. After that the phone works offline.
+
+---
+
+## Everyday use
+- **Add expense / Money received / Add many at once** — anyone can add. Date and time fill in by themselves.
+- **Edit, delete, or an old date** — needs the password (stays unlocked for 5 minutes).
+- Every entry records **who entered it**. Edits and deletes are kept in the **Change Log**.
+- **USD and SSP are kept separately** — they are never added together.
+- The badge at the top shows sync: **✓ Synced**, **⏳ 3 to sync** (waiting for internet), or **⚠️** if
+  something needs attention. Waiting entries are safe on the device and sync by themselves.
+
+## The Google Sheet
+Tabs: **Summary** (balances, projects, month by month, who entered what), **Expenses**,
+**Money Received**, **Ledger** (running balances), **Change Log**. They update after every sync —
+**don't type in them**. The hidden `_sync` tab is the master copy: never edit or delete it.
+Need Excel? In Google Sheets: **File → Download → Microsoft Excel**.
+
+## Good to know
+- The password stops casual changes; it is not bank-level security.
+- On a phone, don't delete the app while the badge shows **⏳ to sync** — those entries are only on that phone.
+- Anyone with an invite link can see and add records. Only send it to your own staff.
+  To shut everyone out, in Apps Script: **Project settings → Script properties** → change `KEY`,
+  then reconnect the main computer and send new invite links.
+
+## Updating the sync script later
+If `apps-script/Code.gs` changes: paste the new code in Apps Script → **Save** → **Deploy → Manage
+deployments** → ✏️ → **Version: New version** → **Deploy**. The web app URL stays the same.
+
+---
+
+## For developers
+- Source: `src/` (`core.js`, `sync.js`, `main.js`, `shell.html`). Build: `node tools/build.js` → `docs/` (served by GitHub Pages).
+- Sync server: `apps-script/Code.gs`. Test it locally: `node tools/test-sheet-server.js`.
+- Try the app without Google: `node tools/mock-server.js` (prints a company code, web app link
+  `http://127.0.0.1:8770/exec`) and serve `docs/` on `http://127.0.0.1:<port>/`.
+- Icons: `python3 tools/make-icons.py`.
