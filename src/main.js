@@ -33,8 +33,9 @@ const ACTIONS = {
   copyInvite: () => navigator.clipboard.writeText($('#inviteLink').value).then(() => toast('Link copied ✓'), () => { $('#inviteLink').select(); toast('Select the link and copy it'); }),
   shareInvite: () => navigator.share({ title: `Join ${S.company}`, text: `Join ${S.company} accounts:`, url: $('#inviteLink').value }).catch(() => {}),
   disconnect: () => disconnect(),
+  importOld: () => importSheet(),
 };
-const FORMS = { expense: saveExpense, credit: saveCredit, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect };
+const FORMS = { expense: saveExpense, credit: saveCredit, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -55,6 +56,7 @@ document.addEventListener('input', e => {
   t.classList.remove('bad');
   if (t.closest('.brows')) updateBulk(t.form);
   if (t.closest('.amt-in')) refreshAmount(t);
+  if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
 });
 document.addEventListener('change', e => {

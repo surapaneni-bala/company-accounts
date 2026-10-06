@@ -134,6 +134,12 @@ b.in { color: var(--in); } b.out { color: var(--out); }
 .card h3 { margin: 0 0 6px; }
 a.btn { display: block; text-align: center; text-decoration: none; }
 .sub { display: block; font-size: 14px; font-weight: 700; color: var(--muted); margin-top: 2px; }
+.fld textarea { width: 100%; min-height: 170px; font: 14px/1.45 ui-monospace, Menlo, Consolas, monospace; padding: 12px; border: 2px solid var(--line); border-radius: var(--r-sm); background: var(--field); color: var(--ink); resize: vertical; }
+.fld textarea:focus { outline: none; border-color: var(--ink); background: #fff; }
+.note.cols { font-size: 13px; font-weight: 800; word-spacing: 2px; }
+.ok-line { color: var(--in); margin: 0 0 6px; }
+.err-list { color: var(--out); background: var(--out-soft); border-radius: var(--r-sm); padding: 10px 14px; font-size: 14px; margin: 6px 0; }
+.err-list ul { margin: 6px 0 0; padding-left: 18px; }
 .steps { margin: 0 0 16px; padding-left: 22px; display: grid; gap: 8px; }
 .muted { color: var(--muted); font-size: 15px; }
 .setrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }

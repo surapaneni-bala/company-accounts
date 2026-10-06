@@ -9,7 +9,7 @@ const root = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(root, 'src', f), 'utf8');
 const out = path.join(root, 'docs');
 
-const js = ['core.js', 'sync.js', 'main.js'].map(read).join('\n');
+const js = ['core.js', 'sync.js', 'import.js', 'main.js'].map(read).join('\n');
 const html = read('shell.html').replace('<!--APP-->', () => `<script>\n${js}</script>`);
 const version = crypto.createHash('sha256').update(html).digest('hex').slice(0, 10);
 

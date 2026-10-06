@@ -329,6 +329,11 @@ function viewSheet() {
   return `<div class="stack">
       ${syncCard()}
       <section class="card pad">
+        <h3>📥 Old expenses</h3>
+        <p class="muted">Have expenses from before you started using the app? Paste the whole list in once — they go to every device and the Google Sheet.</p>
+        <button class="btn ghost" data-act="importOld">Import old expenses 🔒</button>
+      </section>
+      <section class="card pad">
         <h3>💾 Backup file</h3>
         <p class="muted">${S.lastBackup ? 'Last backup: <b>' + fmtAbs(S.lastBackup) + '</b>.' : '<b>No backup file yet.</b>'} ${S.link ? 'Your records are also kept in the company Google Sheet.' : 'Your records are saved on this device only — connect the Google Sheet above, or save a backup file every week.'}</p>
         <div class="two"><button class="btn ghost" data-act="backup">Save backup</button><button class="btn ghost" data-act="restore">Restore 🔒</button></div>
