@@ -502,6 +502,7 @@ function projectDetail(id) {
     ${projBar(s)}
     <div style="margin-bottom:16px">${projStatsGrid(s)}</div>
     <div class="two"><button class="btn in" data-act="addCredit" data-project="${id}">＋ Money received</button><button class="btn ghost" data-act="editProject" data-id="${id}">✏️ Edit 🔒</button></div>
+    <button class="btn ghost" data-act="assignPick" data-id="${id}" style="margin-top:10px">＋ Add existing expenses 🔒</button>
     <h3 class="subh">Money received (${R.length})</h3>
     ${R.length ? `<div class="card list inset">${R.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}
     <h3 class="subh">Spent on this project (${E.length})</h3>
@@ -563,6 +564,46 @@ function saveMove(f) {
     toast(`Saved ✓ ${money(amount, rec.cur)} moved ${from} → ${rec.to}`);
   }
   closeSheet(); render();
+}
+// Put many existing expenses under one project at once (e.g. a list imported without a project).
+async function assignSheet(pid) {
+  if (!await unlock('Enter the password to move expenses into this project.')) return;
+  const p = S.projects.find(x => x.id === pid);
+  const list = live(S.expenses).filter(e => e.project !== pid).sort((a, b) => byAt(b, a));
+  openSheet(`${head('Add expenses to project', '', p.name)}
+    <p class="hint">Tick the expenses that belong to <b>${esc(p.name)}</b>. Expenses without a project are shown.</p>
+    <form data-form="assign" data-id="${pid}">
+      ${list.some(e => e.project) ? '<label class="fld check"><input type="checkbox" name="others"> Also show expenses that are in another project</label>' : ''}
+      <div class="two"><button type="button" class="btn small ghost" data-act="pickAll">Select all</button><button type="button" class="btn small ghost" data-act="pickNone">Select none</button></div>
+      <div class="picklist">${list.length ? list.map(e => `<label class="pick" data-other="${e.project ? 1 : 0}" ${e.project ? 'hidden' : ''}>
+        <input type="checkbox" name="pick" value="${e.id}"><span class="pd">${fmtDate(e.at.slice(0, 10))}</span>
+        <span class="pr">${esc(e.reason)}<small>${esc(e.paidTo)}${e.project ? ' · now in ' + esc(projName(e.project)) : ''}</small></span><b>${money(e.amount, e.cur)}</b></label>`).join('') : '<p class="muted">No other expenses.</p>'}</div>
+      ${byField()}
+      <div class="foot"><div class="btotal"><span id="pickCount">0 selected</span><b id="pickSum"></b></div><p class="err"></p><button class="btn primary" id="pickBtn" disabled>Add to project</button></div>
+    </form>${datalists()}`);
+}
+function updatePick(f) {
+  const ids = new Set($$('input[name=pick]:checked', f).map(i => i.value));
+  const chosen = live(S.expenses).filter(e => ids.has(e.id));
+  $('#pickCount').textContent = `${chosen.length} selected`;
+  $('#pickSum').textContent = chosen.length ? sumText(chosen) : '';
+  $('#pickBtn').disabled = !chosen.length;
+  $('#pickBtn').textContent = chosen.length ? `Add ${chosen.length} to project` : 'Add to project';
+}
+function saveAssign(f) {
+  const pid = f.dataset.id, p = S.projects.find(x => x.id === pid);
+  const ids = new Set($$('input[name=pick]:checked', f).map(i => i.value));
+  if (!ids.size) return formErr(f, null, 'Tick at least one expense.');
+  const by = clean(f.elements.by.value);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const moved = live(S.expenses).filter(e => ids.has(e.id));
+  update({
+    expenses: S.expenses.map(e => (ids.has(e.id) ? { ...e, project: pid, editedAt: stampSec(), editedBy: by } : e)),
+    log: logWith([['Edited', pid, `${moved.length} expenses (${sumText(moved)}) put under project "${p.name}": ${moved.map(e => e.id).join(', ')}`]], by),
+    lastBy: by,
+  });
+  render(); projectDetail(pid);
+  toast(`✓ ${moved.length} expenses added to ${p.name}`);
 }
 function projectFromForm(v) {
   if (v.project !== '__new') return [v.project, S.projects, S.seq];

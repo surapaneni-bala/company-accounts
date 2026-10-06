@@ -156,6 +156,16 @@ details.manual { margin: 4px 0 12px; } details.manual summary { cursor: pointer;
 .tile.move .ic { background: #E8ECF6; color: var(--ink); }
 .row.move .dot { background: #E8ECF6; color: var(--ink); }
 .row.move .amt { color: var(--ink); }
+.picklist { display: grid; gap: 6px; margin: 10px 0 14px; }
+.pick { display: grid; grid-template-columns: 22px 74px 1fr auto; gap: 8px; align-items: center; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; cursor: pointer; font-size: 15px; }
+.pick:has(input:checked) { border-color: var(--ink); background: #F6F4EF; }
+.pick input { width: 20px; height: 20px; margin: 0; }
+.pick .pd { color: var(--muted); font-size: 13px; font-weight: 700; }
+.pick .pr { min-width: 0; overflow-wrap: anywhere; }
+.pick small { display: block; color: var(--muted); font-size: 12px; }
+.pick b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fld.check { display: flex; gap: 10px; align-items: center; font-weight: 700; }
+.fld.check input { width: 20px; height: 20px; padding: 0; margin: 0; flex: none; }
 .steps { margin: 0 0 16px; padding-left: 22px; display: grid; gap: 8px; }
 .muted { color: var(--muted); font-size: 15px; }
 .setrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }

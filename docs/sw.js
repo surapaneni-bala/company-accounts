@@ -1,5 +1,5 @@
 // Keeps a copy of the app on the phone/computer so it opens with no internet.
-const CACHE = 'accounts-ab0a7c14d9';
+const CACHE = 'accounts-e1d1a5e301';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

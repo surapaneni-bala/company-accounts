@@ -156,6 +156,16 @@ details.manual { margin: 4px 0 12px; } details.manual summary { cursor: pointer;
 .tile.move .ic { background: #E8ECF6; color: var(--ink); }
 .row.move .dot { background: #E8ECF6; color: var(--ink); }
 .row.move .amt { color: var(--ink); }
+.picklist { display: grid; gap: 6px; margin: 10px 0 14px; }
+.pick { display: grid; grid-template-columns: 22px 74px 1fr auto; gap: 8px; align-items: center; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; cursor: pointer; font-size: 15px; }
+.pick:has(input:checked) { border-color: var(--ink); background: #F6F4EF; }
+.pick input { width: 20px; height: 20px; margin: 0; }
+.pick .pd { color: var(--muted); font-size: 13px; font-weight: 700; }
+.pick .pr { min-width: 0; overflow-wrap: anywhere; }
+.pick small { display: block; color: var(--muted); font-size: 12px; }
+.pick b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fld.check { display: flex; gap: 10px; align-items: center; font-weight: 700; }
+.fld.check input { width: 20px; height: 20px; padding: 0; margin: 0; flex: none; }
 .steps { margin: 0 0 16px; padding-left: 22px; display: grid; gap: 8px; }
 .muted { color: var(--muted); font-size: 15px; }
 .setrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
@@ -319,7 +329,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 <script>
 'use strict';
-const APP_VERSION = 'ab0a7c14d9'; // filled in by tools/build.js
+const APP_VERSION = 'e1d1a5e301'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -822,6 +832,7 @@ function projectDetail(id) {
     ${projBar(s)}
     <div style="margin-bottom:16px">${projStatsGrid(s)}</div>
     <div class="two"><button class="btn in" data-act="addCredit" data-project="${id}">＋ Money received</button><button class="btn ghost" data-act="editProject" data-id="${id}">✏️ Edit 🔒</button></div>
+    <button class="btn ghost" data-act="assignPick" data-id="${id}" style="margin-top:10px">＋ Add existing expenses 🔒</button>
     <h3 class="subh">Money received (${R.length})</h3>
     ${R.length ? `<div class="card list inset">${R.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}
     <h3 class="subh">Spent on this project (${E.length})</h3>
@@ -883,6 +894,46 @@ function saveMove(f) {
     toast(`Saved ✓ ${money(amount, rec.cur)} moved ${from} → ${rec.to}`);
   }
   closeSheet(); render();
+}
+// Put many existing expenses under one project at once (e.g. a list imported without a project).
+async function assignSheet(pid) {
+  if (!await unlock('Enter the password to move expenses into this project.')) return;
+  const p = S.projects.find(x => x.id === pid);
+  const list = live(S.expenses).filter(e => e.project !== pid).sort((a, b) => byAt(b, a));
+  openSheet(`${head('Add expenses to project', '', p.name)}
+    <p class="hint">Tick the expenses that belong to <b>${esc(p.name)}</b>. Expenses without a project are shown.</p>
+    <form data-form="assign" data-id="${pid}">
+      ${list.some(e => e.project) ? '<label class="fld check"><input type="checkbox" name="others"> Also show expenses that are in another project</label>' : ''}
+      <div class="two"><button type="button" class="btn small ghost" data-act="pickAll">Select all</button><button type="button" class="btn small ghost" data-act="pickNone">Select none</button></div>
+      <div class="picklist">${list.length ? list.map(e => `<label class="pick" data-other="${e.project ? 1 : 0}" ${e.project ? 'hidden' : ''}>
+        <input type="checkbox" name="pick" value="${e.id}"><span class="pd">${fmtDate(e.at.slice(0, 10))}</span>
+        <span class="pr">${esc(e.reason)}<small>${esc(e.paidTo)}${e.project ? ' · now in ' + esc(projName(e.project)) : ''}</small></span><b>${money(e.amount, e.cur)}</b></label>`).join('') : '<p class="muted">No other expenses.</p>'}</div>
+      ${byField()}
+      <div class="foot"><div class="btotal"><span id="pickCount">0 selected</span><b id="pickSum"></b></div><p class="err"></p><button class="btn primary" id="pickBtn" disabled>Add to project</button></div>
+    </form>${datalists()}`);
+}
+function updatePick(f) {
+  const ids = new Set($$('input[name=pick]:checked', f).map(i => i.value));
+  const chosen = live(S.expenses).filter(e => ids.has(e.id));
+  $('#pickCount').textContent = `${chosen.length} selected`;
+  $('#pickSum').textContent = chosen.length ? sumText(chosen) : '';
+  $('#pickBtn').disabled = !chosen.length;
+  $('#pickBtn').textContent = chosen.length ? `Add ${chosen.length} to project` : 'Add to project';
+}
+function saveAssign(f) {
+  const pid = f.dataset.id, p = S.projects.find(x => x.id === pid);
+  const ids = new Set($$('input[name=pick]:checked', f).map(i => i.value));
+  if (!ids.size) return formErr(f, null, 'Tick at least one expense.');
+  const by = clean(f.elements.by.value);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const moved = live(S.expenses).filter(e => ids.has(e.id));
+  update({
+    expenses: S.expenses.map(e => (ids.has(e.id) ? { ...e, project: pid, editedAt: stampSec(), editedBy: by } : e)),
+    log: logWith([['Edited', pid, `${moved.length} expenses (${sumText(moved)}) put under project "${p.name}": ${moved.map(e => e.id).join(', ')}`]], by),
+    lastBy: by,
+  });
+  render(); projectDetail(pid);
+  toast(`✓ ${moved.length} expenses added to ${p.name}`);
 }
 function projectFromForm(v) {
   if (v.project !== '__new') return [v.project, S.projects, S.seq];
@@ -1532,8 +1583,11 @@ const ACTIONS = {
   disconnect: () => disconnect(),
   importOld: () => importSheet(),
   howUpdate: () => howUpdateSheet(),
+  assignPick: b => assignSheet(b.dataset.id),
+  pickAll: b => { const f = b.closest('form'); $$('.pick:not([hidden]) input', f).forEach(i => (i.checked = true)); updatePick(f); },
+  pickNone: b => { const f = b.closest('form'); $$('input[name=pick]', f).forEach(i => (i.checked = false)); updatePick(f); },
 };
-const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport };
+const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -1565,6 +1619,8 @@ document.addEventListener('change', e => {
     $$('.amt-in input', t.form).forEach(refreshAmount);
     if ($('.brows', t.form)) updateBulk(t.form);
   }
+  if (t.name === 'pick' && t.form) updatePick(t.form);
+  if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }
   if (t.id === 'month') { histMonth = t.value; $('#histRes').innerHTML = histResults(); }
   if (t.id === 'restoreFile') { doRestore(t.files[0]); t.value = ''; }

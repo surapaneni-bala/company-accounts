@@ -37,8 +37,11 @@ const ACTIONS = {
   disconnect: () => disconnect(),
   importOld: () => importSheet(),
   howUpdate: () => howUpdateSheet(),
+  assignPick: b => assignSheet(b.dataset.id),
+  pickAll: b => { const f = b.closest('form'); $$('.pick:not([hidden]) input', f).forEach(i => (i.checked = true)); updatePick(f); },
+  pickNone: b => { const f = b.closest('form'); $$('input[name=pick]', f).forEach(i => (i.checked = false)); updatePick(f); },
 };
-const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport };
+const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -70,6 +73,8 @@ document.addEventListener('change', e => {
     $$('.amt-in input', t.form).forEach(refreshAmount);
     if ($('.brows', t.form)) updateBulk(t.form);
   }
+  if (t.name === 'pick' && t.form) updatePick(t.form);
+  if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }
   if (t.id === 'month') { histMonth = t.value; $('#histRes').innerHTML = histResults(); }
   if (t.id === 'restoreFile') { doRestore(t.files[0]); t.value = ''; }
