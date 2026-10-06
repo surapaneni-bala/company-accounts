@@ -950,8 +950,10 @@ async function doRestore(file) {
     if (!await unlock('Enter the password to restore a backup. It replaces the data on this computer.')) return;
     if (!confirm(`Replace ALL current data with this backup?\n\nBackup of: ${data.company}\n${live(data.expenses).length} expenses · ${live(data.credits).length} money received\n\nTip: save a backup of the current data first.`)) return;
   }
-  // a fresh device code, so ids never clash with the device the backup came from
-  S = { ...data, seq: {}, dev: newDev(), dirty: data.link ? allIds(data) : [] };
+  // a fresh device code, so ids never clash with the device the backup came from;
+  // migrate() also upgrades backups saved by older versions of the app
+  const fresh = migrate({ ...data, seq: {}, dev: newDev(), dirty: [] });
+  S = { ...fresh, dirty: fresh.link ? allIds(fresh) : [] };
   update({ log: logWith([['Restored', '—', `Data restored from backup file "${file.name}"`]]) });
   unlockedUntil = 0; tab = 'home';
   closeSheet(); render(); scheduleSync(0); toast('Backup restored ✓ — use the password from the backup');
