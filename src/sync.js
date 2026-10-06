@@ -6,13 +6,17 @@ const SYNC_DELAY_MS = 2000;
 const SYNC_EVERY_MS = 2 * 60 * 1000;
 const SYNC_TIMEOUT_MS = 45000;
 const APP_URL = 'https://surapaneni-bala.github.io/company-accounts/';
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log' };
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers' };
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string',
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur),
   P: d => typeof d.id === 'string' && typeof d.name === 'string',
   L: d => typeof d.lid === 'string' && typeof d.text === 'string' && typeof d.at === 'string',
+  T: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && ACCOUNTS.includes(d.from) && ACCOUNTS.includes(d.to) && d.from !== d.to,
 };
+// what a Google Sheet script from before cash/bank moves can store
+const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
+const OUTDATED_MSG = 'The Google Sheet script needs updating before cash ↔ bank moves can reach the sheet (see the guide: “Updating the sync script”). Everything else is syncing; the moves are kept safe on this device.';
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error
 let syncBusy = false, syncAgain = false, syncTimer = 0;
 
@@ -142,10 +146,13 @@ async function syncNow() {
     if (!S.link) return; // disconnected while this was running
     const changed = applyPull(res.pull || []);
     // a record edited while the request was running stays queued
+    // records the sheet's script cannot store yet stay queued until it is updated
+    const accepted = new Set(res.kinds || OLD_SERVER_KINDS);
+    const refused = new Set(push.filter(p => !accepted.has(p.k)).map(p => p.id));
     const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow();
-    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || S.link.sheet }, dirty: S.dirty.filter(id => !sent.has(id) || (now.get(id) || 0) !== sent.get(id)) };
+    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || S.link.sheet }, dirty: S.dirty.filter(id => refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id)) };
     save();
-    sync = { state: 'ok', at: stampSec(), err: '' };
+    sync = refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };
     if (changed && !typing()) render();
   } catch (e) {
     sync = { ...sync, state: e.offline ? 'offline' : 'error', err: e.message };
@@ -224,7 +231,7 @@ async function doJoin(f) {
   try { ({ link, res } = await firstContact(link)); }
   catch (e) { return formErr(f, null, /^No internet/.test(e.message) ? 'No internet. Joining needs internet once — try again when connected.' : e.message); }
   if (!(res.pull || []).some(p => p.k === 'S')) return formErr(f, null, 'That Google Sheet has no company yet. Connect the main computer first.');
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], projects: [], log: [], seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
+  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
   applyPull(res.pull);
   S = { ...S, link: { ...S.link, since: res.seq } };
   save(); navigator.storage?.persist?.();
@@ -255,5 +262,5 @@ async function disconnect() {
 }
 function migrate(s) {
   const dev = s.dev || newDev();
-  return { ...s, dev, dirty: s.dirty || [], settingsU: s.settingsU || 1, link: s.link || null, log: s.log.map((l, i) => l.lid ? l : { ...l, lid: `L-${dev}-old${i}` }) };
+  return { ...s, dev, transfers: s.transfers || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, link: s.link || null, log: s.log.map((l, i) => l.lid ? l : { ...l, lid: `L-${dev}-old${i}` }) };
 }

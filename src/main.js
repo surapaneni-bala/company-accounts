@@ -7,11 +7,12 @@ const ACTIONS = {
   addBulk: () => bulkForm(),
   addCredit: b => creditForm(null, b.dataset.project),
   addProject: () => projectForm(),
+  addMove: () => moveForm(),
   open: b => detail(b.dataset.kind, b.dataset.id),
   openProject: b => projectDetail(b.dataset.id),
   edit: async b => {
-    const k = b.dataset.kind, r = (k === 'E' ? S.expenses : S.credits).find(x => x.id === b.dataset.id);
-    if (await unlock('Enter the password to edit this entry.')) (k === 'E' ? expenseForm : creditForm)(r);
+    const k = b.dataset.kind, r = S[COLL[k]].find(x => x.id === b.dataset.id);
+    if (await unlock('Enter the password to edit this entry.')) ({ E: expenseForm, R: creditForm, T: moveForm })[k](r);
   },
   del: b => deleteRecord(b.dataset.kind, b.dataset.id),
   editProject: async b => { if (await unlock('Enter the password to edit this project.')) projectForm(S.projects.find(p => p.id === b.dataset.id)); },
@@ -36,7 +37,7 @@ const ACTIONS = {
   disconnect: () => disconnect(),
   importOld: () => importSheet(),
 };
-const FORMS = { expense: saveExpense, credit: saveCredit, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport };
+const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);

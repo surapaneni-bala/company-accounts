@@ -9,7 +9,7 @@ const { loadGas } = require('./fake-gas');
 
 const PORT = Number(process.env.PORT || 8770);
 const STATE = path.join(__dirname, '.mock-state.json');
-const code = fs.readFileSync(path.join(__dirname, '../apps-script/Code.gs'), 'utf8');
+const code = fs.readFileSync(process.env.CODE || path.join(__dirname, '../apps-script/Code.gs'), 'utf8'); // CODE=… tries another script version
 const gas = loadGas(code, fs.existsSync(STATE) ? JSON.parse(fs.readFileSync(STATE, 'utf8')) : {});
 if (!gas.props.KEY) gas.setup();
 

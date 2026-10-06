@@ -2,7 +2,12 @@
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
-const MODES = ['Cash', 'Mobile money', 'Bank', 'Card', 'Cheque'];
+// Money is in one of two places: cash in hand or the bank.
+const ACCOUNTS = ['Cash', 'Bank'];
+const ACCOUNT_ICON = { Cash: '💵', Bank: '🏦' };
+// entries saved by older versions may say Card, Cheque or Mobile money
+const accountOf = mode => (/^(bank|card|cheque|check)/i.test(String(mode || '')) ? 'Bank' : 'Cash');
+const COLL = { E: 'expenses', R: 'credits', T: 'transfers' };
 // Two separate money accounts. They are never added together: the rate moves too much.
 const CURS = ['USD', 'SSP'];
 const CUR_NAME = { USD: 'US Dollar', SSP: 'S. Sudan Pound' };
@@ -24,7 +29,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 function update(patch) {
   const now = Date.now(), dirty = new Set(S.dirty || []), stamped = {};
@@ -92,13 +97,14 @@ function nextIds(prefix, n, seq) {
 }
 const logWith = (entries, by = S.lastBy || '') => [...S.log, ...entries.map(([action, id, text], i) => ({ lid: `L-${S.dev}-${Date.now().toString(36)}${i}`, at: stampSec(), action, id, text, by }))];
 
-const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Paid by', note: 'Note', at: 'Date' };
-function showVal(k, r) { const v = r[k]; return k === 'amount' ? money(+v, r.cur) : k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : (v || '(empty)'); }
+const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved' };
+function showVal(k, r) { const v = r[k]; return k === 'amount' ? money(+v, r.cur) : k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : k === 'mode' ? accountOf(v) : k === 'from' ? `${v} → ${v === 'Cash' ? 'Bank' : 'Cash'}` : (v || '(empty)'); }
 function diff(a, b) { return Object.keys(LABELS).filter(k => k in b && String(a[k] ?? '') !== String(b[k] ?? '')).map(k => `${LABELS[k]}: ${showVal(k, a)} → ${showVal(k, b)}`); }
 function describe(k, r) {
+  if (k === 'T') return `${money(r.amount, r.cur)} moved from ${r.from} to ${r.to}${r.note ? ' · ' + r.note : ''} · dated ${fmtAbs(r.at)}`;
   return k === 'E'
-    ? `${money(r.amount, r.cur)} paid to ${r.paidTo} for ${r.reason}${r.location ? ' at ' + r.location : ''} · ${r.mode} · ${projName(r.project)} · dated ${fmtAbs(r.at)}`
-    : `${money(r.amount, r.cur)} received for ${projName(r.project)} · ${r.mode}${r.note ? ' · ' + r.note : ''} · dated ${fmtAbs(r.at)}`;
+    ? `${money(r.amount, r.cur)} paid to ${r.paidTo} for ${r.reason}${r.location ? ' at ' + r.location : ''} · from ${accountOf(r.mode)} · ${projName(r.project)} · dated ${fmtAbs(r.at)}`
+    : `${money(r.amount, r.cur)} received for ${projName(r.project)} · into ${accountOf(r.mode)}${r.note ? ' · ' + r.note : ''} · dated ${fmtAbs(r.at)}`;
 }
 function projStats(id) {
   const p = S.projects.find(x => x.id === id) || {};
@@ -171,7 +177,7 @@ const textField = (name, label, ph, val, req = true) => `<label class="fld"><spa
 const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${c}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
 const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${val || ''}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
 const byField = () => `<label class="fld"><span>Your name <em>(who is entering this)</em></span><input name="by" placeholder="Type your name" value="${esc(S.lastBy || '')}" list="dl-by" autocomplete="off" maxlength="60" required></label>`;
-const modeChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="chips">${MODES.map(m => `<label><input type="radio" name="mode" value="${m}" ${m === cur ? 'checked' : ''}><span>${m}</span></label>`).join('')}</div></div>`;
+const accountChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="curseg">${ACCOUNTS.map(a => `<label><input type="radio" name="mode" value="${a}" ${a === accountOf(cur) ? 'checked' : ''}><span><b>${ACCOUNT_ICON[a]} ${a}</b><small>${a === 'Cash' ? 'Cash in hand' : 'Bank account'}</small></span></label>`).join('')}</div></div>`;
 function projectSelect(cur, optional) {
   const ps = S.projects.filter(p => !p.deleted);
   const isNew = !optional && (!ps.length || cur === '__new');
@@ -244,22 +250,34 @@ function viewSetup() {
   </section>`;
 }
 
+// Cash and bank balance for each currency. A move between them changes both, never the total.
+function balances() {
+  const b = Object.fromEntries(CURS.map(c => [c, { Cash: 0, Bank: 0 }]));
+  live(S.credits).forEach(x => { b[x.cur][accountOf(x.mode)] += cents(x.amount); });
+  live(S.expenses).forEach(x => { b[x.cur][accountOf(x.mode)] -= cents(x.amount); });
+  live(S.transfers).forEach(x => { b[x.cur][x.from] -= cents(x.amount); b[x.cur][x.to] += cents(x.amount); });
+  return Object.fromEntries(CURS.map(c => [c, { Cash: b[c].Cash / 100, Bank: b[c].Bank / 100, Total: (b[c].Cash + b[c].Bank) / 100 }]));
+}
+const plain = n => (n < 0 ? '−' : '') + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
 function viewHome() {
-  const E = live(S.expenses), R = live(S.credits);
-  const spent = byCur(E), recv = byCur(R);
-  const bal = Object.fromEntries(CURS.map(c => [c, minus(recv[c], spent[c])]));
+  const E = live(S.expenses), R = live(S.credits), T = live(S.transfers);
+  const spent = byCur(E), recv = byCur(R), bal = balances();
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
-  const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
+  const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
   return `${backupBanner()}
-  <section class="balance ${CURS.some(c => bal[c] < 0) ? 'neg' : ''}" aria-label="Account balance">
-    <div class="lbl">Account balance</div>
-    ${CURS.map(c => `<div class="bal ${bal[c] < 0 ? 'neg' : ''}"><span class="cur-tag">${c}</span><span class="big">${money(bal[c], c)}</span></div>`).join('')}
+  <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances">
+    <div class="lbl">Balance</div>
+    ${CURS.map(c => `<div class="balrow">
+      <div class="balhead"><span class="cur-tag">${c}</span><span class="baltot${bal[c].Total < 0 ? ' neg' : ''}">${plain(bal[c].Total)}</span><small>total</small></div>
+      <div class="balparts">${ACCOUNTS.map(a => `<span>${ACCOUNT_ICON[a]} ${a} <b class="${bal[c][a] < 0 ? 'neg' : ''}">${plain(bal[c][a])}</b></span>`).join('')}</div>
+    </div>`).join('')}
     <div class="split"><div class="i"><small>Money received</small>${curLines(recv)}</div><div class="o"><small>Money spent</small>${curLines(spent)}</div></div>
   </section>
   <div class="actions">
     <button class="tile out" data-act="addExpense"><span class="ic">−</span><span><b>Add expense</b><small>Money paid out</small></span></button>
     <button class="tile in" data-act="addCredit"><span class="ic">+</span><span><b>Money received</b><small>From a project</small></span></button>
     <button class="tile bulk" data-act="addBulk"><span class="ic">☰</span><span><b>Add many at once</b><small>Several payments together, with a total</small></span></button>
+    <button class="tile bulk move" data-act="addMove"><span class="ic">⇄</span><span><b>Move money</b><small>Cash into the bank, or bank to cash — not spending</small></span></button>
   </div>
   <div class="minis">
     <div class="mini"><small>Spent today</small>${curLines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
@@ -277,9 +295,17 @@ function backupBanner() {
 }
 
 function itemRow(x, k, showDate) {
+  const when = [showDate ? fmtDay(x.at.slice(0, 10)) : '', fmtTime(x.at), x.by && 'by ' + x.by];
+  if (k === 'T') {
+    return `<button class="row move" data-act="open" data-kind="T" data-id="${x.id}">
+    <span class="dot">⇄</span>
+    <span class="main"><span class="t"><span class="tt">${ACCOUNT_ICON[x.from]} ${x.from} → ${ACCOUNT_ICON[x.to]} ${x.to}</span>${x.manualDate ? '<i class="tag warn">Date set</i>' : ''}</span><span class="s">${[x.note, ...when].filter(Boolean).map(esc).join(' · ')}</span></span>
+    <span class="amt">${money(x.amount, x.cur)}</span></button>`;
+  }
   const isE = k === 'E';
   const title = isE ? x.reason : `From ${projName(x.project)}`;
-  const sub = [isE ? x.paidTo : x.note, isE ? x.location : x.mode, showDate ? fmtDay(x.at.slice(0, 10)) : '', fmtTime(x.at), x.by && 'by ' + x.by].filter(Boolean).map(esc).join(' · ');
+  const acct = accountOf(x.mode);
+  const sub = [isE ? x.paidTo : x.note, isE ? x.location : '', `${ACCOUNT_ICON[acct]} ${acct}`, ...when].filter(Boolean).map(esc).join(' · ');
   const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '');
   return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${x.id}">
     <span class="dot">${isE ? '−' : '+'}</span>
@@ -288,11 +314,10 @@ function itemRow(x, k, showDate) {
 }
 
 function viewHistory() {
-  const all = live(histKind === 'E' ? S.expenses : S.credits);
+  const all = live(S[COLL[histKind]]);
   const months = [...new Set(all.map(x => x.at.slice(0, 7)))].sort().reverse();
   return `<div class="seg" role="tablist">
-      <button data-act="hist" data-k="E" class="${histKind === 'E' ? 'on' : ''}" role="tab" aria-selected="${histKind === 'E'}">− Money out</button>
-      <button data-act="hist" data-k="R" class="${histKind === 'R' ? 'on' : ''}" role="tab" aria-selected="${histKind === 'R'}">+ Money in</button>
+      ${[['E', '− Out'], ['R', '+ In'], ['T', '⇄ Moves']].map(([k, label]) => `<button data-act="hist" data-k="${k}" class="${histKind === k ? 'on' : ''}" role="tab" aria-selected="${histKind === k}">${label}</button>`).join('')}
     </div>
     <div class="filters">
       <input type="search" id="q" placeholder="Search name, reason, place, USD/SSP…" value="${esc(histQuery)}" aria-label="Search">
@@ -302,14 +327,14 @@ function viewHistory() {
 }
 function histResults() {
   const q = histQuery.trim().toLowerCase();
-  const items = live(histKind === 'E' ? S.expenses : S.credits)
+  const items = live(S[COLL[histKind]])
     .filter(x => !histMonth || x.at.startsWith(histMonth))
-    .filter(x => !q || [x.id, x.paidTo, x.reason, x.location, x.note, projName(x.project), x.mode, x.amount, x.by, x.cur].join(' ').toLowerCase().includes(q))
+    .filter(x => !q || [x.id, x.paidTo, x.reason, x.location, x.note, x.project && projName(x.project), x.mode && accountOf(x.mode), x.from, x.to, x.amount, x.by, x.cur].join(' ').toLowerCase().includes(q))
     .sort((a, b) => byAt(b, a));
   if (!items.length) return `<div style="height:14px"></div>` + empty('No entries', q || histMonth ? 'Try a different search or month.' : 'Entries you add will show here.');
   const groups = new Map();
   items.forEach(x => { const d = x.at.slice(0, 10); (groups.get(d) || groups.set(d, []).get(d)).push(x); });
-  return `<div class="sumline"><span>${items.length} ${items.length === 1 ? 'entry' : 'entries'}</span><b class="${histKind === 'E' ? 'out-c' : 'in-c'}">${sumText(items)}</b></div>` +
+  return `<div class="sumline"><span>${items.length} ${items.length === 1 ? 'entry' : 'entries'}</span><b class="${{ E: 'out-c', R: 'in-c', T: '' }[histKind]}">${sumText(items)}</b></div>` +
     [...groups].map(([d, xs]) => `<div class="day"><span>${fmtDay(d)}</span><span>${sumText(xs)}</span></div><div class="card list">${xs.map(x => itemRow(x, histKind, false)).join('')}</div>`).join('');
 }
 
@@ -334,9 +359,9 @@ function viewSheet() {
   return `<div class="stack">
       ${syncCard()}
       <section class="card pad">
-        <h3>📥 Old expenses</h3>
-        <p class="muted">Have expenses from before you started using the app? Paste the whole list in once — they go to every device and the Google Sheet.</p>
-        <button class="btn ghost" data-act="importOld">Import old expenses 🔒</button>
+        <h3>📥 Old entries</h3>
+        <p class="muted">Have expenses or cash/bank moves from before you started using the app? Paste the whole list in once — they go to every device and the Google Sheet.</p>
+        <button class="btn ghost" data-act="importOld">Import old entries 🔒</button>
       </section>
       <section class="card pad">
         <h3>💾 Backup file</h3>
@@ -363,7 +388,7 @@ function expenseForm(old) {
       ${textField('reason', 'Reason', 'What was it for?', d.reason)}
       ${textField('location', 'Location', 'Where?', d.location, false)}
       ${projectSelect(d.project, true)}
-      ${modeChips(d.mode, 'Paid by')}
+      ${accountChips(d.mode, 'Paid from')}
       ${whenField(old?.at, !!old)}
       ${byField()}
       <p class="err"></p>
@@ -377,12 +402,30 @@ function creditForm(old, presetProject) {
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${projectSelect(d.project, false)}
-      ${modeChips(d.mode, 'How did it come?')}
+      ${accountChips(d.mode, 'Received into')}
       ${textField('note', 'Note', 'e.g. 2nd installment', d.note, false)}
       ${whenField(old?.at, !!old)}
       ${byField()}
       <p class="err"></p>
       <button class="btn in">${old ? 'Save changes' : 'Save money received'}</button>
+    </form>${datalists()}`);
+}
+function moveForm(old) {
+  const d = old || { cur: defCur(), amount: '', from: 'Cash', note: '' };
+  openSheet(`${head(old ? 'Edit money move' : 'Move money', '', old?.id)}
+    <p class="hint">Putting cash into the bank (or taking cash out) is not spending — the total stays the same.</p>
+    <form data-form="move" data-id="${old?.id || ''}">
+      ${curChips(d.cur)}
+      ${amountField(d.amount, d.cur)}
+      <div class="fld"><span>Which way?</span><div class="curseg">
+        <label><input type="radio" name="from" value="Cash" ${d.from === 'Cash' ? 'checked' : ''}><span><b>💵 → 🏦</b><small>Cash into the bank</small></span></label>
+        <label><input type="radio" name="from" value="Bank" ${d.from === 'Bank' ? 'checked' : ''}><span><b>🏦 → 💵</b><small>Bank to cash</small></span></label>
+      </div></div>
+      ${textField('note', 'Note', 'e.g. Deposit at the bank', d.note, false)}
+      ${whenField(old?.at, !!old)}
+      ${byField()}
+      <p class="err"></p>
+      <button class="btn primary">${old ? 'Save changes' : 'Save move'}</button>
     </form>${datalists()}`);
 }
 const bulkRow = () => `<div class="brow"><span class="n"></span><input name="amount" inputmode="decimal" placeholder="Amount" autocomplete="off" aria-label="Amount"><input name="paidTo" placeholder="Paid to" list="dl-paidTo" autocomplete="off" maxlength="160" aria-label="Paid to"><input name="reason" placeholder="Reason" list="dl-reason" autocomplete="off" maxlength="160" aria-label="Reason"><button type="button" class="x" data-act="delRow" aria-label="Remove line">×</button></div>`;
@@ -396,7 +439,7 @@ function bulkForm() {
       <div class="shared"><h3>Same for every line</h3>
         ${textField('location', 'Location', 'Where?', S.lastLoc || '', false)}
         ${projectSelect(S.lastExpProject || '', true)}
-        ${modeChips(S.lastMode || 'Cash', 'Paid by')}
+        ${accountChips(S.lastMode || 'Cash', 'Paid from')}
         ${whenField('', false)}
         ${byField()}
       </div>
@@ -435,15 +478,17 @@ function settingsForm() {
 }
 
 function detail(k, id) {
-  const isE = k === 'E';
-  const r = (isE ? S.expenses : S.credits).find(x => x.id === id);
+  const r = S[COLL[k]].find(x => x.id === id);
   if (!r) return;
   const common = [['Date', fmtAbs(r.at)], ['Entered by', r.by], ['Recorded', fmtAbs(r.createdAt)], ['Last edited', r.editedAt && fmtAbs(r.editedAt)], ['Edited by', r.editedBy]];
-  const facts = isE
-    ? [['Money type', CUR_NAME[r.cur]], ['Paid to', r.paidTo], ['Reason', r.reason], ['Location', r.location], ['Project', projName(r.project)], ['Paid by', r.mode], ['Bulk group', r.batch], ...common]
-    : [['Money type', CUR_NAME[r.cur]], ['Project', projName(r.project)], ['How it came', r.mode], ['Note', r.note], ...common];
-  openSheet(`${head(isE ? 'Expense' : 'Money received', isE ? 'out' : 'in', r.id)}
-    <div class="dbig ${isE ? 'out' : 'in'}">${isE ? '−' : '+'}${money(r.amount, r.cur)}</div>
+  const facts = {
+    E: () => [['Money type', CUR_NAME[r.cur]], ['Paid to', r.paidTo], ['Reason', r.reason], ['Location', r.location], ['Project', projName(r.project)], ['Paid from', `${ACCOUNT_ICON[accountOf(r.mode)]} ${accountOf(r.mode)}`], ['Bulk group', r.batch], ...common],
+    R: () => [['Money type', CUR_NAME[r.cur]], ['Project', projName(r.project)], ['Received into', `${ACCOUNT_ICON[accountOf(r.mode)]} ${accountOf(r.mode)}`], ['Note', r.note], ...common],
+    T: () => [['Money type', CUR_NAME[r.cur]], ['From', `${ACCOUNT_ICON[r.from]} ${r.from}`], ['To', `${ACCOUNT_ICON[r.to]} ${r.to}`], ['Note', r.note], ...common],
+  }[k]();
+  const look = { E: ['Expense', 'out', '−'], R: ['Money received', 'in', '+'], T: ['Money moved', '', ''] }[k];
+  openSheet(`${head(look[0], look[1], r.id)}
+    <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
     <div class="two"><button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${id}">✏️ Edit 🔒</button><button class="btn danger" data-act="del" data-kind="${k}" data-id="${id}">🗑 Delete 🔒</button></div>`);
 }
@@ -491,6 +536,30 @@ function saveExpense(f) {
       lastLoc: rec.location, lastMode: rec.mode, lastExpProject: rec.project, lastBy: by, lastCur: rec.cur,
     });
     toast(`Saved ✓ ${money(amount, rec.cur)} to ${rec.paidTo}`);
+  }
+  closeSheet(); render();
+}
+function saveMove(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const old = S.transfers.find(x => x.id === f.dataset.id);
+  const amount = parseAmount(v.amount);
+  if (amount === null) return formErr(f, 'amount', 'Type a correct amount, like 5000');
+  const by = clean(v.by);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const from = v.from === 'Bank' ? 'Bank' : 'Cash';
+  const rec = { cur: formCur(f), amount, from, to: from === 'Cash' ? 'Bank' : 'Cash', note: clean(v.note), ...dateFrom(v, old) };
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    update({ transfers: S.transfers.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
+    toast('Changes saved ✓');
+  } else {
+    const [[id], seq] = nextIds('T', 1, S.seq);
+    update({
+      transfers: [...S.transfers, { id, ...rec, by, createdAt: stampSec() }], seq, lastBy: by, lastCur: rec.cur,
+      log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('T', rec)}`]], by) : S.log,
+    });
+    toast(`Saved ✓ ${money(amount, rec.cur)} moved ${from} → ${rec.to}`);
   }
   closeSheet(); render();
 }
@@ -604,7 +673,7 @@ async function doSetup(f) {
   const v = Object.fromEntries(new FormData(f));
   if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
   const salt = randHex();
-  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], projects: [], log: [], seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
+  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
   save();
   navigator.storage?.persist?.();
   render(); scrollTo(0, 0); toast('All set! Add your first entry.');
@@ -612,7 +681,7 @@ async function doSetup(f) {
 
 async function deleteRecord(k, id) {
   if (!await unlock('Enter the password to delete this entry.')) return;
-  const key = k === 'E' ? 'expenses' : 'credits';
+  const key = COLL[k];
   const r = S[key].find(x => x.id === id);
   const by = clean(prompt(`Delete ${id} — ${money(r.amount, r.cur)}?\n\nIt will be removed from all totals. A record stays in the Change Log.\n\nType your name to confirm:`, S.lastBy || ''));
   if (!by) return;
@@ -651,7 +720,7 @@ function doBackup() {
 function validBackup(d) {
   const okRec = x => x && typeof x.id === 'string' && Number.isFinite(x.amount) && AT_RE.test(x.at) && CURS.includes(x.cur);
   return !!d && d.v === 2 && typeof d.company === 'string' && !!d.pass?.hash && !!d.pass?.salt &&
-    ['expenses', 'credits', 'projects', 'log'].every(k => Array.isArray(d[k])) && d.expenses.every(okRec) && d.credits.every(okRec);
+    ['expenses', 'credits', 'projects', 'log'].every(k => Array.isArray(d[k])) && d.expenses.every(okRec) && d.credits.every(okRec) && (d.transfers || []).every(okRec);
 }
 async function doRestore(file) {
   if (!file) return;

@@ -5,16 +5,19 @@
  * this file, run setup(), then Deploy → New deployment → Web app
  * (Execute as: Me, Who has access: Anyone). Full steps are in the README.
  *
- * The hidden "_sync" tab is the master copy of every record. Summary, Expenses,
- * Money Received, Ledger and Change Log are rebuilt from it after every change.
+ * The hidden "_sync" tab is the master copy of every record. Summary, Expenses, Money Received,
+ * Cash & Bank moves, Ledger and Change Log are rebuilt from it after every change.
  */
 const SYNC_TAB = '_sync';
-const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Ledger', 'Change Log'];
+const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log'];
+// record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move)
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T'];
+const ACCOUNTS = ['Cash', 'Bank'];
 const LOCK_WAIT_MS = 25000;
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
-  num: '#,##0.00',
+  num: '#,##0.00;[Red]-#,##0.00',
   pct: '0%',
   date: 'dd mmm yyyy',
 };
@@ -43,7 +46,7 @@ function setup() {
     ['Company code (keep it private — it is inside every invite link):'],
     [key],
     [''],
-    ['• Summary, Expenses, Money Received, Ledger and Change Log update by themselves after every sync. Do not type in them.'],
+    ['• Summary, Expenses, Money Received, Cash & Bank moves, Ledger and Change Log update by themselves after every sync. Do not type in them.'],
     ['• The hidden "_sync" tab is the master copy of all records. Never edit or delete it.'],
     ['• USD and SSP are always kept separately.'],
     ['• Need an Excel file? File → Download → Microsoft Excel (.xlsx).'],
@@ -80,7 +83,7 @@ function doPost(e) {
       sh.getRange(2, 1, result.rows.length, 5).setValues(result.rows);
       rebuild_(ss, result.rows.map(toRec_));
     }
-    return json_({ ok: true, seq: result.seq, sheet: ss.getUrl(), pull: result.pull });
+    return json_({ ok: true, seq: result.seq, sheet: ss.getUrl(), kinds: KINDS, pull: result.pull });
   } finally {
     lock.releaseLock();
   }
@@ -94,7 +97,7 @@ function merge_(rows, push, since) {
   let seq = out.reduce((m, r) => Math.max(m, Number(r[3]) || 0), 0);
   let changed = false;
   (Array.isArray(push) ? push : []).forEach(p => {
-    if (!p || typeof p.id !== 'string' || !p.id || !/^[ERPLS]$/.test(p.k) || typeof p.u !== 'number' || !p.d || typeof p.d !== 'object') return;
+    if (!p || typeof p.id !== 'string' || !p.id || KINDS.indexOf(p.k) < 0 || typeof p.u !== 'number' || !p.d || typeof p.d !== 'object') return;
     const i = index[p.id];
     if (i !== undefined && Number(out[i][2]) >= p.u) return;
     seq += 1;
@@ -125,25 +128,34 @@ function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).se
 
 /* ---------- readable tabs ---------- */
 function rebuild_(ss, recs) {
-  const byAt = (a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0);
   const of = k => recs.filter(r => r.k === k).map(r => r.d);
   const projects = {};
   of('P').forEach(p => { projects[p.id] = p; });
   const pname = id => (id ? (projects[id] ? projects[id].name : 'Unknown project') : 'General (no project)');
-  const E = of('E').filter(x => !x.deleted).sort(byAt);
-  const R = of('R').filter(x => !x.deleted).sort(byAt);
-  const P = of('P').filter(x => !x.deleted);
+  const live = k => of(k).filter(x => !x.deleted && (k !== 'T' || (ACCOUNTS.indexOf(x.from) >= 0 && ACCOUNTS.indexOf(x.to) >= 0))).sort(byAt_);
   const settings = of('S')[0] || {};
-  const ctx = { E: E, R: R, P: P, L: of('L').sort(byAt), pname: pname, company: settings.company || 'Company' };
+  const ctx = { E: live('E'), R: live('R'), T: live('T'), P: of('P').filter(x => !x.deleted), L: of('L').sort(byAt_), pname: pname, company: settings.company || 'Company' };
   summary_(ss, ctx);
   expenses_(ss, ctx);
   received_(ss, ctx);
+  moves_(ss, ctx);
   ledger_(ss, ctx);
   changeLog_(ss, ctx);
   // keep the tabs in a fixed order right after "Read me"
   VIEW_TABS.forEach((name, i) => {
     if (ss.getSheets()[i + 1].getName() !== name) { ss.setActiveSheet(ss.getSheetByName(name)); ss.moveActiveSheet(i + 2); }
   });
+}
+const byAt_ = (a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : String(a.createdAt || '') < String(b.createdAt || '') ? -1 : String(a.createdAt || '') > String(b.createdAt || '') ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+// entries from older app versions may say Card, Cheque or Mobile money
+const accountOf_ = mode => (/^(bank|card|cheque|check)/i.test(String(mode || '')) ? 'Bank' : 'Cash');
+// running Cash / Bank balance per currency, in cents
+function balances_(c) {
+  const b = { USD: { Cash: 0, Bank: 0 }, SSP: { Cash: 0, Bank: 0 } };
+  c.R.forEach(x => { if (b[x.cur]) b[x.cur][accountOf_(x.mode)] += cents_(x.amount); });
+  c.E.forEach(x => { if (b[x.cur]) b[x.cur][accountOf_(x.mode)] -= cents_(x.amount); });
+  c.T.forEach(x => { if (b[x.cur]) { b[x.cur][x.from] -= cents_(x.amount); b[x.cur][x.to] += cents_(x.amount); } });
+  return b;
 }
 
 const cents_ = n => Math.round(Number(n || 0) * 100);
@@ -223,17 +235,20 @@ function summary_(ss, c) {
   const pending = { USD: 0, SSP: 0 };
   stats.forEach(s => { pending[s.vc] = (cents_(pending[s.vc]) + cents_(s.pending)) / 100; });
 
+  const acct = balances_(c);
   let r = table_(sh, 4, ['', 'USD', 'SSP'], [
+    ['💵 Cash balance', acct.USD.Cash / 100, acct.SSP.Cash / 100],
+    ['🏦 Bank balance', acct.USD.Bank / 100, acct.SSP.Bank / 100],
+    ['Total balance', bal.USD, bal.SSP],
     ['Total money received', recv.USD, recv.SSP],
     ['Total money spent', spent.USD, spent.SSP],
-    ['Account balance', bal.USD, bal.SSP],
     ['Pending from clients', pending.USD, pending.SSP],
   ], ['', 'USD', 'SSP']);
-  [[5, COLOR.inSoft, COLOR.in], [6, COLOR.outSoft, COLOR.out], [7, COLOR.bal, COLOR.ink], [8, COLOR.warnSoft, COLOR.warn]].forEach(x => {
+  [[5, COLOR.bal, COLOR.ink], [6, COLOR.bal, COLOR.ink], [7, COLOR.ink, '#ffffff'], [8, COLOR.inSoft, COLOR.in], [9, COLOR.outSoft, COLOR.out], [10, COLOR.warnSoft, COLOR.warn]].forEach(x => {
     sh.getRange(x[0], 1, 1, 3).setBackground(x[1]).setFontColor(x[2]).setFontWeight('bold');
   });
   sh.getRange(7, 1, 1, 3).setFontSize(14);
-  sh.getRange(r + 1, 1).setValue(c.E.length + ' expenses · ' + c.R.length + ' money received entries · ' + c.P.length + ' projects').setFontStyle('italic').setFontColor(COLOR.muted);
+  sh.getRange(r + 1, 1).setValue(c.E.length + ' expenses · ' + c.R.length + ' money received entries · ' + c.T.length + ' cash/bank moves · ' + c.P.length + ' projects').setFontStyle('italic').setFontColor(COLOR.muted);
 
   r = section_(sh, r + 3, 'Projects');
   const gen = c.E.filter(x => !x.project);
@@ -262,12 +277,10 @@ function summary_(ss, c) {
   });
   r = table_(sh, r, ['Entered by', 'Expenses', 'Expenses USD', 'Expenses SSP', 'Receipts', 'Receipts USD', 'Receipts SSP'], pRows, ['', '', 'USD', 'SSP', '', 'USD', 'SSP']);
 
-  r = section_(sh, r + 2, 'Spending by payment mode');
-  const modes = {};
-  c.E.forEach(x => { modes[x.mode] = true; });
-  table_(sh, r, ['Paid by', 'Spent USD', 'Spent SSP', 'Entries'], Object.keys(modes).map(m => {
-    const e = c.E.filter(x => x.mode === m);
-    return [m, sum_(e, 'USD'), sum_(e, 'SSP'), e.length];
+  r = section_(sh, r + 2, 'Spending from cash / bank');
+  table_(sh, r, ['Paid from', 'Spent USD', 'Spent SSP', 'Entries'], ACCOUNTS.map(a => {
+    const e = c.E.filter(x => accountOf_(x.mode) === a);
+    return [a, sum_(e, 'USD'), sum_(e, 'SSP'), e.length];
   }), ['', 'USD', 'SSP', '']);
   [220, 130, 130, 120, 110, 130, 130, 130, 150, 150, 150].forEach((w, j) => sh.setColumnWidth(j + 1, w));
 }
@@ -277,30 +290,45 @@ function section_(sh, r, text) {
 }
 function expenses_(ss, c) {
   dataTab_(ss, c.company, 'Expenses', COLOR.out,
-    ['Entry no.', 'Date', 'Day', 'Time', 'Currency', 'Amount USD', 'Amount SSP', 'Paid to', 'Reason', 'Location', 'Project', 'Paid by', 'Entered by', 'Recorded', 'Remarks'],
-    c.E.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), x.cur, only_(x, 'USD'), only_(x, 'SSP'), x.paidTo, x.reason, x.location || '', c.pname(x.project), x.mode, x.by || '', when_(x.createdAt), remarks_(x)]),
+    ['Entry no.', 'Date', 'Day', 'Time', 'Currency', 'Amount USD', 'Amount SSP', 'Paid to', 'Reason', 'Location', 'Project', 'Paid from', 'Entered by', 'Recorded', 'Remarks'],
+    c.E.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), x.cur, only_(x, 'USD'), only_(x, 'SSP'), x.paidTo, x.reason, x.location || '', c.pname(x.project), accountOf_(x.mode), x.by || '', when_(x.createdAt), remarks_(x)]),
     ['', 'date', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 75, 120, 140, 170, 200, 130, 170, 100, 120, 150, 260], [5, 6]);
 }
 function received_(ss, c) {
   dataTab_(ss, c.company, 'Money Received', COLOR.in,
-    ['Entry no.', 'Date', 'Day', 'Time', 'Project', 'Currency', 'Amount USD', 'Amount SSP', 'How it came', 'Note', 'Entered by', 'Recorded', 'Remarks'],
-    c.R.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), c.pname(x.project), x.cur, only_(x, 'USD'), only_(x, 'SSP'), x.mode, x.note || '', x.by || '', when_(x.createdAt), remarks_(x)]),
+    ['Entry no.', 'Date', 'Day', 'Time', 'Project', 'Currency', 'Amount USD', 'Amount SSP', 'Received into', 'Note', 'Entered by', 'Recorded', 'Remarks'],
+    c.R.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), c.pname(x.project), x.cur, only_(x, 'USD'), only_(x, 'SSP'), accountOf_(x.mode), x.note || '', x.by || '', when_(x.createdAt), remarks_(x)]),
     ['', 'date', '', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 190, 75, 120, 140, 110, 200, 120, 150, 260], [6, 7]);
 }
+function moves_(ss, c) {
+  dataTab_(ss, c.company, 'Cash & Bank moves', '#3b5bdb',
+    ['Entry no.', 'Date', 'Day', 'Time', 'Currency', 'Amount USD', 'Amount SSP', 'From', 'To', 'Note', 'Entered by', 'Recorded', 'Remarks'],
+    c.T.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), x.cur, only_(x, 'USD'), only_(x, 'SSP'), x.from, x.to, x.note || '', x.by || '', when_(x.createdAt), remarks_(x)]),
+    ['', 'date', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 75, 120, 140, 80, 80, 260, 120, 150, 220], [5, 6]);
+}
+// Every payment in and out plus every cash ↔ bank move, with that currency's running balances.
 function ledger_(ss, c) {
-  const run = { USD: 0, SSP: 0 };
-  const rows = c.E.map(x => ({ x: x, out: true })).concat(c.R.map(x => ({ x: x, out: false })))
-    .sort((a, b) => (a.x.at < b.x.at ? -1 : a.x.at > b.x.at ? 1 : 0))
+  const run = { USD: { Cash: 0, Bank: 0 }, SSP: { Cash: 0, Bank: 0 } };
+  const rows = c.E.map(x => ({ x: x, k: 'E' })).concat(c.R.map(x => ({ x: x, k: 'R' })), c.T.map(x => ({ x: x, k: 'T' })))
+    .filter(o => run[o.x.cur])
+    .sort((a, b) => byAt_(a.x, b.x))
     .map(o => {
-      const x = o.x;
-      run[x.cur] += o.out ? -cents_(x.amount) : cents_(x.amount);
-      const cell = (cur, out) => (x.cur === cur && o.out === out ? x.amount : '');
-      return [ymd_(x.at), time_(x.at), x.id, o.out ? 'Paid to ' + x.paidTo + ' — ' + x.reason + (x.location ? ' (' + x.location + ')' : '') : 'Money received' + (x.note ? ' — ' + x.note : ''),
-        c.pname(x.project), x.mode, x.cur, cell('USD', false), cell('USD', true), x.cur === 'USD' ? run.USD / 100 : '', cell('SSP', false), cell('SSP', true), x.cur === 'SSP' ? run.SSP / 100 : '', x.by || ''];
+      const x = o.x, b = run[x.cur], a = cents_(x.amount);
+      let details, where, cashIn = '', cashOut = '';
+      if (o.k === 'T') {
+        b[x.from] -= a; b[x.to] += a;
+        details = 'Moved ' + x.from + ' → ' + x.to + (x.note ? ' — ' + x.note : '');
+        where = x.from + ' → ' + x.to;
+      } else {
+        where = accountOf_(x.mode);
+        if (o.k === 'E') { b[where] -= a; cashOut = x.amount; details = 'Paid to ' + x.paidTo + ' — ' + x.reason + (x.location ? ' (' + x.location + ')' : ''); }
+        else { b[where] += a; cashIn = x.amount; details = 'Money received' + (x.note ? ' — ' + x.note : ''); }
+      }
+      return [ymd_(x.at), time_(x.at), x.id, details, o.k === 'T' ? '' : c.pname(x.project), where, x.cur, cashIn, cashOut, b.Cash / 100, b.Bank / 100, (b.Cash + b.Bank) / 100, x.by || ''];
     });
   dataTab_(ss, c.company, 'Ledger', '#1d6f42',
-    ['Date', 'Time', 'Entry no.', 'Details', 'Project', 'Mode', 'Currency', 'In USD', 'Out USD', 'Balance USD', 'In SSP', 'Out SSP', 'Balance SSP', 'Entered by'],
-    rows, ['date', '', '', '', '', '', '', 'USD', 'USD', 'USD', 'SSP', 'SSP', 'SSP'], [105, 80, 110, 300, 170, 100, 75, 110, 110, 125, 140, 140, 150, 120], [7, 8, 10, 11]);
+    ['Date', 'Time', 'Entry no.', 'Details', 'Project', 'Cash / Bank', 'Currency', 'In', 'Out', 'Cash balance', 'Bank balance', 'Total balance', 'Entered by'],
+    rows, ['date', '', '', '', '', '', '', 'num', 'num', 'num', 'num', 'num'], [105, 80, 110, 300, 170, 110, 75, 110, 110, 130, 130, 140, 120], null);
 }
 function changeLog_(ss, c) {
   dataTab_(ss, c.company, 'Change Log', COLOR.muted, ['When', 'Action', 'Entry', 'By', 'Details'],

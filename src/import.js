@@ -1,9 +1,12 @@
-/* ---------- import old expenses (paste rows from a list or sheet) ---------- */
-// One expense per line: Date | Currency | Amount | Paid to | Reason | Location | Project | Paid by | Entered by
-// Columns may be separated by tabs (copied from a spreadsheet) or by "|". A header line is skipped.
-const IMPORT_COLS = ['Date', 'Currency', 'Amount', 'Paid to', 'Reason', 'Location', 'Project', 'Paid by', 'Entered by'];
+/* ---------- import old entries (paste rows from a list or sheet) ---------- */
+// One entry per line: Date | Currency | Amount | Paid to | Reason | Location | Project | Paid from | Entered by
+// "Paid from" is Cash or Bank. Writing "Cash → Bank" (or "Bank → Cash") there makes the line a move
+// between cash and bank instead of an expense. Columns may be separated by tabs or "|"; a header line is skipped.
+const IMPORT_COLS = ['Date', 'Currency', 'Amount', 'Paid to', 'Reason', 'Location', 'Project', 'Paid from', 'Entered by'];
 const IMPORT_TIME = '12:00'; // old lists have no time of day
 const MAX_SHOWN_ERRORS = 8;
+const MOVE_RE = /^(cash|bank)\s*(?:→|->|>|to)\s*(cash|bank)$/i;
+const cap = w => w[0].toUpperCase() + w.slice(1).toLowerCase();
 
 function parseDay(text) {
   const t = clean(text);
@@ -25,29 +28,37 @@ function parseImport(text) {
     const day = parseDay(date);
     const c = /^(usd|\$|us\$)$/i.test(cur) ? 'USD' : /^ssp$/i.test(cur) ? 'SSP' : null;
     const a = parseAmount(amount);
+    const move = mode.match(MOVE_RE);
+    const isMove = !!move && move[1].toLowerCase() !== move[2].toLowerCase();
     const problem = !day ? `date "${date}" not understood (use day/month/year)`
       : !c ? `currency "${cur}" must be USD or SSP`
       : a === null ? `amount "${amount}" not understood`
+      : isMove ? ''
       : !paidTo ? '"Paid to" is empty' : !reason ? '"Reason" is empty' : '';
     if (problem) { errors.push(`Line ${i + 1}: ${problem}`); return; }
-    rows.push({ at: `${day}T${IMPORT_TIME}`, cur: c, amount: a, paidTo, reason, location, project, mode: MODES.find(x => x.toLowerCase() === mode.toLowerCase()) || mode || 'Cash', by });
+    const at = `${day}T${IMPORT_TIME}`;
+    if (isMove) rows.push({ kind: 'T', at, cur: c, amount: a, from: cap(move[1]), to: cap(move[2]), note: reason || paidTo, by });
+    else rows.push({ kind: 'E', at, cur: c, amount: a, paidTo, reason, location, project, mode: accountOf(mode), by });
   });
   return { rows, errors };
 }
-// the same day, money and reason already in the app = already imported; skip it
-const importKey = x => [x.at.slice(0, 10), x.cur, cents(x.amount), clean(x.reason).toLowerCase()].join('|');
+// the same day, money and reason (or direction) already in the app = already imported; skip it
+const importKey = x => (x.kind === 'T'
+  ? ['T', x.at.slice(0, 10), x.cur, cents(x.amount), x.from]
+  : ['E', x.at.slice(0, 10), x.cur, cents(x.amount), clean(x.reason).toLowerCase()]).join('|');
 function importPlan(text) {
   const { rows, errors } = parseImport(text);
-  const have = new Set(live(S.expenses).map(importKey));
+  const have = new Set([...live(S.expenses).map(e => importKey({ ...e, kind: 'E' })), ...live(S.transfers).map(t => importKey({ ...t, kind: 'T' }))]);
   const fresh = rows.filter(r => !have.has(importKey(r)));
   return { fresh, errors, skipped: rows.length - fresh.length };
 }
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 async function importSheet() {
-  if (!await unlock('Enter the password to import old expenses (they have old dates).')) return;
-  openSheet(`${head('Import old expenses', 'out')}
-    <p class="hint">Paste your old expenses — one per line, in this column order:</p>
-    <p class="note cols">${IMPORT_COLS.map(esc).join(' | ')}</p>
+  if (!await unlock('Enter the password to import old entries (they have old dates).')) return;
+  openSheet(`${head('Import old entries', 'out')}
+    <p class="hint">Paste your old entries — one per line, in this column order:</p>
+    <p class="note cols">${IMPORT_COLS.map(esc).join(' | ')}<br><span style="font-weight:600">Paid from: <b>Cash</b> or <b>Bank</b>. For money moved between them write <b>Cash → Bank</b> or <b>Bank → Cash</b>.</span></p>
     <form data-form="import">
       <label class="fld"><span>Paste here</span><textarea name="rows" rows="8" autocomplete="off" spellcheck="false" placeholder="01/09/2026 | USD | 250 | Shop name | Office supplies | | | Cash | Your name" autofocus></textarea></label>
       <div id="importPreview"></div>
@@ -57,11 +68,13 @@ async function importSheet() {
 }
 function previewImport(f) {
   const { fresh, errors, skipped } = importPlan(f.elements.rows.value);
+  const E = fresh.filter(r => r.kind === 'E'), T = fresh.filter(r => r.kind === 'T');
   const days = fresh.map(r => r.at.slice(0, 10)).sort();
   const btn = $('#importBtn');
   btn.disabled = !fresh.length || errors.length > 0;
-  btn.textContent = fresh.length ? `Import ${fresh.length} expense${fresh.length === 1 ? '' : 's'}` : 'Import';
-  $('#importPreview').innerHTML = (fresh.length ? `<p class="ok-line">✅ <b>${fresh.length} ready</b> · ${esc(sumText(fresh))} · ${fmtDate(days[0])} to ${fmtDate(days[days.length - 1])}</p>` : '')
+  btn.textContent = fresh.length ? `Import ${fresh.length} ${fresh.length === 1 ? 'entry' : 'entries'}` : 'Import';
+  $('#importPreview').innerHTML = (fresh.length ? `<p class="ok-line">✅ <b>${fresh.length} ready</b> · ${fmtDate(days[0])} to ${fmtDate(days[days.length - 1])}</p>
+      <p class="ok-line">${E.length ? `${plural(E.length, 'expense')}: ${esc(sumText(E))}` : ''}${E.length && T.length ? ' · ' : ''}${T.length ? `${plural(T.length, 'cash/bank move')}: ${esc(sumText(T))}` : ''}</p>` : '')
     + (skipped ? `<p class="muted">${skipped} already in the app — they will be skipped.</p>` : '')
     + (errors.length ? `<div class="err-list"><b>Fix these lines first:</b><ul>${errors.slice(0, MAX_SHOWN_ERRORS).map(e => `<li>${esc(e)}</li>`).join('')}</ul>${errors.length > MAX_SHOWN_ERRORS ? `<p>…and ${errors.length - MAX_SHOWN_ERRORS} more.</p>` : ''}</div>` : '');
 }
@@ -69,10 +82,12 @@ function doImport(f) {
   const { fresh, errors } = importPlan(f.elements.rows.value);
   if (errors.length) return formErr(f, null, 'Fix the lines listed above first.');
   if (!fresh.length) return formErr(f, null, 'Nothing new to import.');
+  const E = fresh.filter(r => r.kind === 'E'), T = fresh.filter(r => r.kind === 'T');
   const who = S.lastBy || fresh[0].by || 'Import';
-  let seq = S.seq, projects = S.projects, batch, ids;
+  let seq = S.seq, projects = S.projects, batch, eIds, tIds;
   [[batch], seq] = nextIds('B', 1, seq);
-  [ids, seq] = nextIds('E', fresh.length, seq);
+  [eIds, seq] = nextIds('E', E.length, seq);
+  [tIds, seq] = nextIds('T', T.length, seq);
   const projectId = name => {
     if (!name) return '';
     const hit = projects.find(p => !p.deleted && p.name.toLowerCase() === name.toLowerCase());
@@ -82,12 +97,14 @@ function doImport(f) {
     projects = [...projects, { id, name, value: 0, valueCur: 'USD', by: who, createdAt: stampSec() }];
     return id;
   };
-  const recs = fresh.map((r, i) => ({ id: ids[i], cur: r.cur, amount: r.amount, paidTo: r.paidTo, reason: r.reason, location: r.location, project: projectId(r.project), mode: r.mode, at: r.at, manualDate: true, by: r.by || who, createdAt: stampSec(), batch }));
-  const days = recs.map(r => r.at.slice(0, 10)).sort();
+  const recs = E.map((r, i) => ({ id: eIds[i], cur: r.cur, amount: r.amount, paidTo: r.paidTo, reason: r.reason, location: r.location, project: projectId(r.project), mode: r.mode, at: r.at, manualDate: true, by: r.by || who, createdAt: stampSec(), batch }));
+  const moves = T.map((r, i) => ({ id: tIds[i], cur: r.cur, amount: r.amount, from: r.from, to: r.to, note: r.note, at: r.at, manualDate: true, by: r.by || who, createdAt: stampSec() }));
+  const days = fresh.map(r => r.at.slice(0, 10)).sort();
+  const what = [recs.length && `${plural(recs.length, 'old expense')} (${sumText(recs)})`, moves.length && `${plural(moves.length, 'cash/bank move')} (${sumText(moves)})`].filter(Boolean).join(' and ');
   update({
-    expenses: [...S.expenses, ...recs], projects, seq,
-    log: logWith([['Imported', batch, `${recs.length} old expenses imported (${fmtDate(days[0])} to ${fmtDate(days[days.length - 1])}), total ${sumText(recs)}`]], who),
+    expenses: [...S.expenses, ...recs], transfers: [...S.transfers, ...moves], projects, seq,
+    log: logWith([['Imported', recs.length ? batch : moves[0].id, `${what} imported, dated ${fmtDate(days[0])} to ${fmtDate(days[days.length - 1])}`]], who),
   });
   closeSheet(); render();
-  toast(`Imported ✓ ${recs.length} expenses · ${sumText(recs)}`);
+  toast(`Imported ✓ ${fresh.length} entries`);
 }

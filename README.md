@@ -51,12 +51,18 @@ Joining needs internet once. After that the phone works offline.
 - **Edit, delete, or an old date** — needs the password (stays unlocked for 5 minutes).
 - Every entry records **who entered it**. Edits and deletes are kept in the **Change Log**.
 - **USD and SSP are kept separately** — they are never added together.
+- **Cash or bank** — every entry says where the money came from or went: 💵 **Cash** or 🏦 **Bank**.
+  **Move money** records cash put into the bank (or taken out of it) — that is not spending.
+  The Home screen shows **Cash**, **Bank** and **Total** for USD and for SSP.
+- **Import old entries** (Sheet tab) — paste a list, one per line:
+  `Date | Currency | Amount | Paid to | Reason | Location | Project | Paid from | Entered by`.
+  *Paid from* is `Cash` or `Bank`; write `Cash → Bank` for a deposit. Lines already in the app are skipped.
 - The badge at the top shows sync: **✓ Synced**, **⏳ 3 to sync** (waiting for internet), or **⚠️** if
   something needs attention. Waiting entries are safe on the device and sync by themselves.
 
 ## The Google Sheet
-Tabs: **Summary** (balances, projects, month by month, who entered what), **Expenses**,
-**Money Received**, **Ledger** (running balances), **Change Log**. They update after every sync —
+Tabs: **Summary** (Cash / Bank / Total balances, projects, month by month, who entered what), **Expenses**,
+**Money Received**, **Cash & Bank moves**, **Ledger** (running Cash / Bank / Total balances), **Change Log**. They update after every sync —
 **don't type in them**. The hidden `_sync` tab is the master copy: never edit or delete it.
 Need Excel? In Google Sheets: **File → Download → Microsoft Excel**.
 
