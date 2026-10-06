@@ -23,7 +23,8 @@ syncs with your **company Google Sheet**, so everyone sees the same records.
 
 ### B. Turn the sheet into a "web app" (so the app can reach it)
 7. In Apps Script click **Deploy → New deployment**. Click the ⚙️ next to "Select type" → **Web app**.
-8. Set **Execute as: Me** and **Who has access: Anyone**. Click **Deploy**.
+8. Set **Execute as: Me** and **Who has access: Anyone** — exactly **Anyone**, *not* "Anyone with Google account"
+   (that one makes Google ask for a sign-in, and the app gets blocked). Click **Deploy**.
 9. Copy the **Web app URL** (it ends with `/exec`).
    *If "Anyone" is not in the list, your company's Google admin has blocked it — ask them to allow it,
    or use another Google account for the sheet.*

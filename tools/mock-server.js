@@ -19,7 +19,8 @@ http.createServer((req, res) => {
   req.on('end', () => {
     const reply = req.method === 'POST' ? gas.doPost({ postData: { contents: body } }) : gas.doGet();
     fs.writeFileSync(STATE, JSON.stringify(gas.dump()));
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    // BLOCK=1 acts like a web app whose access is not "Anyone": the browser gets no usable answer
+    res.writeHead(200, { 'Content-Type': 'application/json', ...(process.env.BLOCK ? {} : { 'Access-Control-Allow-Origin': '*' }) });
     res.end(reply.getContent());
   });
 }).listen(PORT, '127.0.0.1', () => console.log(`mock Google web app on http://127.0.0.1:${PORT}/exec — company code ${gas.props.KEY}`));

@@ -1011,6 +1011,33 @@ async function callServer(link, body) {
   return j;
 }
 
+// When a connection fails, find out why, so the message says what to fix.
+const BLOCKED_MSG = 'The Google Sheet is blocking the app. In Apps Script click Deploy → Manage deployments → ✏️ (edit), set "Execute as: Me" and "Who has access: Anyone" (exactly "Anyone" — not "Anyone with Google account"), then click Deploy. If plain "Anyone" is not in the list, your company\'s Google admin has switched it off.';
+const plainUrl = u => u.replace(/^https:\/\/script\.google\.com\/a\/macros\/[\w.-]+\/s\//, 'https://script.google.com/macros/s/');
+async function answers(url) {
+  try { const j = await (await fetch(url, { cache: 'no-store' })).json(); return !!j && j.app === 'company-accounts'; } catch { return false; }
+}
+async function hasInternet() {
+  try { await fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store' }); return true; } catch { return false; }
+}
+async function whyUnreachable(link) {
+  if (!await hasInternet()) return { msg: 'No internet. Connect to the internet and try again.' };
+  if (await answers(link.u)) return { msg: 'The Google Sheet answered but could not save. In Apps Script paste the newest Code.gs, click Save, then Deploy → Manage deployments → ✏️ → Version: New version → Deploy.' };
+  const alt = plainUrl(link.u);
+  if (alt !== link.u && await answers(alt)) return { alt };
+  return { msg: BLOCKED_MSG };
+}
+// First contact with a sheet: on failure explain why; company (Workspace) links get retried in their plain form.
+async function firstContact(link) {
+  try { return { link, res: await callServer(link, { since: 0, push: [] }) }; } catch (e) {
+    if (!e.offline) throw e;
+    const why = await whyUnreachable(link);
+    if (!why.alt) throw new SyncError(why.msg);
+    const plain = { ...link, u: why.alt };
+    return { link: plain, res: await callServer(plain, { since: 0, push: [] }) };
+  }
+}
+
 function pendingRecords() {
   const want = new Set(S.dirty), out = [];
   for (const [k, key] of Object.entries(KIND_KEY)) {
@@ -1112,12 +1139,12 @@ function connectForm() {
     </form>`);
 }
 async function doConnect(f) {
-  const link = { u: f.elements.url.value.trim(), k: f.elements.key.value.trim().toUpperCase() };
-  if (!validLinkUrl(link.u)) return formErr(f, 'url', 'This is not a web app link. It starts with https://script.google.com/ and ends with /exec');
+  const typed = { u: f.elements.url.value.trim(), k: f.elements.key.value.trim().toUpperCase() };
+  if (!validLinkUrl(typed.u)) return formErr(f, 'url', /\/dev$/.test(typed.u) ? 'This is the test link (ends in /dev). Use the Web app URL from Deploy → Manage deployments — it ends in /exec.' : 'This is not a web app link. It starts with https://script.google.com/ and ends with /exec');
   $('.err', f).textContent = 'Connecting…';
-  let res;
-  try { res = await callServer(link, { since: 0, push: [] }); }
-  catch (e) { return formErr(f, null, e.offline ? 'No internet. Connect to the internet and try again.' : e.message); }
+  let link, res;
+  try { ({ link, res } = await firstContact(typed)); }
+  catch (e) { return formErr(f, null, e.message); }
   const theirs = (res.pull || []).find(p => p.k === 'S');
   if (theirs && !confirm(`This Google Sheet already has records for "${theirs.d.company}".\n\nAdd this device's entries to it?`)) return;
   // send everything this device has; the sheet keeps the newest copy of each record.
@@ -1128,12 +1155,12 @@ async function doConnect(f) {
   syncNow();
 }
 async function doJoin(f) {
-  const link = parseInvite(f.elements.invite.value);
+  let link = parseInvite(f.elements.invite.value);
   if (!link) return formErr(f, 'invite', 'This invite link is not complete. Copy the whole link again.');
   $('.err', f).textContent = 'Joining…';
   let res;
-  try { res = await callServer(link, { since: 0, push: [] }); }
-  catch (e) { return formErr(f, null, e.offline ? 'No internet. Joining needs internet once — try again when connected.' : e.message); }
+  try { ({ link, res } = await firstContact(link)); }
+  catch (e) { return formErr(f, null, /^No internet/.test(e.message) ? 'No internet. Joining needs internet once — try again when connected.' : e.message); }
   if (!(res.pull || []).some(p => p.k === 'S')) return formErr(f, null, 'That Google Sheet has no company yet. Connect the main computer first.');
   S = { v: 2, company: '', pass: null, expenses: [], credits: [], projects: [], log: [], seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
   applyPull(res.pull);
