@@ -140,6 +140,9 @@ a.btn { display: block; text-align: center; text-decoration: none; }
 .ok-line { color: var(--in); margin: 0 0 6px; }
 .err-list { color: var(--out); background: var(--out-soft); border-radius: var(--r-sm); padding: 10px 14px; font-size: 14px; margin: 6px 0; }
 .err-list ul { margin: 6px 0 0; padding-left: 18px; }
+.invite-hint { min-height: 1.2em; margin: -6px 0 10px; font-weight: 800; font-size: 14px; }
+.invite-hint.good { color: var(--in); } .invite-hint.bad { color: var(--out); }
+details.manual { margin: 4px 0 12px; } details.manual summary { cursor: pointer; font-weight: 800; color: var(--muted); padding: 6px 0 10px; }
 .steps { margin: 0 0 16px; padding-left: 22px; display: grid; gap: 8px; }
 .muted { color: var(--muted); font-size: 15px; }
 .setrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
@@ -516,7 +519,12 @@ function viewSetup() {
     <h1>Join my company</h1>
     <p>Paste the invite link you were sent. Joining needs internet once — after that the app works offline.</p>${tip}
     <form data-form="join">
-      <label class="fld"><span>Invite link</span><input name="invite" required autocomplete="off" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" autofocus></label>
+      <label class="fld"><span>Invite link</span><input name="invite" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" autofocus></label>
+      <p class="invite-hint"></p>
+      <details class="manual"><summary>Join with the web app link and code instead</summary>
+        <label class="fld"><span>Web app link</span><input name="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
+        <label class="fld"><span>Company code</span><input name="key" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab"></label>
+      </details>
       <p class="err"></p>
       <button class="btn in">Join</button>
     </form>${back}</section>`;
@@ -1000,13 +1008,33 @@ const unb64u = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(
 const appUrl = () => /^https?:$/.test(location.protocol) ? location.origin + location.pathname : APP_URL;
 const inviteLink = () => `${appUrl()}#join=${b64u(JSON.stringify({ u: S.link.u, k: S.link.k }))}`;
 const inviteFromHash = () => (location.hash.match(/join=[\w-]+/) || [''])[0];
-function parseInvite(text) {
-  const m = String(text || '').match(/join=([\w-]+)/);
-  if (!m) return null;
+function decodeInvite(code) {
   try {
-    const j = JSON.parse(unb64u(m[1]));
-    return validLinkUrl(j.u) && typeof j.k === 'string' && j.k ? { u: j.u, k: j.k } : null;
+    const j = JSON.parse(unb64u(code));
+    return validLinkUrl(j.u) && typeof j.k === 'string' && j.k ? { u: j.u, k: j.k.toUpperCase() } : null;
   } catch { return null; }
+}
+// Find the invite in whatever was pasted: a whole chat message, the link pasted twice in a row,
+// a link broken over several lines, or one a messaging app %-encoded.
+function parseInvite(text) {
+  let t = String(text || '').replace(/\s+/g, '');
+  try { t = decodeURIComponent(t); } catch { /* not %-encoded: use as is */ }
+  const codes = [...t.matchAll(/join=([\w-]+)/g)].map(m => m[1]);
+  if (!codes.length && /^eyJ[\w-]{20,}$/.test(t)) codes.push(t); // just the code part
+  for (const code of codes) {
+    // a link pasted onto the end of another reads as "…codehttps": try without that tail
+    for (const c of [code, code.replace(/(https?)+$/, '')]) { const link = decodeInvite(c); if (link) return link; }
+  }
+  return null;
+}
+function manualLink(f) {
+  const u = (f.elements.url ? f.elements.url.value : '').trim(), k = (f.elements.key ? f.elements.key.value : '').trim().toUpperCase();
+  return validLinkUrl(u) && k ? { u, k } : null;
+}
+function inviteHint(f) {
+  const v = f.elements.invite.value.trim(), box = $('.invite-hint', f);
+  box.className = 'invite-hint ' + (!v ? '' : parseInvite(v) ? 'good' : 'bad');
+  box.textContent = !v ? '' : parseInvite(v) ? '✓ Invite link OK — tap Join.' : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : '✗ This is not an invite link. It starts with https://surapaneni-bala.github.io/company-accounts/#join=';
 }
 
 async function callServer(link, body) {
@@ -1143,8 +1171,8 @@ function connectForm() {
   openSheet(`${head('Connect to Google Sheet')}
     <p class="hint">Do this once, on the main computer. The setup guide shows where to find these two things.</p>
     <form data-form="connect">
-      <label class="fld"><span>Web app link</span><input name="url" required autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" autofocus></label>
-      <label class="fld"><span>Company code</span><input name="key" required autocomplete="off" placeholder="From the “Read me” tab of the Google Sheet"></label>
+      <label class="fld"><span>Web app link</span><input name="url" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" autofocus></label>
+      <label class="fld"><span>Company code</span><input name="key" required autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab of the Google Sheet"></label>
       <p class="err"></p>
       <button class="btn in">Connect</button>
     </form>`);
@@ -1166,8 +1194,11 @@ async function doConnect(f) {
   syncNow();
 }
 async function doJoin(f) {
-  let link = parseInvite(f.elements.invite.value);
-  if (!link) return formErr(f, 'invite', 'This invite link is not complete. Copy the whole link again.');
+  let link = parseInvite(f.elements.invite.value) || manualLink(f);
+  if (!link) {
+    if (f.elements.url.value.trim() || f.elements.key.value.trim()) return formErr(f, validLinkUrl(f.elements.url.value.trim()) ? 'key' : 'url', validLinkUrl(f.elements.url.value.trim()) ? 'Type the company code.' : 'The web app link starts with https://script.google.com/ and ends with /exec');
+    return formErr(f, 'invite', f.elements.invite.value.trim() ? 'This invite link is cut off or changed. Copy it again from the message — or open “Join with the web app link and code” below.' : 'Paste the invite link first.');
+  }
   $('.err', f).textContent = 'Joining…';
   let res;
   try { ({ link, res } = await firstContact(link)); }
@@ -1187,7 +1218,7 @@ async function inviteSheet() {
     <ol class="steps">
       <li>Send this link to the phone (WhatsApp or email).</li>
       <li>On the phone, open the link. <b>iPhone:</b> in Safari tap <b>Share → Add to Home Screen</b>. <b>Android:</b> in Chrome tap <b>⋮ → Add to Home screen</b>.</li>
-      <li>Open <b>Accounts</b> from the home screen, tap <b>Join my company</b> and paste the same link.</li>
+      <li>Open <b>Accounts</b> from the home screen and tap <b>Join my company</b>. If the link is not filled in already, paste it.</li>
     </ol>
     <label class="fld"><span>Invite link</span><input id="inviteLink" readonly value="${esc(inviteLink())}"></label>
     <div class="two"><button class="btn in" data-act="copyInvite">Copy link</button>${navigator.share ? '<button class="btn ghost" data-act="shareInvite">Send…</button>' : ''}</div>
@@ -1305,7 +1336,7 @@ function doImport(f) {
 const ACTIONS = {
   tab: b => { tab = b.dataset.tab; render(); scrollTo(0, 0); },
   close: closeSheet,
-  setupMode: b => { setupMode = b.dataset.mode; render(); },
+  setupMode: b => { setupMode = b.dataset.mode; render(); const jf = $('form[data-form=join]'); if (jf) inviteHint(jf); },
   addExpense: () => expenseForm(),
   addBulk: () => bulkForm(),
   addCredit: b => creditForm(null, b.dataset.project),
@@ -1334,7 +1365,8 @@ const ACTIONS = {
   syncNow: () => syncNow(),
   invite: () => inviteSheet(),
   copyInvite: () => navigator.clipboard.writeText($('#inviteLink').value).then(() => toast('Link copied ✓'), () => { $('#inviteLink').select(); toast('Select the link and copy it'); }),
-  shareInvite: () => navigator.share({ title: `Join ${S.company}`, text: `Join ${S.company} accounts:`, url: $('#inviteLink').value }).catch(() => {}),
+  // the link goes inside the text: some apps (WhatsApp on iPhone) drop a separate url
+  shareInvite: () => navigator.share({ text: `Join ${S.company} accounts: ${$('#inviteLink').value}` }).catch(() => {}),
   disconnect: () => disconnect(),
   importOld: () => importSheet(),
 };
@@ -1360,6 +1392,7 @@ document.addEventListener('input', e => {
   if (t.closest('.brows')) updateBulk(t.form);
   if (t.closest('.amt-in')) refreshAmount(t);
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
+  if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
 });
 document.addEventListener('change', e => {
@@ -1373,6 +1406,14 @@ document.addEventListener('change', e => {
   if (t.id === 'month') { histMonth = t.value; $('#histRes').innerHTML = histResults(); }
   if (t.id === 'restoreFile') { doRestore(t.files[0]); t.value = ''; }
 });
+// pasting an invite replaces the box (it may already hold the link) instead of adding to it
+document.addEventListener('paste', e => {
+  const t = e.target;
+  if (t.name !== 'invite' || !e.clipboardData) return;
+  e.preventDefault();
+  t.value = e.clipboardData.getData('text').trim();
+  t.dispatchEvent(new Event('input', { bubbles: true }));
+});
 // another tab of this app saved something: pick it up so neither tab overwrites the other
 addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
 // sync as soon as the internet comes back, when the app is reopened, and every few minutes
@@ -1384,6 +1425,7 @@ setInterval(renderLock, 10000);
 if (S) { S = migrate(S); save(); }
 if (S && location.hash) history.replaceState(null, '', location.pathname);
 render();
+if ($('form[data-form=join]')) inviteHint($('form[data-form=join]'));
 scheduleSync(0);
 // offline support: the service worker keeps a copy of the app on the device
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {

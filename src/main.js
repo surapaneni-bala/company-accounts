@@ -2,7 +2,7 @@
 const ACTIONS = {
   tab: b => { tab = b.dataset.tab; render(); scrollTo(0, 0); },
   close: closeSheet,
-  setupMode: b => { setupMode = b.dataset.mode; render(); },
+  setupMode: b => { setupMode = b.dataset.mode; render(); const jf = $('form[data-form=join]'); if (jf) inviteHint(jf); },
   addExpense: () => expenseForm(),
   addBulk: () => bulkForm(),
   addCredit: b => creditForm(null, b.dataset.project),
@@ -31,7 +31,8 @@ const ACTIONS = {
   syncNow: () => syncNow(),
   invite: () => inviteSheet(),
   copyInvite: () => navigator.clipboard.writeText($('#inviteLink').value).then(() => toast('Link copied ✓'), () => { $('#inviteLink').select(); toast('Select the link and copy it'); }),
-  shareInvite: () => navigator.share({ title: `Join ${S.company}`, text: `Join ${S.company} accounts:`, url: $('#inviteLink').value }).catch(() => {}),
+  // the link goes inside the text: some apps (WhatsApp on iPhone) drop a separate url
+  shareInvite: () => navigator.share({ text: `Join ${S.company} accounts: ${$('#inviteLink').value}` }).catch(() => {}),
   disconnect: () => disconnect(),
   importOld: () => importSheet(),
 };
@@ -57,6 +58,7 @@ document.addEventListener('input', e => {
   if (t.closest('.brows')) updateBulk(t.form);
   if (t.closest('.amt-in')) refreshAmount(t);
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
+  if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
 });
 document.addEventListener('change', e => {
@@ -70,6 +72,14 @@ document.addEventListener('change', e => {
   if (t.id === 'month') { histMonth = t.value; $('#histRes').innerHTML = histResults(); }
   if (t.id === 'restoreFile') { doRestore(t.files[0]); t.value = ''; }
 });
+// pasting an invite replaces the box (it may already hold the link) instead of adding to it
+document.addEventListener('paste', e => {
+  const t = e.target;
+  if (t.name !== 'invite' || !e.clipboardData) return;
+  e.preventDefault();
+  t.value = e.clipboardData.getData('text').trim();
+  t.dispatchEvent(new Event('input', { bubbles: true }));
+});
 // another tab of this app saved something: pick it up so neither tab overwrites the other
 addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
 // sync as soon as the internet comes back, when the app is reopened, and every few minutes
@@ -81,6 +91,7 @@ setInterval(renderLock, 10000);
 if (S) { S = migrate(S); save(); }
 if (S && location.hash) history.replaceState(null, '', location.pathname);
 render();
+if ($('form[data-form=join]')) inviteHint($('form[data-form=join]'));
 scheduleSync(0);
 // offline support: the service worker keeps a copy of the app on the device
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {

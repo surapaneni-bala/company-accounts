@@ -212,7 +212,12 @@ function viewSetup() {
     <h1>Join my company</h1>
     <p>Paste the invite link you were sent. Joining needs internet once — after that the app works offline.</p>${tip}
     <form data-form="join">
-      <label class="fld"><span>Invite link</span><input name="invite" required autocomplete="off" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" autofocus></label>
+      <label class="fld"><span>Invite link</span><input name="invite" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" autofocus></label>
+      <p class="invite-hint"></p>
+      <details class="manual"><summary>Join with the web app link and code instead</summary>
+        <label class="fld"><span>Web app link</span><input name="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
+        <label class="fld"><span>Company code</span><input name="key" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab"></label>
+      </details>
       <p class="err"></p>
       <button class="btn in">Join</button>
     </form>${back}</section>`;

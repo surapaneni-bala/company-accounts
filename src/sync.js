@@ -28,13 +28,33 @@ const unb64u = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(
 const appUrl = () => /^https?:$/.test(location.protocol) ? location.origin + location.pathname : APP_URL;
 const inviteLink = () => `${appUrl()}#join=${b64u(JSON.stringify({ u: S.link.u, k: S.link.k }))}`;
 const inviteFromHash = () => (location.hash.match(/join=[\w-]+/) || [''])[0];
-function parseInvite(text) {
-  const m = String(text || '').match(/join=([\w-]+)/);
-  if (!m) return null;
+function decodeInvite(code) {
   try {
-    const j = JSON.parse(unb64u(m[1]));
-    return validLinkUrl(j.u) && typeof j.k === 'string' && j.k ? { u: j.u, k: j.k } : null;
+    const j = JSON.parse(unb64u(code));
+    return validLinkUrl(j.u) && typeof j.k === 'string' && j.k ? { u: j.u, k: j.k.toUpperCase() } : null;
   } catch { return null; }
+}
+// Find the invite in whatever was pasted: a whole chat message, the link pasted twice in a row,
+// a link broken over several lines, or one a messaging app %-encoded.
+function parseInvite(text) {
+  let t = String(text || '').replace(/\s+/g, '');
+  try { t = decodeURIComponent(t); } catch { /* not %-encoded: use as is */ }
+  const codes = [...t.matchAll(/join=([\w-]+)/g)].map(m => m[1]);
+  if (!codes.length && /^eyJ[\w-]{20,}$/.test(t)) codes.push(t); // just the code part
+  for (const code of codes) {
+    // a link pasted onto the end of another reads as "…codehttps": try without that tail
+    for (const c of [code, code.replace(/(https?)+$/, '')]) { const link = decodeInvite(c); if (link) return link; }
+  }
+  return null;
+}
+function manualLink(f) {
+  const u = (f.elements.url ? f.elements.url.value : '').trim(), k = (f.elements.key ? f.elements.key.value : '').trim().toUpperCase();
+  return validLinkUrl(u) && k ? { u, k } : null;
+}
+function inviteHint(f) {
+  const v = f.elements.invite.value.trim(), box = $('.invite-hint', f);
+  box.className = 'invite-hint ' + (!v ? '' : parseInvite(v) ? 'good' : 'bad');
+  box.textContent = !v ? '' : parseInvite(v) ? '✓ Invite link OK — tap Join.' : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : '✗ This is not an invite link. It starts with https://surapaneni-bala.github.io/company-accounts/#join=';
 }
 
 async function callServer(link, body) {
@@ -171,8 +191,8 @@ function connectForm() {
   openSheet(`${head('Connect to Google Sheet')}
     <p class="hint">Do this once, on the main computer. The setup guide shows where to find these two things.</p>
     <form data-form="connect">
-      <label class="fld"><span>Web app link</span><input name="url" required autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" autofocus></label>
-      <label class="fld"><span>Company code</span><input name="key" required autocomplete="off" placeholder="From the “Read me” tab of the Google Sheet"></label>
+      <label class="fld"><span>Web app link</span><input name="url" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" autofocus></label>
+      <label class="fld"><span>Company code</span><input name="key" required autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab of the Google Sheet"></label>
       <p class="err"></p>
       <button class="btn in">Connect</button>
     </form>`);
@@ -194,8 +214,11 @@ async function doConnect(f) {
   syncNow();
 }
 async function doJoin(f) {
-  let link = parseInvite(f.elements.invite.value);
-  if (!link) return formErr(f, 'invite', 'This invite link is not complete. Copy the whole link again.');
+  let link = parseInvite(f.elements.invite.value) || manualLink(f);
+  if (!link) {
+    if (f.elements.url.value.trim() || f.elements.key.value.trim()) return formErr(f, validLinkUrl(f.elements.url.value.trim()) ? 'key' : 'url', validLinkUrl(f.elements.url.value.trim()) ? 'Type the company code.' : 'The web app link starts with https://script.google.com/ and ends with /exec');
+    return formErr(f, 'invite', f.elements.invite.value.trim() ? 'This invite link is cut off or changed. Copy it again from the message — or open “Join with the web app link and code” below.' : 'Paste the invite link first.');
+  }
   $('.err', f).textContent = 'Joining…';
   let res;
   try { ({ link, res } = await firstContact(link)); }
@@ -215,7 +238,7 @@ async function inviteSheet() {
     <ol class="steps">
       <li>Send this link to the phone (WhatsApp or email).</li>
       <li>On the phone, open the link. <b>iPhone:</b> in Safari tap <b>Share → Add to Home Screen</b>. <b>Android:</b> in Chrome tap <b>⋮ → Add to Home screen</b>.</li>
-      <li>Open <b>Accounts</b> from the home screen, tap <b>Join my company</b> and paste the same link.</li>
+      <li>Open <b>Accounts</b> from the home screen and tap <b>Join my company</b>. If the link is not filled in already, paste it.</li>
     </ol>
     <label class="fld"><span>Invite link</span><input id="inviteLink" readonly value="${esc(inviteLink())}"></label>
     <div class="two"><button class="btn in" data-act="copyInvite">Copy link</button>${navigator.share ? '<button class="btn ghost" data-act="shareInvite">Send…</button>' : ''}</div>
