@@ -89,12 +89,26 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) sche
 setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
 setInterval(renderLock, 10000);
 
-if (S) { S = migrate(S); save(); }
+if (S) { S = migrate(S); save(); repairImportedMoves(); }
 if (S && location.hash) history.replaceState(null, '', location.pathname);
 render();
 if ($('form[data-form=join]')) inviteHint($('form[data-form=join]'));
 scheduleSync(0);
 // offline support: the service worker keeps a copy of the app on the device
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  // a new version was installed in the background: switch to it now, not on the next open
+  const hadCopy = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadCopy || reloading) return; // very first install: this page is already the newest
+    const go = () => { reloading = true; location.reload(); };
+    const busy = [$('#sheet'), $('#pw')].find(d => d.open);
+    if (!busy) return go();
+    toast('A new version is ready — it opens when you close this window');
+    busy.addEventListener('close', go, { once: true });
+  });
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('Offline copy not installed:', e.message));
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {});
+  });
 }

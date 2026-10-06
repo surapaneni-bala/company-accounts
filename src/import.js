@@ -108,3 +108,39 @@ function doImport(f) {
   closeSheet(); render();
   toast(`Imported ✓ ${fresh.length} entries`);
 }
+
+/* ---------- repairs ---------- */
+const moveKey = x => [x.at.slice(0, 10), x.cur, cents(x.amount), x.from].join('|');
+// The importer before cash/bank moves saved "Cash → Bank" lines as expenses. Turn each into the move
+// it was meant to be. Ids are made from the expense id, so every device repairs to the same records.
+function repairImportedMoves() {
+  if (!S) return 0;
+  const bad = live(S.expenses).map(e => ({ e, m: clean(e.mode).match(MOVE_RE) }))
+    .filter(({ m }) => m && m[1].toLowerCase() !== m[2].toLowerCase());
+  if (!bad.length) return 0;
+  const have = new Set(live(S.transfers).map(moveKey));
+  const moves = [];
+  bad.forEach(({ e, m }) => {
+    const mv = { id: `${e.id}-MOVE`, cur: e.cur, amount: e.amount, from: cap(m[1]), to: cap(m[2]), note: e.reason, at: e.at, manualDate: !!e.manualDate, by: e.by, createdAt: e.createdAt };
+    if (!have.has(moveKey(mv))) { have.add(moveKey(mv)); moves.push(mv); } // already imported properly: just drop the expense
+  });
+  const badIds = new Set(bad.map(({ e }) => e.id));
+  update({
+    expenses: S.expenses.map(e => (badIds.has(e.id) ? { ...e, deleted: stampSec(), deletedBy: 'App repair' } : e)),
+    transfers: [...S.transfers, ...moves],
+    log: [...S.log, ...bad.map(({ e }) => ({ lid: `L-repair-${e.id}`, at: stampSec(), action: 'Repaired', id: e.id, by: 'App',
+      text: `${money(e.amount, e.cur)} on ${fmtDate(e.at.slice(0, 10))} was imported as an expense by mistake. It is a ${clean(e.mode)} move, so it is now recorded as a move and no longer counted as spending.` }))],
+  });
+  return bad.length;
+}
+// An expense with the same day, currency and amount as a cash/bank move, that talks about a deposit
+// or the bank, is probably the same money counted twice.
+function lookalikeExpenses() {
+  const moves = new Set(live(S.transfers).map(t => [t.at.slice(0, 10), t.cur, cents(t.amount)].join('|')));
+  return live(S.expenses).filter(e => moves.has([e.at.slice(0, 10), e.cur, cents(e.amount)].join('|')) && /deposit|bank|withdraw|transfer/i.test(`${e.reason} ${e.paidTo}`));
+}
+function lookalikeBanner() {
+  const e = lookalikeExpenses()[0];
+  if (!e) return '';
+  return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${e.id}">Show it</button></div>`;
+}

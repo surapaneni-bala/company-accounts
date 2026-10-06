@@ -1,4 +1,5 @@
 'use strict';
+const APP_VERSION = '__VERSION__'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -264,7 +265,7 @@ function viewHome() {
   const spent = byCur(E), recv = byCur(R), bal = balances();
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
-  return `${backupBanner()}
+  return `${lookalikeBanner()}${backupBanner()}
   <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances">
     <div class="lbl">Balance</div>
     ${CURS.map(c => `<div class="balrow">
@@ -371,7 +372,7 @@ function viewSheet() {
       </section>
       <section class="card pad">
         <h3>⚙️ Settings</h3>
-        <div class="setrow"><span>${esc(S.company)}<br><span class="muted">Company name, password · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow"><span>${esc(S.company)}<br><span class="muted">Company name, password · this device: ${esc(S.dev)} · app version ${APP_VERSION.slice(0, 7)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
       </section>
     </div>`;

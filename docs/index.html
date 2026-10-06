@@ -319,6 +319,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 <script>
 'use strict';
+const APP_VERSION = 'f315c62acc'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -584,7 +585,7 @@ function viewHome() {
   const spent = byCur(E), recv = byCur(R), bal = balances();
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
-  return `${backupBanner()}
+  return `${lookalikeBanner()}${backupBanner()}
   <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances">
     <div class="lbl">Balance</div>
     ${CURS.map(c => `<div class="balrow">
@@ -691,7 +692,7 @@ function viewSheet() {
       </section>
       <section class="card pad">
         <h3>⚙️ Settings</h3>
-        <div class="setrow"><span>${esc(S.company)}<br><span class="muted">Company name, password · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow"><span>${esc(S.company)}<br><span class="muted">Company name, password · this device: ${esc(S.dev)} · app version ${APP_VERSION.slice(0, 7)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
       </section>
     </div>`;
@@ -1207,6 +1208,7 @@ async function syncNow() {
     const res = await callServer(S.link, { since: S.link.since || 0, push });
     if (!S.link) return; // disconnected while this was running
     const changed = applyPull(res.pull || []);
+    if (changed) repairImportedMoves(); // a device on an old version may have sent mistaken expenses
     // a record edited while the request was running stays queued
     // records the sheet's script cannot store yet stay queued until it is updated
     const accepted = new Set(res.kinds || OLD_SERVER_KINDS);
@@ -1297,6 +1299,7 @@ async function doJoin(f) {
   applyPull(res.pull);
   S = { ...S, link: { ...S.link, since: res.seq } };
   save(); navigator.storage?.persist?.();
+  repairImportedMoves();
   history.replaceState(null, '', location.pathname);
   sync = { state: 'ok', at: stampSec(), err: '' };
   tab = 'home'; render(); toast(`Joined ${S.company} ✓`);
@@ -1438,6 +1441,42 @@ function doImport(f) {
   toast(`Imported ✓ ${fresh.length} entries`);
 }
 
+/* ---------- repairs ---------- */
+const moveKey = x => [x.at.slice(0, 10), x.cur, cents(x.amount), x.from].join('|');
+// The importer before cash/bank moves saved "Cash → Bank" lines as expenses. Turn each into the move
+// it was meant to be. Ids are made from the expense id, so every device repairs to the same records.
+function repairImportedMoves() {
+  if (!S) return 0;
+  const bad = live(S.expenses).map(e => ({ e, m: clean(e.mode).match(MOVE_RE) }))
+    .filter(({ m }) => m && m[1].toLowerCase() !== m[2].toLowerCase());
+  if (!bad.length) return 0;
+  const have = new Set(live(S.transfers).map(moveKey));
+  const moves = [];
+  bad.forEach(({ e, m }) => {
+    const mv = { id: `${e.id}-MOVE`, cur: e.cur, amount: e.amount, from: cap(m[1]), to: cap(m[2]), note: e.reason, at: e.at, manualDate: !!e.manualDate, by: e.by, createdAt: e.createdAt };
+    if (!have.has(moveKey(mv))) { have.add(moveKey(mv)); moves.push(mv); } // already imported properly: just drop the expense
+  });
+  const badIds = new Set(bad.map(({ e }) => e.id));
+  update({
+    expenses: S.expenses.map(e => (badIds.has(e.id) ? { ...e, deleted: stampSec(), deletedBy: 'App repair' } : e)),
+    transfers: [...S.transfers, ...moves],
+    log: [...S.log, ...bad.map(({ e }) => ({ lid: `L-repair-${e.id}`, at: stampSec(), action: 'Repaired', id: e.id, by: 'App',
+      text: `${money(e.amount, e.cur)} on ${fmtDate(e.at.slice(0, 10))} was imported as an expense by mistake. It is a ${clean(e.mode)} move, so it is now recorded as a move and no longer counted as spending.` }))],
+  });
+  return bad.length;
+}
+// An expense with the same day, currency and amount as a cash/bank move, that talks about a deposit
+// or the bank, is probably the same money counted twice.
+function lookalikeExpenses() {
+  const moves = new Set(live(S.transfers).map(t => [t.at.slice(0, 10), t.cur, cents(t.amount)].join('|')));
+  return live(S.expenses).filter(e => moves.has([e.at.slice(0, 10), e.cur, cents(e.amount)].join('|')) && /deposit|bank|withdraw|transfer/i.test(`${e.reason} ${e.paidTo}`));
+}
+function lookalikeBanner() {
+  const e = lookalikeExpenses()[0];
+  if (!e) return '';
+  return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${e.id}">Show it</button></div>`;
+}
+
 /* ---------- events ---------- */
 const ACTIONS = {
   tab: b => { tab = b.dataset.tab; render(); scrollTo(0, 0); },
@@ -1529,14 +1568,28 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) sche
 setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
 setInterval(renderLock, 10000);
 
-if (S) { S = migrate(S); save(); }
+if (S) { S = migrate(S); save(); repairImportedMoves(); }
 if (S && location.hash) history.replaceState(null, '', location.pathname);
 render();
 if ($('form[data-form=join]')) inviteHint($('form[data-form=join]'));
 scheduleSync(0);
 // offline support: the service worker keeps a copy of the app on the device
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  // a new version was installed in the background: switch to it now, not on the next open
+  const hadCopy = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadCopy || reloading) return; // very first install: this page is already the newest
+    const go = () => { reloading = true; location.reload(); };
+    const busy = [$('#sheet'), $('#pw')].find(d => d.open);
+    if (!busy) return go();
+    toast('A new version is ready — it opens when you close this window');
+    busy.addEventListener('close', go, { once: true });
+  });
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('Offline copy not installed:', e.message));
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {});
+  });
 }
 </script>
 </body>

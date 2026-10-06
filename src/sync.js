@@ -145,6 +145,7 @@ async function syncNow() {
     const res = await callServer(S.link, { since: S.link.since || 0, push });
     if (!S.link) return; // disconnected while this was running
     const changed = applyPull(res.pull || []);
+    if (changed) repairImportedMoves(); // a device on an old version may have sent mistaken expenses
     // a record edited while the request was running stays queued
     // records the sheet's script cannot store yet stay queued until it is updated
     const accepted = new Set(res.kinds || OLD_SERVER_KINDS);
@@ -235,6 +236,7 @@ async function doJoin(f) {
   applyPull(res.pull);
   S = { ...S, link: { ...S.link, since: res.seq } };
   save(); navigator.storage?.persist?.();
+  repairImportedMoves();
   history.replaceState(null, '', location.pathname);
   sync = { state: 'ok', at: stampSec(), err: '' };
   tab = 'home'; render(); toast(`Joined ${S.company} ✓`);
