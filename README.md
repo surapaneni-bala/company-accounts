@@ -80,6 +80,8 @@ deployments** → ✏️ → **Version: New version** → **Deploy**. The web ap
 ---
 
 ## For developers
+Start with **[HANDOVER.md](HANDOVER.md)**: how everything works, how to test and publish, and what is open.
+
 - Source: `src/` (`core.js`, `sync.js`, `main.js`, `shell.html`). Build: `node tools/build.js` → `docs/` (served by GitHub Pages).
 - Sync server: `apps-script/Code.gs`. Test it locally: `node tools/test-sheet-server.js`.
 - Try the app without Google: `node tools/mock-server.js` (prints a company code, web app link
