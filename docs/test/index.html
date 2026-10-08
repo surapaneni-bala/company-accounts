@@ -337,7 +337,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 <script>
 'use strict';
-const APP_VERSION = 'a718511e6c'; // filled in by tools/build.js
+const APP_VERSION = '7c108d4932'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -480,7 +480,7 @@ function unlock(why) {
     $('#pwCancel').onclick = () => d.close();
     $('#pwForm').onsubmit = async e => {
       e.preventDefault();
-      if (pass && await hashPw($('#pwIn').value, pass.salt) === pass.hash) {
+      if (pass && await (signedIn() ? slowHash : hashPw)($('#pwIn').value, pass.salt) === pass.hash) {
         unlockedUntil = Date.now() + UNLOCK_MS; d.close('ok'); renderLock(); resolve(true);
       } else {
         $('#pwErr').textContent = 'Wrong password. Try again.';
@@ -522,8 +522,8 @@ function suggestions(field) {
 }
 const datalists = () => ['paidTo', 'reason', 'location', 'by'].map(f => `<datalist id="dl-${f}">${suggestions(f).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('');
 const textField = (name, label, ph, val, req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input name="${name}" placeholder="${ph}" value="${esc(val)}" ${['paidTo', 'reason', 'location'].includes(name) ? `list="dl-${name}"` : ''} autocomplete="off" maxlength="160" ${req ? 'required' : ''}></label>`;
-const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${c}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
-const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${val || ''}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
+const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${esc(c)}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
+const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${esc(val || '')}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
 const byField = () => (signedIn()
   ? `<input type="hidden" name="by" value="${esc(myName())}"><p class="muted">Entered by <b>${esc(myName())}</b></p>`
   : `<label class="fld"><span>Your name <em>(who is entering this)</em></span><input name="by" placeholder="Type your name" value="${esc(S.lastBy || '')}" list="dl-by" autocomplete="off" maxlength="60" required></label>`);
@@ -532,20 +532,20 @@ function confirmBy(text) {
   if (signedIn()) return confirm(text) ? myName() : '';
   return clean(prompt(`${text}\n\nType your name to confirm:`, S.lastBy || ''));
 }
-const accountChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="curseg">${ACCOUNTS.map(a => `<label><input type="radio" name="mode" value="${a}" ${a === accountOf(cur) ? 'checked' : ''}><span><b>${ACCOUNT_ICON[a]} ${a}</b><small>${a === 'Cash' ? 'Cash in hand' : 'Bank account'}</small></span></label>`).join('')}</div></div>`;
+const accountChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="curseg">${ACCOUNTS.map(a => `<label><input type="radio" name="mode" value="${esc(a)}" ${a === accountOf(cur) ? 'checked' : ''}><span><b>${ACCOUNT_ICON[a]} ${a}</b><small>${a === 'Cash' ? 'Cash in hand' : 'Bank account'}</small></span></label>`).join('')}</div></div>`;
 function projectSelect(cur, optional) {
   if (!can('projects')) return '<input type="hidden" name="project" value="">';
   const ps = S.projects.filter(p => !p.deleted);
   const isNew = !optional && (!ps.length || cur === '__new');
   return `<label class="fld"><span>Project${optional ? ' <em>(optional)</em>' : ''}</span><select name="project">
     ${optional ? `<option value="">No project — general</option>` : ''}
-    ${ps.map(p => `<option value="${p.id}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+    ${ps.map(p => `<option value="${esc(p.id)}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
     ${optional ? '' : `<option value="__new" ${isNew ? 'selected' : ''}>＋ New project…</option>`}
   </select></label>
   ${optional ? '' : `<label class="fld newp" ${isNew ? '' : 'hidden'}><span>New project name</span><input name="newProject" placeholder="e.g. Warehouse — Juba" maxlength="80"></label>`}`;
 }
 function whenField(at, editable) {
-  if (editable) return `<label class="fld"><span>Date &amp; time</span><input type="datetime-local" name="at" value="${at}" required></label>`;
+  if (editable) return `<label class="fld"><span>Date &amp; time</span><input type="datetime-local" name="at" value="${esc(at)}" required></label>`;
   return `<div class="fld"><span>Date &amp; time</span><div class="when"><div><b>${fmtWhen(stamp())}</b><small>Set automatically</small></div>${can('date') ? '<button type="button" class="btn small ghost" data-act="unlockDate">🔒 Change</button>' : ''}</div></div>`;
 }
 
@@ -662,7 +662,7 @@ function backupBanner() {
 function itemRow(x, k, showDate) {
   const when = [showDate ? fmtDay(x.at.slice(0, 10)) : '', fmtTime(x.at), x.by && 'by ' + x.by];
   if (k === 'T') {
-    return `<button class="row move" data-act="open" data-kind="T" data-id="${x.id}">
+    return `<button class="row move" data-act="open" data-kind="T" data-id="${esc(x.id)}">
     <span class="dot">⇄</span>
     <span class="main"><span class="t"><span class="tt">${ACCOUNT_ICON[x.from]} ${x.from} → ${ACCOUNT_ICON[x.to]} ${x.to}</span>${x.manualDate ? '<i class="tag warn">Date set</i>' : ''}</span><span class="s">${[x.note, ...when].filter(Boolean).map(esc).join(' · ')}</span></span>
     <span class="amt">${money(x.amount, x.cur)}</span></button>`;
@@ -672,7 +672,7 @@ function itemRow(x, k, showDate) {
   const acct = accountOf(x.mode);
   const sub = [isE ? x.paidTo : x.note, isE ? x.location : '', `${ACCOUNT_ICON[acct]} ${acct}`, ...when].filter(Boolean).map(esc).join(' · ');
   const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '') + (waitingFor(x.id).length ? '<i class="tag warn">Change waiting</i>' : '');
-  return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${x.id}">
+  return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${esc(x.id)}">
     <span class="dot">${isE ? '−' : '+'}</span>
     <span class="main"><span class="t"><span class="tt">${esc(title)}</span>${tags}</span><span class="s">${sub}</span></span>
     <span class="amt">${isE ? '−' : '+'}${money(x.amount, x.cur)}</span></button>`;
@@ -686,7 +686,7 @@ function viewHistory() {
     </div>
     <div class="filters">
       <input type="search" id="q" placeholder="Search name, reason, place, USD/SSP…" value="${esc(histQuery)}" aria-label="Search">
-      <select id="month" aria-label="Month"><option value="">All time</option>${months.map(m => `<option value="${m}" ${m === histMonth ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select>
+      <select id="month" aria-label="Month"><option value="">All time</option>${months.map(m => `<option value="${esc(m)}" ${m === histMonth ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select>
     </div>
     <div id="histRes">${histResults()}</div>`;
 }
@@ -714,7 +714,7 @@ function viewProjects() {
 }
 function projCard(p) {
   const s = projStats(p.id);
-  return `<button class="card proj" data-act="openProject" data-id="${p.id}">
+  return `<button class="card proj" data-act="openProject" data-id="${esc(p.id)}">
     <span class="ph"><b>${esc(p.name)}</b><span class="chev">›</span></span>
     ${projBar(s)}${projStatsGrid(s)}
   </button>`;
@@ -748,7 +748,7 @@ function viewSheet() {
 function expenseForm(old) {
   const d = old || { cur: defCur(), amount: '', paidTo: '', reason: '', location: S.lastLoc || '', project: S.lastExpProject || '', mode: S.lastMode || 'Cash' };
   openSheet(`${head(old ? 'Edit expense' : 'Add expense', 'out', old?.id)}
-    <form data-form="expense" data-id="${old?.id || ''}">
+    <form data-form="expense" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${textField('paidTo', 'Paid to', 'Who did you pay?', d.paidTo)}
@@ -765,7 +765,7 @@ function expenseForm(old) {
 function creditForm(old, presetProject) {
   const d = old || { cur: defCur(), amount: '', project: presetProject || S.lastProject || '', mode: 'Bank', note: '' };
   openSheet(`${head(old ? 'Edit money received' : 'Money received', 'in', old?.id)}
-    <form data-form="credit" data-id="${old?.id || ''}">
+    <form data-form="credit" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${projectSelect(d.project, false)}
@@ -781,7 +781,7 @@ function moveForm(old) {
   const d = old || { cur: defCur(), amount: '', from: 'Cash', note: '' };
   openSheet(`${head(old ? 'Edit money move' : 'Move money', '', old?.id)}
     <p class="hint">Putting cash into the bank (or taking cash out) is not spending — the total stays the same.</p>
-    <form data-form="move" data-id="${old?.id || ''}">
+    <form data-form="move" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       <div class="fld"><span>Which way?</span><div class="curseg">
@@ -821,7 +821,7 @@ function bulkForm() {
 function projectForm(old) {
   const vc = old?.valueCur || defCur();
   openSheet(`${head(old ? 'Edit project' : 'New project', '', old?.id)}
-    <form data-form="project" data-id="${old?.id || ''}">
+    <form data-form="project" data-id="${esc(old?.id || '')}">
       <label class="fld"><span>Project name</span><input name="name" required maxlength="80" value="${esc(old?.name)}" placeholder="e.g. Warehouse — Juba" autofocus></label>
       ${curChips(vc, 'Project value is in')}
       ${amountField(old?.value, vc, 'value', 'Total project value', false)}
@@ -829,7 +829,7 @@ function projectForm(old) {
       ${byField()}${approvalNote(old)}
       <p class="err"></p>
       <button class="btn primary">${old ? saveLabel() : 'Add project'}</button>
-      ${old && can('delete') ? `<p class="center"><button type="button" class="link" data-act="delProject" data-id="${old.id}">Delete this project</button></p>` : ''}
+      ${old && can('delete') ? `<p class="center"><button type="button" class="link" data-act="delProject" data-id="${esc(old.id)}">Delete this project</button></p>` : ''}
     </form>${datalists()}`);
 }
 function settingsForm() {
@@ -858,7 +858,7 @@ function detail(k, id) {
     <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
     ${waitingNote(id)}
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
-    <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${id}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${id}">🗑 Delete 🔒</button>` : ''}</div>
+    <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : ''}</div>
     ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}`);
 }
 function projectDetail(id) {
@@ -870,8 +870,8 @@ function projectDetail(id) {
     ${projBar(s)}
     <div style="margin-bottom:16px">${projStatsGrid(s)}</div>
     ${waitingNote(id)}
-    <div class="two"><button class="btn in" data-act="addCredit" data-project="${id}">＋ Money received</button>${canChange() ? `<button class="btn ghost" data-act="editProject" data-id="${id}">✏️ Edit 🔒</button>` : ''}</div>
-    ${can('edit') ? `<button class="btn ghost" data-act="assignPick" data-id="${id}" style="margin-top:10px">＋ Add existing expenses 🔒</button>` : ''}
+    <div class="two"><button class="btn in" data-act="addCredit" data-project="${esc(id)}">＋ Money received</button>${canChange() ? `<button class="btn ghost" data-act="editProject" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}</div>
+    ${can('edit') ? `<button class="btn ghost" data-act="assignPick" data-id="${esc(id)}" style="margin-top:10px">＋ Add existing expenses 🔒</button>` : ''}
     <h3 class="subh">Money received (${R.length})</h3>
     ${R.length ? `<div class="card list inset">${R.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}
     <h3 class="subh">Spent on this project (${E.length})</h3>
@@ -943,11 +943,11 @@ async function assignSheet(pid) {
   const list = live(S.expenses).filter(e => e.project !== pid).sort((a, b) => byAt(b, a));
   openSheet(`${head('Add expenses to project', '', p.name)}
     <p class="hint">Tick the expenses that belong to <b>${esc(p.name)}</b>. Expenses without a project are shown.</p>
-    <form data-form="assign" data-id="${pid}">
+    <form data-form="assign" data-id="${esc(pid)}">
       ${list.some(e => e.project) ? '<label class="fld check"><input type="checkbox" name="others"> Also show expenses that are in another project</label>' : ''}
       <div class="two"><button type="button" class="btn small ghost" data-act="pickAll">Select all</button><button type="button" class="btn small ghost" data-act="pickNone">Select none</button></div>
       <div class="picklist">${list.length ? list.map(e => `<label class="pick" data-other="${e.project ? 1 : 0}" ${e.project ? 'hidden' : ''}>
-        <input type="checkbox" name="pick" value="${e.id}"><span class="pd">${fmtDate(e.at.slice(0, 10))}</span>
+        <input type="checkbox" name="pick" value="${esc(e.id)}"><span class="pd">${fmtDate(e.at.slice(0, 10))}</span>
         <span class="pr">${esc(e.reason)}<small>${esc(e.paidTo)}${e.project ? ' · now in ' + esc(projName(e.project)) : ''}</small></span><b>${money(e.amount, e.cur)}</b></label>`).join('') : '<p class="muted">No other expenses.</p>'}</div>
       ${byField()}
       <div class="foot"><div class="btotal"><span id="pickCount">0 selected</span><b id="pickSum"></b></div><p class="err"></p><button class="btn primary" id="pickBtn" disabled>Add to project</button></div>
@@ -1173,8 +1173,10 @@ const VALID = {
   P: d => typeof d.id === 'string' && typeof d.name === 'string',
   L: d => typeof d.lid === 'string' && typeof d.text === 'string' && typeof d.at === 'string',
   T: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && ACCOUNTS.includes(d.from) && ACCOUNTS.includes(d.to) && d.from !== d.to,
-  C: d => typeof d.id === 'string' && typeof d.target === 'string' && ['E', 'R', 'T', 'P'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string',
+  C: d => typeof d.id === 'string' && SAFE_ID.test(d.target) && ['E', 'R', 'T', 'P'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string' && AT_RE.test(d.at),
 };
+// ids end up inside the app's pages: only plain ones are ever accepted (the sheet checks this too)
+const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before cash ↔ bank moves can reach the sheet. Everything else is syncing; the moves are kept safe on this device.';
@@ -1273,6 +1275,14 @@ async function firstContact(link, body = { since: 0, push: [] }) {
   }
 }
 
+// A big backlog goes in batches: the sheet takes at most 200 records at once from logins other than admins.
+// Records it refused last time go last, so they can never hold the others up.
+const MAX_PUSH = 200;
+let lastRefused = new Set();
+function nextBatch() {
+  const all = pendingRecords();
+  return [...all.filter(p => !lastRefused.has(p.id)), ...all.filter(p => lastRefused.has(p.id))].slice(0, MAX_PUSH);
+}
 function pendingRecords() {
   const want = new Set(S.dirty), out = [];
   for (const [k, key] of Object.entries(KIND_KEY)) {
@@ -1291,7 +1301,7 @@ function applyPull(pull) {
   const next = {};
   let changed = false;
   for (const [k, key] of Object.entries(KIND_KEY)) {
-    const recs = pull.filter(p => p.k === k && p.d && VALID[k](p.d) && p.id === recId(key, p.d));
+    const recs = pull.filter(p => p.k === k && p.d && SAFE_ID.test(p.id) && VALID[k](p.d) && p.id === recId(key, p.d));
     if (!recs.length) continue;
     const list = [...S[key]], at = new Map(list.map((r, i) => [recId(key, r), i]));
     for (const p of recs) {
@@ -1313,7 +1323,7 @@ async function syncNow() {
   if (!S || !S.link) return;
   if (syncBusy) { syncAgain = true; return; }
   syncBusy = true; sync = { ...sync, state: 'syncing' }; paintSync();
-  const push = pendingRecords();
+  const push = nextBatch();
   try {
     const res = await callServer(S.link, { since: S.link.since || 0, push });
     if (!S.link) return; // disconnected while this was running
@@ -1328,6 +1338,8 @@ async function syncNow() {
     S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || S.link.sheet, v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id)) };
     save();
     if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
+    lastRefused = refused;
+    if (S.dirty.some(id => !sent.has(id))) syncAgain = true; // more waiting than one batch: send the rest straight after
     sync = notAllowed.size ? { state: 'error', at: stampSec(), err: notAllowedMsg(notAllowed.size) }
       : refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };
     if ((changed || was.logins !== S.link.logins || was.v !== S.link.v) && !typing()) render();
@@ -1493,7 +1505,7 @@ function migrate(s) {
 // The sign-in lives in its own storage slot, so it never ends up in a backup file.
 const SESSION_KEY = KEY + '-login';
 const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper' };
-const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Sees everything · adds and edits entries', store: 'Adds expenses · sees only their own, no company money' };
+const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Sees everything · adds entries · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
 const RIGHTS = {
   admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones'],
   manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup'], // suggest = edits wait for an admin's approval
@@ -1515,14 +1527,24 @@ const can = what => !signedIn() || RIGHTS[session.user.role].includes(what);
 const mustSignIn = () => !!(S && S.link && session && session.out);
 const signInBanner = () => (S.link?.logins && !signedIn() ? `<div class="banner new"><span>👤 Everyone can now have their own login. Sign in with yours.</span><button class="btn small" data-act="signIn">Sign in</button></div>` : '');
 
+// The phone's own check of a login password (for "unlock" without internet): PBKDF2 with many rounds,
+// so a copy taken from the phone is slow to crack.
+async function slowHash(pw, salt) {
+  const enc = new TextEncoder(), key = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(salt), iterations: 200000 }, key, 256);
+  return [...new Uint8Array(bits)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+// only the entries this phone hasn't sent yet (they must never be lost)
+const onlyUnsent = () => { const d = new Set(S.dirty); return Object.fromEntries(Object.keys(SYNC_KEYS).map(key => [key, S[key].filter(r => d.has(recId(key, r)))])); };
+
 // Signed in: remember who, and a check of the password so "unlock" works offline.
 // The company code is removed from this phone, so a closed login can't fall back to it.
 async function signedInAs(res, password) {
   const salt = randHex();
-  saveSession({ token: res.token, user: res.me, check: { salt, hash: await hashPw(password, salt) } });
+  saveSession({ token: res.token, user: res.me, check: { salt, hash: await slowHash(password, salt) } });
   // reload the company settings as this person may see them (only admins get the company password);
-  // a store keeper sees only their own entries: drop what this phone held before (it's all on the sheet)
-  const clear = { settingsU: 0, ...(res.me.role === 'admin' ? {} : { pass: null }), ...(res.me.role === 'store' && !S.dirty.length ? NOTHING_SEEN : {}) };
+  // a store keeper sees only their own entries: drop everything else this phone held (it's all on the sheet)
+  const clear = { settingsU: 0, ...(res.me.role === 'admin' ? {} : { pass: null }), ...(res.me.role === 'store' ? onlyUnsent() : {}) };
   S = { ...S, ...clear, link: { ...S.link, k: '', since: 0, logins: true }, lastBy: res.me.name };
   save();
 }
@@ -1537,10 +1559,12 @@ async function signOut() {
   const n = S.dirty.length;
   if (n) return alert(`This phone has ${n} change${n === 1 ? '' : 's'} not sent to the Google Sheet yet.\n\nConnect to the internet and wait until it says "Up to date", then sign out.`);
   if (!confirm('Sign out of this phone?\n\nThe company records leave this phone. They come back when someone signs in.')) return;
-  try { await callServer(S.link, { op: 'logout' }); } catch { /* already signed out on the sheet: fine */ }
-  saveSession({ out: true });
-  S = { ...S, ...NOTHING_SEEN, link: { ...S.link, since: 0 } };
-  save(); closeSheet(); render();
+  const token = session.token;
+  saveSession({ out: true }); // the sign-in screen shows at once, so nothing new can be added meanwhile
+  closeSheet(); render();
+  try { await callServer(S.link, { op: 'logout', token }); } catch { /* already signed out on the sheet: fine */ }
+  if (!S.dirty.length) { S = { ...S, ...NOTHING_SEEN, link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
+  render();
 }
 
 const signInFields = (autofocus = true) => `
@@ -1577,16 +1601,16 @@ async function doSignIn(f) {
   syncNow();
 }
 
-/* the owner's first login, proven with today's company code and company password */
+/* the owner's first login, proven with a one-time setup code that only appears inside the Google Sheet */
 function setupLoginsSheet() {
   openSheet(`${head('Set up logins')}
     <p class="hint">You become the first admin. Then you give logins to the Managing Director and your staff. Phones that haven't signed in keep working until you choose <b>Require logins</b>.</p>
     <form data-form="setupLogins">
-      <label class="fld"><span>Company password <em>(the one you use today)</em></span><input type="password" name="company" required autocomplete="off" autofocus></label>
+      <label class="fld"><span>Setup code <em>(open your Google Sheet → <b>Read me</b> tab → at the bottom)</em></span><input name="code" required maxlength="12" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" autofocus></label>
       <label class="fld"><span>Your name</span><input name="name" required maxlength="60" value="${esc(S.lastBy || '')}" autocomplete="name"></label>
       <label class="fld"><span>Choose a username <em>(what you type to sign in)</em></span><input name="username" required maxlength="30" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="e.g. john"></label>
-      <label class="fld"><span>Your new password</span><input type="password" name="pw" required minlength="6" autocomplete="new-password" placeholder="At least 6 characters"></label>
-      <label class="fld"><span>Type it again</span><input type="password" name="pw2" required minlength="6" autocomplete="new-password"></label>
+      <label class="fld"><span>Your new password</span><input type="password" name="pw" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+      <label class="fld"><span>Type it again</span><input type="password" name="pw2" required minlength="8" autocomplete="new-password"></label>
       <p class="err"></p>
       <button class="btn primary">Set up logins</button>
     </form>`);
@@ -1596,7 +1620,7 @@ async function doSetupLogins(f) {
   if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
   $('.err', f).textContent = 'Setting up…';
   let res;
-  try { res = await callServer(S.link, { op: 'setup', key: S.link.k, password: v.company, name: clean(v.name), username: v.username, newPassword: v.pw, device: S.dev }); }
+  try { res = await callServer(S.link, { op: 'setup', key: S.link.k, setupCode: v.code, name: clean(v.name), username: v.username, newPassword: v.pw, device: S.dev }); }
   catch (e) { return formErr(f, null, e.offline ? 'No internet. This needs internet.' : e.message); }
   if (!res.token) return formErr(f, null, 'The Google Sheet script is too old for logins. Update it to version 3 first (Sheet tab → Show me how).');
   await signedInAs(res, v.pw);
@@ -1633,8 +1657,8 @@ function userForm(id) {
     <form data-form="user" data-id="${esc(u?.id || '')}">
       <label class="fld"><span>Name</span><input name="name" required maxlength="60" value="${esc(u?.name)}" placeholder="e.g. Mary" ${u ? '' : 'autofocus'}></label>
       <label class="fld"><span>Username <em>(what they type to sign in)</em></span><input name="username" required maxlength="30" autocapitalize="off" autocorrect="off" spellcheck="false" value="${esc(u?.username)}" placeholder="e.g. mary"></label>
-      <div class="fld"><span>What may they do?</span><div class="curseg roles">${Object.keys(ROLES).map(r => `<label><input type="radio" name="role" value="${r}" ${r === role ? 'checked' : ''}><span><b>${ROLES[r]}</b><small>${ROLE_HELP[r]}</small></span></label>`).join('')}</div></div>
-      <label class="fld"><span>${u ? 'New password <em>(leave empty to keep theirs)</em>' : 'Password'}</span><input name="password" ${u ? '' : 'required'} minlength="6" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="At least 6 characters"></label>
+      <div class="fld"><span>What may they do?</span><div class="curseg roles">${Object.keys(ROLES).map(r => `<label><input type="radio" name="role" value="${esc(r)}" ${r === role ? 'checked' : ''}><span><b>${ROLES[r]}</b><small>${ROLE_HELP[r]}</small></span></label>`).join('')}</div></div>
+      <label class="fld"><span>${u ? 'New password <em>(leave empty to keep theirs)</em>' : 'Password'}</span><input name="password" ${u ? '' : 'required'} minlength="8" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="At least 8 characters"></label>
       ${u ? `<label class="fld check"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> Login is open <em>(untick to block this person)</em></label>` : ''}
       <p class="err"></p>
       <button class="btn primary">${u ? 'Save changes' : 'Create login'}</button>
@@ -1670,8 +1694,8 @@ function accountSheet() {
     <form data-form="password">
       <h3 class="subh" style="margin-top:0">Change my password</h3>
       <label class="fld"><span>Current password</span><input type="password" name="old" required autocomplete="current-password"></label>
-      <label class="fld"><span>New password</span><input type="password" name="pw" required minlength="6" autocomplete="new-password" placeholder="At least 6 characters"></label>
-      <label class="fld"><span>New password again</span><input type="password" name="pw2" required minlength="6" autocomplete="new-password"></label>
+      <label class="fld"><span>New password</span><input type="password" name="pw" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+      <label class="fld"><span>New password again</span><input type="password" name="pw2" required minlength="8" autocomplete="new-password"></label>
       <p class="err"></p>
       <button class="btn primary">Change password</button>
     </form>
@@ -1684,7 +1708,7 @@ async function doChangePassword(f) {
   try { await callServer(S.link, { op: 'password', old: v.old, password: v.pw }); }
   catch (e) { return formErr(f, e.offline ? null : 'old', e.offline ? 'No internet. Changing your password needs internet.' : e.message); }
   const salt = randHex();
-  saveSession({ ...session, check: { salt, hash: await hashPw(v.pw, salt) } });
+  saveSession({ ...session, check: { salt, hash: await slowHash(v.pw, salt) } });
   closeSheet(); toast('Password changed ✓');
 }
 
@@ -1715,8 +1739,26 @@ const saveLabel = () => (can('edit') ? 'Save changes' : 'Send for approval');
 const approvalNote = old => (old && !can('edit') ? '<p class="note">An admin approves this change first. Until then the entry and the totals stay as they are.</p>' : '');
 const waiting = () => (S.changes || []).filter(c => c.status === 'waiting');
 const waitingFor = id => waiting().filter(c => c.target === id);
-const waitingNote = id => waitingFor(id).map(c => `<p class="note">✏️ <b>Change waiting for approval</b> — ${esc(c.text)} · asked by ${esc(c.by)}, ${fmtAbs(c.at)}</p>`).join('');
-const recordsOf = kind => S[kind === 'P' ? 'projects' : COLL[kind]];
+const recordsOf = kind => S[kind === 'P' ? 'projects' : COLL[kind]] || [];
+const targetOf = c => recordsOf(c.kind).find(x => x.id === c.target);
+// the fields an edit may change, per kind (the Google Sheet checks the same list)
+const EDITABLE = {
+  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate'],
+  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate'],
+  T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
+  P: ['name', 'value', 'valueCur'],
+};
+const editPart = c => Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f)));
+// what approving would really change, worked out from the entry itself — never from the text sent with the request
+function changeLines(c, r) {
+  if (!r) return [];
+  const next = { ...r, ...editPart(c) };
+  if (c.kind !== 'P') return diff(r, next);
+  const vc = x => x.valueCur || 'USD';
+  return [r.name !== next.name && `Name: ${r.name} → ${next.name}`,
+    (Number(r.value || 0) !== Number(next.value || 0) || vc(r) !== vc(next)) && `Project value: ${money(+r.value || 0, vc(r))} → ${money(+next.value || 0, vc(next))}`].filter(Boolean);
+}
+const waitingNote = id => waitingFor(id).map(c => `<p class="note">✏️ <b>Change waiting for approval</b> — ${esc(changeLines(c, targetOf(c)).join(' ; ') || 'no real change')} · asked by ${esc(c.by)}, ${esc(fmtAbs(c.at))}</p>`).join('');
 
 function requestChange(kind, old, rec, changes, by) {
   const [[id], seq] = nextIds('C', 1, S.seq);
@@ -1735,19 +1777,19 @@ function approvalsBanner() {
   return mine ? `<div class="banner new"><span>✏️ ${mine} of your changes ${mine === 1 ? 'is' : 'are'} waiting for an admin to approve.</span></div>` : '';
 }
 function approvalsSheet() {
-  const list = waiting().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const list = waiting().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
   openSheet(`${head('Changes to approve', '', `${list.length} waiting`)}
     ${list.length ? list.map(changeCard).join('') : '<p class="muted">Nothing is waiting. ✓</p>'}`);
 }
 function changeCard(c) {
-  const r = recordsOf(c.kind).find(x => x.id === c.target);
-  const gone = !r || r.deleted;
+  const r = targetOf(c);
+  const gone = !r || r.deleted, lines = changeLines(c, r);
   // the entry was changed by someone else after this request: show it so the admin looks first
-  const moved = r && Object.keys(c.before).some(f => String(r[f] ?? '') !== String(c.before[f] ?? ''));
+  const moved = r && Object.keys(c.before || {}).some(f => String(r[f] ?? '') !== String(c.before[f] ?? ''));
   return `<section class="card pad" style="margin-bottom:12px">
     <p style="margin:0 0 6px"><b>${esc(r ? (c.kind === 'P' ? `Project "${r.name}"` : describe(c.kind, r)) : c.target)}</b></p>
-    <ul style="margin:0 0 8px;padding-left:20px">${c.text.split(' ; ').map(t => `<li>${esc(t)}</li>`).join('')}</ul>
-    <p class="muted" style="margin:0 0 10px">Asked by ${esc(c.by)} · ${fmtAbs(c.at)}</p>
+    <ul style="margin:0 0 8px;padding-left:20px">${(lines.length ? lines : ['No real change — reject it']).map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+    <p class="muted" style="margin:0 0 10px">Asked by ${esc(c.by)} · ${esc(fmtAbs(c.at))}</p>
     ${gone ? '<p class="note">This entry was deleted — the change can only be rejected.</p>' : moved ? '<p class="note">⚠️ This entry was changed after the request. Check it before approving.</p>' : ''}
     <div class="two"><button class="btn danger" data-act="decide" data-id="${esc(c.id)}" data-ok="">Reject</button><button class="btn in" data-act="decide" data-id="${esc(c.id)}" data-ok="1" ${gone ? 'disabled' : ''}>Approve</button></div>
   </section>`;
@@ -1757,11 +1799,14 @@ async function decide(id, ok) {
   const c = S.changes.find(x => x.id === id);
   if (!c || c.status !== 'waiting') return approvalsSheet();
   const me = myName() || S.lastBy || 'Admin', key = c.kind === 'P' ? 'projects' : COLL[c.kind];
+  const r = targetOf(c), next = r && { ...r, ...editPart(c) };
+  if (ok && (!r || r.deleted || !VALID[c.kind](next))) return alert("This change can't be applied: the entry is gone or the new values aren't valid. Reject it instead.");
+  const what = changeLines(c, r).join(' ; ') || 'no real change';
   const patch = {
     changes: S.changes.map(x => (x.id === id ? { ...x, status: ok ? 'approved' : 'rejected', decidedBy: me, decidedAt: stampSec() } : x)),
-    log: logWith([[ok ? 'Approved' : 'Rejected', c.target, `${c.text} — asked by ${c.by}`]], me),
+    log: logWith([[ok ? 'Approved' : 'Rejected', c.target, `${what} — asked by ${c.by}`]], me),
   };
-  if (ok) patch[key] = S[key].map(x => (x.id === c.target ? { ...x, ...c.after, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
+  if (ok) patch[key] = S[key].map(x => (x.id === c.target ? { ...next, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
   update(patch);
   render(); approvalsSheet(); toast(ok ? 'Approved ✓ The entry is changed' : 'Rejected — the entry stays as it was');
 }
@@ -1910,7 +1955,7 @@ function lookalikeExpenses() {
 function lookalikeBanner() {
   const e = can('delete') && lookalikeExpenses()[0];
   if (!e) return '';
-  return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${e.id}">Show it</button></div>`;
+  return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${esc(e.id)}">Show it</button></div>`;
 }
 
 /* ---------- app updates ---------- */
