@@ -142,7 +142,7 @@ function unlock(why) {
     $('#pwCancel').onclick = () => d.close();
     $('#pwForm').onsubmit = async e => {
       e.preventDefault();
-      if (pass && await hashPw($('#pwIn').value, pass.salt) === pass.hash) {
+      if (pass && await (signedIn() ? slowHash : hashPw)($('#pwIn').value, pass.salt) === pass.hash) {
         unlockedUntil = Date.now() + UNLOCK_MS; d.close('ok'); renderLock(); resolve(true);
       } else {
         $('#pwErr').textContent = 'Wrong password. Try again.';
@@ -184,8 +184,8 @@ function suggestions(field) {
 }
 const datalists = () => ['paidTo', 'reason', 'location', 'by'].map(f => `<datalist id="dl-${f}">${suggestions(f).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('');
 const textField = (name, label, ph, val, req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input name="${name}" placeholder="${ph}" value="${esc(val)}" ${['paidTo', 'reason', 'location'].includes(name) ? `list="dl-${name}"` : ''} autocomplete="off" maxlength="160" ${req ? 'required' : ''}></label>`;
-const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${c}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
-const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${val || ''}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
+const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${esc(c)}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
+const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${esc(val || '')}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
 const byField = () => (signedIn()
   ? `<input type="hidden" name="by" value="${esc(myName())}"><p class="muted">Entered by <b>${esc(myName())}</b></p>`
   : `<label class="fld"><span>Your name <em>(who is entering this)</em></span><input name="by" placeholder="Type your name" value="${esc(S.lastBy || '')}" list="dl-by" autocomplete="off" maxlength="60" required></label>`);
@@ -194,20 +194,20 @@ function confirmBy(text) {
   if (signedIn()) return confirm(text) ? myName() : '';
   return clean(prompt(`${text}\n\nType your name to confirm:`, S.lastBy || ''));
 }
-const accountChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="curseg">${ACCOUNTS.map(a => `<label><input type="radio" name="mode" value="${a}" ${a === accountOf(cur) ? 'checked' : ''}><span><b>${ACCOUNT_ICON[a]} ${a}</b><small>${a === 'Cash' ? 'Cash in hand' : 'Bank account'}</small></span></label>`).join('')}</div></div>`;
+const accountChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="curseg">${ACCOUNTS.map(a => `<label><input type="radio" name="mode" value="${esc(a)}" ${a === accountOf(cur) ? 'checked' : ''}><span><b>${ACCOUNT_ICON[a]} ${a}</b><small>${a === 'Cash' ? 'Cash in hand' : 'Bank account'}</small></span></label>`).join('')}</div></div>`;
 function projectSelect(cur, optional) {
   if (!can('projects')) return '<input type="hidden" name="project" value="">';
   const ps = S.projects.filter(p => !p.deleted);
   const isNew = !optional && (!ps.length || cur === '__new');
   return `<label class="fld"><span>Project${optional ? ' <em>(optional)</em>' : ''}</span><select name="project">
     ${optional ? `<option value="">No project — general</option>` : ''}
-    ${ps.map(p => `<option value="${p.id}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+    ${ps.map(p => `<option value="${esc(p.id)}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
     ${optional ? '' : `<option value="__new" ${isNew ? 'selected' : ''}>＋ New project…</option>`}
   </select></label>
   ${optional ? '' : `<label class="fld newp" ${isNew ? '' : 'hidden'}><span>New project name</span><input name="newProject" placeholder="e.g. Warehouse — Juba" maxlength="80"></label>`}`;
 }
 function whenField(at, editable) {
-  if (editable) return `<label class="fld"><span>Date &amp; time</span><input type="datetime-local" name="at" value="${at}" required></label>`;
+  if (editable) return `<label class="fld"><span>Date &amp; time</span><input type="datetime-local" name="at" value="${esc(at)}" required></label>`;
   return `<div class="fld"><span>Date &amp; time</span><div class="when"><div><b>${fmtWhen(stamp())}</b><small>Set automatically</small></div>${can('date') ? '<button type="button" class="btn small ghost" data-act="unlockDate">🔒 Change</button>' : ''}</div></div>`;
 }
 
@@ -324,7 +324,7 @@ function backupBanner() {
 function itemRow(x, k, showDate) {
   const when = [showDate ? fmtDay(x.at.slice(0, 10)) : '', fmtTime(x.at), x.by && 'by ' + x.by];
   if (k === 'T') {
-    return `<button class="row move" data-act="open" data-kind="T" data-id="${x.id}">
+    return `<button class="row move" data-act="open" data-kind="T" data-id="${esc(x.id)}">
     <span class="dot">⇄</span>
     <span class="main"><span class="t"><span class="tt">${ACCOUNT_ICON[x.from]} ${x.from} → ${ACCOUNT_ICON[x.to]} ${x.to}</span>${x.manualDate ? '<i class="tag warn">Date set</i>' : ''}</span><span class="s">${[x.note, ...when].filter(Boolean).map(esc).join(' · ')}</span></span>
     <span class="amt">${money(x.amount, x.cur)}</span></button>`;
@@ -334,7 +334,7 @@ function itemRow(x, k, showDate) {
   const acct = accountOf(x.mode);
   const sub = [isE ? x.paidTo : x.note, isE ? x.location : '', `${ACCOUNT_ICON[acct]} ${acct}`, ...when].filter(Boolean).map(esc).join(' · ');
   const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '') + (waitingFor(x.id).length ? '<i class="tag warn">Change waiting</i>' : '');
-  return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${x.id}">
+  return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${esc(x.id)}">
     <span class="dot">${isE ? '−' : '+'}</span>
     <span class="main"><span class="t"><span class="tt">${esc(title)}</span>${tags}</span><span class="s">${sub}</span></span>
     <span class="amt">${isE ? '−' : '+'}${money(x.amount, x.cur)}</span></button>`;
@@ -348,7 +348,7 @@ function viewHistory() {
     </div>
     <div class="filters">
       <input type="search" id="q" placeholder="Search name, reason, place, USD/SSP…" value="${esc(histQuery)}" aria-label="Search">
-      <select id="month" aria-label="Month"><option value="">All time</option>${months.map(m => `<option value="${m}" ${m === histMonth ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select>
+      <select id="month" aria-label="Month"><option value="">All time</option>${months.map(m => `<option value="${esc(m)}" ${m === histMonth ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select>
     </div>
     <div id="histRes">${histResults()}</div>`;
 }
@@ -376,7 +376,7 @@ function viewProjects() {
 }
 function projCard(p) {
   const s = projStats(p.id);
-  return `<button class="card proj" data-act="openProject" data-id="${p.id}">
+  return `<button class="card proj" data-act="openProject" data-id="${esc(p.id)}">
     <span class="ph"><b>${esc(p.name)}</b><span class="chev">›</span></span>
     ${projBar(s)}${projStatsGrid(s)}
   </button>`;
@@ -410,7 +410,7 @@ function viewSheet() {
 function expenseForm(old) {
   const d = old || { cur: defCur(), amount: '', paidTo: '', reason: '', location: S.lastLoc || '', project: S.lastExpProject || '', mode: S.lastMode || 'Cash' };
   openSheet(`${head(old ? 'Edit expense' : 'Add expense', 'out', old?.id)}
-    <form data-form="expense" data-id="${old?.id || ''}">
+    <form data-form="expense" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${textField('paidTo', 'Paid to', 'Who did you pay?', d.paidTo)}
@@ -427,7 +427,7 @@ function expenseForm(old) {
 function creditForm(old, presetProject) {
   const d = old || { cur: defCur(), amount: '', project: presetProject || S.lastProject || '', mode: 'Bank', note: '' };
   openSheet(`${head(old ? 'Edit money received' : 'Money received', 'in', old?.id)}
-    <form data-form="credit" data-id="${old?.id || ''}">
+    <form data-form="credit" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${projectSelect(d.project, false)}
@@ -443,7 +443,7 @@ function moveForm(old) {
   const d = old || { cur: defCur(), amount: '', from: 'Cash', note: '' };
   openSheet(`${head(old ? 'Edit money move' : 'Move money', '', old?.id)}
     <p class="hint">Putting cash into the bank (or taking cash out) is not spending — the total stays the same.</p>
-    <form data-form="move" data-id="${old?.id || ''}">
+    <form data-form="move" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       <div class="fld"><span>Which way?</span><div class="curseg">
@@ -483,7 +483,7 @@ function bulkForm() {
 function projectForm(old) {
   const vc = old?.valueCur || defCur();
   openSheet(`${head(old ? 'Edit project' : 'New project', '', old?.id)}
-    <form data-form="project" data-id="${old?.id || ''}">
+    <form data-form="project" data-id="${esc(old?.id || '')}">
       <label class="fld"><span>Project name</span><input name="name" required maxlength="80" value="${esc(old?.name)}" placeholder="e.g. Warehouse — Juba" autofocus></label>
       ${curChips(vc, 'Project value is in')}
       ${amountField(old?.value, vc, 'value', 'Total project value', false)}
@@ -491,7 +491,7 @@ function projectForm(old) {
       ${byField()}${approvalNote(old)}
       <p class="err"></p>
       <button class="btn primary">${old ? saveLabel() : 'Add project'}</button>
-      ${old && can('delete') ? `<p class="center"><button type="button" class="link" data-act="delProject" data-id="${old.id}">Delete this project</button></p>` : ''}
+      ${old && can('delete') ? `<p class="center"><button type="button" class="link" data-act="delProject" data-id="${esc(old.id)}">Delete this project</button></p>` : ''}
     </form>${datalists()}`);
 }
 function settingsForm() {
@@ -520,7 +520,7 @@ function detail(k, id) {
     <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
     ${waitingNote(id)}
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
-    <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${id}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${id}">🗑 Delete 🔒</button>` : ''}</div>
+    <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : ''}</div>
     ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}`);
 }
 function projectDetail(id) {
@@ -532,8 +532,8 @@ function projectDetail(id) {
     ${projBar(s)}
     <div style="margin-bottom:16px">${projStatsGrid(s)}</div>
     ${waitingNote(id)}
-    <div class="two"><button class="btn in" data-act="addCredit" data-project="${id}">＋ Money received</button>${canChange() ? `<button class="btn ghost" data-act="editProject" data-id="${id}">✏️ Edit 🔒</button>` : ''}</div>
-    ${can('edit') ? `<button class="btn ghost" data-act="assignPick" data-id="${id}" style="margin-top:10px">＋ Add existing expenses 🔒</button>` : ''}
+    <div class="two"><button class="btn in" data-act="addCredit" data-project="${esc(id)}">＋ Money received</button>${canChange() ? `<button class="btn ghost" data-act="editProject" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}</div>
+    ${can('edit') ? `<button class="btn ghost" data-act="assignPick" data-id="${esc(id)}" style="margin-top:10px">＋ Add existing expenses 🔒</button>` : ''}
     <h3 class="subh">Money received (${R.length})</h3>
     ${R.length ? `<div class="card list inset">${R.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}
     <h3 class="subh">Spent on this project (${E.length})</h3>
@@ -605,11 +605,11 @@ async function assignSheet(pid) {
   const list = live(S.expenses).filter(e => e.project !== pid).sort((a, b) => byAt(b, a));
   openSheet(`${head('Add expenses to project', '', p.name)}
     <p class="hint">Tick the expenses that belong to <b>${esc(p.name)}</b>. Expenses without a project are shown.</p>
-    <form data-form="assign" data-id="${pid}">
+    <form data-form="assign" data-id="${esc(pid)}">
       ${list.some(e => e.project) ? '<label class="fld check"><input type="checkbox" name="others"> Also show expenses that are in another project</label>' : ''}
       <div class="two"><button type="button" class="btn small ghost" data-act="pickAll">Select all</button><button type="button" class="btn small ghost" data-act="pickNone">Select none</button></div>
       <div class="picklist">${list.length ? list.map(e => `<label class="pick" data-other="${e.project ? 1 : 0}" ${e.project ? 'hidden' : ''}>
-        <input type="checkbox" name="pick" value="${e.id}"><span class="pd">${fmtDate(e.at.slice(0, 10))}</span>
+        <input type="checkbox" name="pick" value="${esc(e.id)}"><span class="pd">${fmtDate(e.at.slice(0, 10))}</span>
         <span class="pr">${esc(e.reason)}<small>${esc(e.paidTo)}${e.project ? ' · now in ' + esc(projName(e.project)) : ''}</small></span><b>${money(e.amount, e.cur)}</b></label>`).join('') : '<p class="muted">No other expenses.</p>'}</div>
       ${byField()}
       <div class="foot"><div class="btotal"><span id="pickCount">0 selected</span><b id="pickSum"></b></div><p class="err"></p><button class="btn primary" id="pickBtn" disabled>Add to project</button></div>

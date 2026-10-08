@@ -63,8 +63,9 @@ Joining needs internet once. After that the phone works offline.
 ## Logins (each person their own username and password)
 Needs the sheet script **version 3** (see *Updating the sync script later*).
 
-1. **Set up (once, by the owner):** **Sheet** tab → **👥 Logins → Set up logins**. Type today's company
-   password, your name, a username and a new password. You are now the first **Admin**.
+1. **Set up (once, by the owner):** open your Google Sheet → **Read me** tab: at the bottom is a **setup code**
+   (only someone who can open the Sheet sees it). In the app: **Sheet** tab → **👥 Logins → Set up logins** →
+   type that code, your name, a username and a new password. You are now the first **Admin**.
 2. **Give logins:** **Sheet** tab → **👥 Logins → ＋ Give someone a login**. Pick what they may do:
    - **Admin** — everything, including giving logins (owner, Managing Director).
    - **Office manager** — sees everything and adds entries. **Her edits wait for an admin to approve them**;
@@ -80,7 +81,10 @@ Needs the sheet script **version 3** (see *Updating the sync script later*).
   next sync and the company records leave it.
 - **Approving changes:** when an office manager edits something, admins see **✏️ changes waiting for your
   approval** on Home → **Review** → **Approve** or **Reject**. Both are written in the Change Log.
-- **Edit / delete** asks for **your own** password. 5 wrong tries lock a login for 15 minutes.
+- **Edit / delete** asks for **your own** password. Passwords need at least 8 characters. 5 wrong tries lock a
+  login for 15 minutes (phones already signed in keep working).
+- Only use invite links that come from an admin, and type your password only into the app you installed from
+  them. Don't send the whole Google Sheet file to anyone: its hidden tabs hold the scrambled passwords.
 - Change your own password or sign out: tap your name at the top.
 
 ## The Google Sheet

@@ -142,5 +142,5 @@ function lookalikeExpenses() {
 function lookalikeBanner() {
   const e = can('delete') && lookalikeExpenses()[0];
   if (!e) return '';
-  return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${e.id}">Show it</button></div>`;
+  return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${esc(e.id)}">Show it</button></div>`;
 }

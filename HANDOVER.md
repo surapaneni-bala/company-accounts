@@ -136,13 +136,20 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
 - Requests carry `token` (signed in) or `key` (company code, no login). Until an admin turns on **Require logins**
   (Script property `REQUIRE_LOGIN=1`), key-only requests keep full access exactly like version 2 — so old phones
   keep working during the switch. After it, they get `{ ok:false, code:'LOGIN' }`.
-- Ops (`{ op, … }`): `setup` (first admin; needs company code + the company password, checked against the S
-  record; only when no users exist), `login`, `logout`, `password`, and admin-only `users`, `saveUser`, `require`.
+- Ops (`{ op, … }`): `setup` (first admin; needs the company code + a one-time **setup code** that the script
+  writes only into the sheet's "Read me" tab, rows 11–12, and deletes after use; only when no users exist),
+  `login`, `logout`, `password`, and admin-only `users`, `saveUser`, `require`. One error message for every
+  failed sign-in. Passwords ≥ 8 characters. Wrong `password`-op guesses count towards the lock.
+- Every pushed record must have a safe id (`SAFE_ID`), its id inside the record, the right shape (`SHAPES`, the
+  same checks as the app's `VALID`) and keep its kind; damaged stored records are skipped when drawing tabs, and
+  a drawing failure never stops a sync. For non-admins the sheet also caps a push at 200 records and 5000
+  characters each, clamps `u` to now, and signs records with the login's name (`by`). The app sends at most
+  200 records per sync and puts previously refused ones last.
 - Hidden tabs: `_users` (salted SHA-256 ×1000 password hashes) and `_sessions` (only the hash of each token;
   ended after 30 days unused, on password reset, role change or block). 5 wrong passwords → 15-minute lock.
   The last active admin can't be demoted or blocked.
-- Server rules (`view_` = what is sent, `allowed_` = what is accepted): admin everything; manager sees all,
-  may add new records but **never change an existing one** — her edits are **change requests** (kind `C`:
+- Server rules (`view_` = what is sent, `allowed_` = what is accepted): admin everything; non-admins may only
+  add new records (store keeper: own E and L; manager: E R T P L C) — the manager **never changes an existing one** — her edits are **change requests** (kind `C`:
   `{kind, target, before, after, text, by, status: waiting|approved|rejected, decidedBy}`) that an admin
   approves (the app then applies `after` to the target) or rejects; store keeper only their own E and L (by
   `uid`). Only admins receive the company password inside S. Refused records come back in `refused` and stay
@@ -236,6 +243,15 @@ Release order (nothing disturbs the live app until step 4):
 3. Fix whatever they find. 4. Owner pastes Code.gs v3 into the real sheet (Manage deployments → New version);
    then `node tools/build.js` and push, so phones get "Update now". 5. Set up logins; everyone signs in;
    only then "Require logins".
+
+**Security review (8 Oct 2026, independent reviewer, snapshot 5056e73).** All CRITICAL and HIGH findings were
+reproduced, fixed and each has a check in `tools/test-auth.js` (setup hijack via the company password → setup
+code; shapeless records breaking the tabs; re-kinding; unwhitelisted change-request fields; sign-out wiping a
+fresh entry; stored markup in ids). Accepted for now, tell the owner: a fake invite link pointing at someone
+else's script could collect a password (pin the company's script address in the release build); anyone who
+knows a username can lock it for 15 minutes at a time (signed-in phones keep working); hidden `_users` tab has
+1000-round SHA-256 hashes (don't share the whole sheet file); until "Require logins" is on, old invite links
+still give full access — switch it on as soon as everyone has signed in.
 
 **Waiting on the owner (we can't do these for them):**
 1. **Update the Google Sheet script to version 2.** They last saw the "script needs updating"

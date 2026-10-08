@@ -16,8 +16,10 @@ const VALID = {
   P: d => typeof d.id === 'string' && typeof d.name === 'string',
   L: d => typeof d.lid === 'string' && typeof d.text === 'string' && typeof d.at === 'string',
   T: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && ACCOUNTS.includes(d.from) && ACCOUNTS.includes(d.to) && d.from !== d.to,
-  C: d => typeof d.id === 'string' && typeof d.target === 'string' && ['E', 'R', 'T', 'P'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string',
+  C: d => typeof d.id === 'string' && SAFE_ID.test(d.target) && ['E', 'R', 'T', 'P'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string' && AT_RE.test(d.at),
 };
+// ids end up inside the app's pages: only plain ones are ever accepted (the sheet checks this too)
+const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before cash ↔ bank moves can reach the sheet. Everything else is syncing; the moves are kept safe on this device.';
@@ -116,6 +118,14 @@ async function firstContact(link, body = { since: 0, push: [] }) {
   }
 }
 
+// A big backlog goes in batches: the sheet takes at most 200 records at once from logins other than admins.
+// Records it refused last time go last, so they can never hold the others up.
+const MAX_PUSH = 200;
+let lastRefused = new Set();
+function nextBatch() {
+  const all = pendingRecords();
+  return [...all.filter(p => !lastRefused.has(p.id)), ...all.filter(p => lastRefused.has(p.id))].slice(0, MAX_PUSH);
+}
 function pendingRecords() {
   const want = new Set(S.dirty), out = [];
   for (const [k, key] of Object.entries(KIND_KEY)) {
@@ -134,7 +144,7 @@ function applyPull(pull) {
   const next = {};
   let changed = false;
   for (const [k, key] of Object.entries(KIND_KEY)) {
-    const recs = pull.filter(p => p.k === k && p.d && VALID[k](p.d) && p.id === recId(key, p.d));
+    const recs = pull.filter(p => p.k === k && p.d && SAFE_ID.test(p.id) && VALID[k](p.d) && p.id === recId(key, p.d));
     if (!recs.length) continue;
     const list = [...S[key]], at = new Map(list.map((r, i) => [recId(key, r), i]));
     for (const p of recs) {
@@ -156,7 +166,7 @@ async function syncNow() {
   if (!S || !S.link) return;
   if (syncBusy) { syncAgain = true; return; }
   syncBusy = true; sync = { ...sync, state: 'syncing' }; paintSync();
-  const push = pendingRecords();
+  const push = nextBatch();
   try {
     const res = await callServer(S.link, { since: S.link.since || 0, push });
     if (!S.link) return; // disconnected while this was running
@@ -171,6 +181,8 @@ async function syncNow() {
     S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || S.link.sheet, v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id)) };
     save();
     if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
+    lastRefused = refused;
+    if (S.dirty.some(id => !sent.has(id))) syncAgain = true; // more waiting than one batch: send the rest straight after
     sync = notAllowed.size ? { state: 'error', at: stampSec(), err: notAllowedMsg(notAllowed.size) }
       : refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };
     if ((changed || was.logins !== S.link.logins || was.v !== S.link.v) && !typing()) render();

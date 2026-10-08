@@ -31,6 +31,10 @@ function makeRange(sh, r, c, nr, nc) {
     return p;
   };
   rg.setValue = v => rg.setValues([[v]]);
+  rg.clearContent = () => {
+    for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) if (sh.grid[r - 1 + i]) sh.grid[r - 1 + i][c - 1 + j] = '';
+    return p;
+  };
   rg.setBackgrounds = vals => { size(vals, 'setBackgrounds'); return p; };
   rg.createFilter = () => {
     if (sh.filter) throw new Error('You cannot create a filter in a sheet that already has a filter.');
@@ -75,7 +79,7 @@ function loadGas(code, state = {}) {
   const ss = makeSpreadsheet(state);
   const sandbox = {
     SpreadsheetApp: { getActive: () => ss, BorderStyle: { SOLID: 'SOLID', SOLID_MEDIUM: 'SOLID_MEDIUM' } },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
     ContentService: { MimeType: { JSON: 'JSON' }, createTextOutput: s => ({ setMimeType() { return this; }, getContent: () => s }) },
     Utilities: {
