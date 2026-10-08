@@ -4,7 +4,7 @@ A simple app for company expenses and money received, in **USD and SSP**.
 It works **without internet** on phones and computers. Whenever there is internet, every device
 syncs with your **company Google Sheet**, so everyone sees the same records.
 
-**App address:** https://surapaneni-bala.github.io/company-accounts/
+**App address:** https://app.b-e-p-l.com/ (the test copy: https://app.b-e-p-l.com/test/)
 
 ---
 

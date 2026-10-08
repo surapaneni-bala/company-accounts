@@ -5,7 +5,7 @@
 const SYNC_DELAY_MS = 2000;
 const SYNC_EVERY_MS = 2 * 60 * 1000;
 const SYNC_TIMEOUT_MS = 45000;
-const APP_URL = 'https://surapaneni-bala.github.io/company-accounts/';
+const APP_URL = 'https://app.b-e-p-l.com/';
 const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers', C: 'changes' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
@@ -24,7 +24,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before cash ↔ bank moves can reach the sheet. Everything else is syncing; the moves are kept safe on this device.';
 const notAllowedMsg = n => `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
-const SCRIPT_URL = 'https://raw.githubusercontent.com/surapaneni-bala/company-accounts/main/apps-script/Code.gs';
+const SCRIPT_URL = 'https://app.b-e-p-l.com/sheet-script.txt'; // the sheet script, published next to the app
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error
 let syncBusy = false, syncAgain = false, syncTimer = 0;
 

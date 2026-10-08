@@ -17,9 +17,9 @@ const TEST_SWAPS = {
     ["const fresh = migrate({ ...data, seq: {}, dev: newDev(), dirty: [] });", "const fresh = migrate({ ...data, link: null, seq: {}, dev: newDev(), dirty: [] });"],
   ],
   'sync.js': [
-    ["const APP_URL = 'https://surapaneni-bala.github.io/company-accounts/';", "const APP_URL = 'https://surapaneni-bala.github.io/company-accounts/test/';"],
-    // the test copy's sheet script is published next to it, so the real one (main branch) is never swapped by accident
-    ["const SCRIPT_URL = 'https://raw.githubusercontent.com/surapaneni-bala/company-accounts/main/apps-script/Code.gs';", "const SCRIPT_URL = 'https://surapaneni-bala.github.io/company-accounts/test/sheet-script.txt';"],
+    ["const APP_URL = 'https://app.b-e-p-l.com/';", "const APP_URL = 'https://app.b-e-p-l.com/test/';"],
+    // the test copy's sheet script is published next to it, so it can't be mixed up with the real one
+    ["const SCRIPT_URL = 'https://app.b-e-p-l.com/sheet-script.txt';", "const SCRIPT_URL = 'https://app.b-e-p-l.com/test/sheet-script.txt';"],
   ],
   'update.js': [["const CACHE_PREFIX = 'accounts-';", "const CACHE_PREFIX = 'test-accounts-';"]],
   'sw.js': [["const PREFIX = 'accounts-';", "const PREFIX = 'test-accounts-';"]],
@@ -54,5 +54,5 @@ const home = fs.existsSync(cname) ? `https://${fs.readFileSync(cname, 'utf8').tr
 fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify(home ? { version, home } : { version }) + '\n'); // the app asks for this to spot updates
 fs.writeFileSync(path.join(out, 'manifest.webmanifest'), read('manifest.webmanifest'));
 for (const f of ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png']) fs.copyFileSync(path.join(root, 'src', f), path.join(out, f));
-if (TEST) fs.copyFileSync(path.join(root, 'apps-script', 'Code.gs'), path.join(out, 'sheet-script.txt')); // .txt so browsers show it, ready to copy
+fs.copyFileSync(path.join(root, 'apps-script', 'Code.gs'), path.join(out, 'sheet-script.txt')); // .txt so browsers show it, ready to copy
 console.log(`built ${path.relative(root, out)}/ — index.html ${(html.length / 1024).toFixed(0)} KB, version ${version}${TEST ? ' (TEST COPY)' : ''}`);

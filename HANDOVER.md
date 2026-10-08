@@ -24,10 +24,10 @@ report.
 
 | | |
 |---|---|
-| App (installable, works offline) | https://surapaneni-bala.github.io/company-accounts/ |
+| App (installable, works offline) | https://app.b-e-p-l.com/ (custom domain since 8 Oct 2026; the old github.io address redirects there) |
 | Repository | https://github.com/surapaneni-bala/company-accounts (GitHub Pages serves `docs/`) |
-| Sheet script to paste into Apps Script | https://raw.githubusercontent.com/surapaneni-bala/company-accounts/main/apps-script/Code.gs |
-| Check which app version is live | `https://surapaneni-bala.github.io/company-accounts/version.json` |
+| Sheet script to paste into Apps Script | https://app.b-e-p-l.com/sheet-script.txt (a copy of apps-script/Code.gs made by the build) |
+| Check which app version is live | `https://app.b-e-p-l.com/version.json` (also names `home`, the app's address) |
 
 **The owner** isn't technical, writes short messages (often with typos) and wants the UI simple enough
 for a child. They use an **iPhone first**, then Android, plus a Mac with Chrome and Google Drive for
@@ -161,6 +161,14 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
 - Phone side: signing in removes the company code from the phone; a store keeper's phone drops everything
   else it held (only when nothing is unsent). Being signed out by the sheet removes the company records from
   the phone unless some are unsent. The client only hides buttons — the sheet enforces every rule.
+
+### The app's address (custom domain)
+
+- `docs/CNAME` = `app.b-e-p-l.com`. DNS: a CNAME record `app` → `surapaneni-bala.github.io` in **Netlify**, which runs
+  the b-e-p-l.com zone (nameservers dnsN.p09.nsone.net; registrar Namecheap). Never touch the nameservers in
+  Namecheap: on 8 Oct the owner briefly added github.io there as a fifth nameserver, and it had to be removed.
+- `version.json` carries `home`. A phone still on an old address shows a "moved" banner, and moving waits until
+  nothing is unsent, because each address has its own storage.
 
 ### Offline copy and updates
 
