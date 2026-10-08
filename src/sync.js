@@ -40,7 +40,8 @@ const unb64u = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(
 const appUrl = () => /^https?:$/.test(location.protocol) ? location.origin + location.pathname : APP_URL;
 const inviteFromHash = () => (location.hash.match(/join=[\w-]+/) || [''])[0];
 // Once the company has logins, invites carry only the web app link: each person signs in instead of using the company code.
-const inviteLink = () => `${appUrl()}#join=${b64u(JSON.stringify(S.link.logins ? { u: S.link.u } : { u: S.link.u, k: S.link.k }))}`;
+const inviteCode = () => b64u(JSON.stringify(S.link.logins ? { u: S.link.u } : { u: S.link.u, k: S.link.k }));
+const inviteLink = () => `${appUrl()}#join=${inviteCode()}`;
 function decodeInvite(code) {
   try {
     const j = JSON.parse(unb64u(code));
@@ -72,7 +73,7 @@ function inviteHint(f) {
   const needLogin = !!link && !link.k;
   if (needLogin) $('.loginfields', f).hidden = false;
   box.className = 'invite-hint ' + (!v ? '' : link ? 'good' : 'bad');
-  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Join.' : '✓ Invite link OK — tap Join.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${APP_URL}#join=`;
+  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Join.' : '✓ Invite link OK — tap Join.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${appUrl()}#join=`;
 }
 
 // Every request says who is asking: this phone's sign-in, or (no sign-in yet) the company code.

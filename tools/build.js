@@ -48,7 +48,10 @@ const html = page.replace('__VERSION__', version);
 fs.mkdirSync(out, { recursive: true });
 fs.writeFileSync(path.join(out, 'index.html'), html);
 fs.writeFileSync(path.join(out, 'sw.js'), read('sw.js').replace('__VERSION__', version));
-fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify({ version }) + '\n'); // the app asks for this to spot updates
+// docs/CNAME = the company's own address; once it exists, version.json tells phones on the old address to move
+const cname = path.join(root, 'docs', 'CNAME');
+const home = fs.existsSync(cname) ? `https://${fs.readFileSync(cname, 'utf8').trim()}/${TEST ? 'test/' : ''}` : '';
+fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify(home ? { version, home } : { version }) + '\n'); // the app asks for this to spot updates
 fs.writeFileSync(path.join(out, 'manifest.webmanifest'), read('manifest.webmanifest'));
 for (const f of ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png']) fs.copyFileSync(path.join(root, 'src', f), path.join(out, f));
 if (TEST) fs.copyFileSync(path.join(root, 'apps-script', 'Code.gs'), path.join(out, 'sheet-script.txt')); // .txt so browsers show it, ready to copy

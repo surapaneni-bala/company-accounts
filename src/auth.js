@@ -72,7 +72,7 @@ const signInFields = (autofocus = true) => `
   <label class="fld"><span>Password</span><input type="password" name="password" required autocomplete="current-password"></label>`;
 function viewSignIn() {
   const n = S.dirty.length;
-  return `<section class="setup card pad">${APP_LOGO}
+  return `${moveBanner()}<section class="setup card pad">${APP_LOGO}
     <h1>Sign in</h1>
     <p>${esc(S.company || 'Company accounts')}</p>
     ${session.why ? `<p class="note">${esc(session.why)}</p>` : ''}

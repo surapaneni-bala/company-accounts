@@ -290,7 +290,7 @@ function viewHome() {
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
   const seeMoney = can('money');
-  return `${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">Your expenses — only you and the office see them.</p>`}
   <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
@@ -383,7 +383,7 @@ function projCard(p) {
 }
 
 function viewSheet() {
-  return `<div class="stack">
+  return `${moveBanner()}<div class="stack">
       ${syncCard()}
       ${loginsCard()}
       <section class="card pad" ${can('import') ? '' : 'hidden'}>

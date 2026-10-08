@@ -49,6 +49,7 @@ const ACTIONS = {
   account: () => accountSheet(),
   signOut: () => signOut(),
   approvals: () => approvalsSheet(),
+  moveApp: () => moveApp(),
   decide: b => decide(b.dataset.id, !!b.dataset.ok),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,

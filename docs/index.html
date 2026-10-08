@@ -336,7 +336,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 <script>
 'use strict';
-const APP_VERSION = '6497338b76'; // filled in by tools/build.js
+const APP_VERSION = 'abfb0d5cd2'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -627,7 +627,7 @@ function viewHome() {
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
   const seeMoney = can('money');
-  return `${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">Your expenses — only you and the office see them.</p>`}
   <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
@@ -720,7 +720,7 @@ function projCard(p) {
 }
 
 function viewSheet() {
-  return `<div class="stack">
+  return `${moveBanner()}<div class="stack">
       ${syncCard()}
       ${loginsCard()}
       <section class="card pad" ${can('import') ? '' : 'hidden'}>
@@ -1196,7 +1196,8 @@ const unb64u = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(
 const appUrl = () => /^https?:$/.test(location.protocol) ? location.origin + location.pathname : APP_URL;
 const inviteFromHash = () => (location.hash.match(/join=[\w-]+/) || [''])[0];
 // Once the company has logins, invites carry only the web app link: each person signs in instead of using the company code.
-const inviteLink = () => `${appUrl()}#join=${b64u(JSON.stringify(S.link.logins ? { u: S.link.u } : { u: S.link.u, k: S.link.k }))}`;
+const inviteCode = () => b64u(JSON.stringify(S.link.logins ? { u: S.link.u } : { u: S.link.u, k: S.link.k }));
+const inviteLink = () => `${appUrl()}#join=${inviteCode()}`;
 function decodeInvite(code) {
   try {
     const j = JSON.parse(unb64u(code));
@@ -1228,7 +1229,7 @@ function inviteHint(f) {
   const needLogin = !!link && !link.k;
   if (needLogin) $('.loginfields', f).hidden = false;
   box.className = 'invite-hint ' + (!v ? '' : link ? 'good' : 'bad');
-  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Join.' : '✓ Invite link OK — tap Join.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${APP_URL}#join=`;
+  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Join.' : '✓ Invite link OK — tap Join.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${appUrl()}#join=`;
 }
 
 // Every request says who is asking: this phone's sign-in, or (no sign-in yet) the company code.
@@ -1571,7 +1572,7 @@ const signInFields = (autofocus = true) => `
   <label class="fld"><span>Password</span><input type="password" name="password" required autocomplete="current-password"></label>`;
 function viewSignIn() {
   const n = S.dirty.length;
-  return `<section class="setup card pad">${APP_LOGO}
+  return `${moveBanner()}<section class="setup card pad">${APP_LOGO}
     <h1>Sign in</h1>
     <p>${esc(S.company || 'Company accounts')}</p>
     ${session.why ? `<p class="note">${esc(session.why)}</p>` : ''}
@@ -1960,24 +1961,40 @@ function lookalikeBanner() {
 /* ---------- app updates ---------- */
 // GitHub Pages lets phones keep the app files for 10 minutes, so the app asks for version.json
 // (never cached) to learn about a newer version, and "Update now" fetches a completely fresh copy.
-let newerVersion = '';
+// The app's address can also change (to the company's own domain): version.json then names the new home, and
+// a phone still on the old address is asked to move — only once its waiting changes have reached the sheet,
+// because the old address's storage stays behind.
+let newerVersion = '', movedTo = '';
 const CACHE_PREFIX = 'accounts-'; // same as in sw.js
-async function latestVersion() {
+async function latestInfo() {
   const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
   if (!res.ok) throw new Error('version check failed');
-  return (await res.json()).version;
+  return res.json();
 }
+const elsewhere = home => typeof home === 'string' && /^https:\/\//.test(home) && !location.href.startsWith(home);
 async function checkForUpdate() {
   if (location.protocol === 'file:') return;
-  let v;
-  try { v = await latestVersion(); } catch { return; } // offline: check again later
-  const was = newerVersion;
-  newerVersion = v && v !== APP_VERSION ? v : '';
-  if (newerVersion !== was && S && (tab === 'home' || tab === 'sheet') && !typing()) render();
+  let info;
+  try { info = await latestInfo(); } catch { return; } // offline: check again later
+  const was = newerVersion + movedTo;
+  movedTo = elsewhere(info.home) ? info.home : '';
+  newerVersion = !movedTo && info.version && info.version !== APP_VERSION ? info.version : '';
+  if (newerVersion + movedTo !== was && S && !typing()) render();
+}
+function moveBanner() {
+  if (!movedTo) return '';
+  const host = esc(new URL(movedTo).host), n = S ? S.dirty.length : 0;
+  if (n) return `<div class="banner"><span>🏠 This app is moving to <b>${host}</b>. First connect to the internet so your ${n} waiting change${n === 1 ? '' : 's'} reach${n === 1 ? 'es' : ''} the Google Sheet.</span><button class="btn small" data-act="syncNow">Sync now</button></div>`;
+  return `<div class="banner new"><span>🏠 This app now lives at <b>${host}</b>. Open it there, add it to your home screen and sign in once — everything is in the Google Sheet.</span><button class="btn small" data-act="moveApp">Open</button></div>`;
+}
+function moveApp() {
+  if (S && S.dirty.length) return alert('Your waiting changes must reach the Google Sheet first. Connect to the internet and tap Sync now.');
+  location.href = movedTo + (S && S.link ? `#join=${inviteCode()}` : '');
 }
 async function updateApp() {
   let v;
-  try { v = await latestVersion(); } catch { return alert('No internet. Connect to the internet to update the app.'); }
+  try { const info = await latestInfo(); if (elsewhere(info.home)) { movedTo = info.home; render(); return moveApp(); } v = info.version; }
+  catch { return alert('No internet. Connect to the internet to update the app.'); }
   if (v === APP_VERSION) { newerVersion = ''; render(); return toast(`You have the newest version ✓ (${APP_VERSION.slice(0, 7)})`); }
   toast('Updating the app…');
   // only this app's saved files are removed — your records are stored separately and stay
@@ -2041,6 +2058,7 @@ const ACTIONS = {
   account: () => accountSheet(),
   signOut: () => signOut(),
   approvals: () => approvalsSheet(),
+  moveApp: () => moveApp(),
   decide: b => decide(b.dataset.id, !!b.dataset.ok),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
