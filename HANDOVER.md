@@ -1,7 +1,7 @@
 # Handover — Company Accounts
 
-Last updated **8 Oct 2026** · live app version **5b2a803** (unchanged) · owner's Google Sheet script **version 2**
-· **Stage 1 (logins, script version 3) built and tested locally, not released** — see [§6](#6-where-things-stand-open-items)
+Last updated **8 Oct 2026** · live app version **6497338b76** (logins released) · script in this repo: **version 3**
+· the owner's real sheet was still on the FIRST script on 8 Oct — see [§6](#6-where-things-stand-open-items)
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
 
@@ -229,7 +229,9 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
-**Stage 1 — logins (built 8 Oct 2026, not released).** Code.gs version 3, `src/auth.js`, the test copy build.
+**Stage 1 — logins: RELEASED 8 Oct 2026** (app 6497338b76, script v3 on main). The owner still has to paste
+script v3 into the real sheet, update the app, set up logins with the setup code, give logins, and only then
+switch on "Require logins". Earlier notes on how it was built: Code.gs version 3, `src/auth.js`, the test copy build.
 Verified locally: all three test files pass; the owner's real old list, entered in the live version (5b2a803) and
 opened by the new code, gives the same totals to the cent; old-version phones keep syncing with script v3 until
 "Require logins"; store keeper / office manager / admin / blocked / signed-out flows checked in the browser.

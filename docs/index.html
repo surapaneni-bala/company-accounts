@@ -40,6 +40,7 @@ button { font: inherit; color: inherit; }
 .chip { border: 0; cursor: pointer; font-size: 13px; font-weight: 800; color: var(--in); background: var(--in-soft); padding: 8px 12px; border-radius: 999px; white-space: nowrap; }
 .chip.wait { color: var(--warn); background: var(--warn-soft); }
 .chip.bad { color: var(--out); background: var(--out-soft); }
+.chip.who { color: var(--ink); background: #E8ECF6; }
 .lockpill { border: 0; background: var(--warn-soft); color: var(--warn); font-weight: 800; font-size: 14px; padding: 8px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
 
 /* balance */
@@ -192,7 +193,7 @@ details.manual { margin: 4px 0 12px; } details.manual summary { cursor: pointer;
 
 /* bottom tabs */
 nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.93); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); z-index: 5; }
-nav.tabs .wrap { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+nav.tabs .wrap { max-width: 720px; margin: 0 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
 nav.tabs button { border: 0; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; border-radius: 14px; color: var(--muted); font-size: 13px; font-weight: 800; }
 nav.tabs button.on { color: var(--ink); background: var(--paper); }
 nav.tabs svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
@@ -243,6 +244,8 @@ dialog::backdrop { background: rgba(27,34,50,.5); backdrop-filter: blur(3px); }
 .curseg input:checked + span { background: var(--ink); border-color: var(--ink); color: #fff; }
 .curseg input:checked + span small { color: rgba(255,255,255,.75); }
 .curseg input:focus-visible + span { outline: 3px solid #3B5BDB; outline-offset: 2px; }
+.curseg.roles { grid-template-columns: 1fr; }
+.curseg.roles b { font-size: 18px; }
 .when { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--paper); border-radius: var(--r-sm); padding: 12px 14px; }
 .when small { display: block; color: var(--muted); font-size: 13px; font-weight: 700; }
 .err { color: var(--out); font-weight: 800; min-height: 1.2em; margin: 4px 0 10px; }
@@ -301,7 +304,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 <div class="app">
   <header class="top" id="hdr" hidden>
     <div><div class="co" id="coName"></div><div class="today-date" id="todayDate"></div></div>
-    <div class="top-r"><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
+    <div class="top-r"><button class="chip who" id="whoChip" data-act="account" hidden></button><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
   </header>
   <main id="main"></main>
 </div>
@@ -333,7 +336,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 <script>
 'use strict';
-const APP_VERSION = '5b2a803b50'; // filled in by tools/build.js
+const APP_VERSION = '6497338b76'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -364,14 +367,20 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
+// A new record made by a signed-in person also carries their login (uid); edits keep the original one.
 function update(patch) {
   const now = Date.now(), dirty = new Set(S.dirty || []), stamped = {};
+  const uid = signedIn() ? { uid: session.user.id } : {};
   for (const key of Object.keys(SYNC_KEYS)) {
     if (!patch[key]) continue;
-    const before = new Set(S[key]);
-    stamped[key] = patch[key].map(r => { if (before.has(r)) return r; dirty.add(recId(key, r)); return { ...r, u: now }; });
+    const before = new Set(S[key]), known = new Set(S[key].map(r => recId(key, r)));
+    stamped[key] = patch[key].map(r => {
+      if (before.has(r)) return r;
+      dirty.add(recId(key, r));
+      return { ...r, ...(known.has(recId(key, r)) ? {} : uid), u: now };
+    });
   }
   if ('company' in patch || 'pass' in patch) { dirty.add('settings'); stamped.settingsU = now; }
   S = { ...S, ...patch, ...stamped, dirty: S.link ? [...dirty] : [] };
@@ -461,13 +470,16 @@ function unlock(why) {
   if (isUnlocked()) return Promise.resolve(true);
   return new Promise(resolve => {
     const d = $('#pw');
-    $('#pwWhy').textContent = why; $('#pwIn').value = ''; $('#pwErr').textContent = '';
+    // signed in: your own password; otherwise the company password, as before logins
+    const pass = signedIn() ? session.check : S.pass;
+    $('#pwWhy').textContent = signedIn() ? why.replace('the password', 'your password') : why;
+    $('#pwIn').value = ''; $('#pwErr').textContent = ''; $('#pwIn').placeholder = signedIn() ? 'Your password' : 'Password';
     d.returnValue = '';
     d.showModal(); $('#pwIn').focus();
     $('#pwCancel').onclick = () => d.close();
     $('#pwForm').onsubmit = async e => {
       e.preventDefault();
-      if (await hashPw($('#pwIn').value, S.pass.salt) === S.pass.hash) {
+      if (pass && await (signedIn() ? slowHash : hashPw)($('#pwIn').value, pass.salt) === pass.hash) {
         unlockedUntil = Date.now() + UNLOCK_MS; d.close('ok'); renderLock(); resolve(true);
       } else {
         $('#pwErr').textContent = 'Wrong password. Try again.';
@@ -509,23 +521,31 @@ function suggestions(field) {
 }
 const datalists = () => ['paidTo', 'reason', 'location', 'by'].map(f => `<datalist id="dl-${f}">${suggestions(f).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('');
 const textField = (name, label, ph, val, req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input name="${name}" placeholder="${ph}" value="${esc(val)}" ${['paidTo', 'reason', 'location'].includes(name) ? `list="dl-${name}"` : ''} autocomplete="off" maxlength="160" ${req ? 'required' : ''}></label>`;
-const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${c}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
-const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${val || ''}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
-const byField = () => `<label class="fld"><span>Your name <em>(who is entering this)</em></span><input name="by" placeholder="Type your name" value="${esc(S.lastBy || '')}" list="dl-by" autocomplete="off" maxlength="60" required></label>`;
-const accountChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="curseg">${ACCOUNTS.map(a => `<label><input type="radio" name="mode" value="${a}" ${a === accountOf(cur) ? 'checked' : ''}><span><b>${ACCOUNT_ICON[a]} ${a}</b><small>${a === 'Cash' ? 'Cash in hand' : 'Bank account'}</small></span></label>`).join('')}</div></div>`;
+const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${esc(c)}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
+const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${esc(val || '')}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
+const byField = () => (signedIn()
+  ? `<input type="hidden" name="by" value="${esc(myName())}"><p class="muted">Entered by <b>${esc(myName())}</b></p>`
+  : `<label class="fld"><span>Your name <em>(who is entering this)</em></span><input name="by" placeholder="Type your name" value="${esc(S.lastBy || '')}" list="dl-by" autocomplete="off" maxlength="60" required></label>`);
+// who confirms a delete: the signed-in person, or a typed name on phones without logins
+function confirmBy(text) {
+  if (signedIn()) return confirm(text) ? myName() : '';
+  return clean(prompt(`${text}\n\nType your name to confirm:`, S.lastBy || ''));
+}
+const accountChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="curseg">${ACCOUNTS.map(a => `<label><input type="radio" name="mode" value="${esc(a)}" ${a === accountOf(cur) ? 'checked' : ''}><span><b>${ACCOUNT_ICON[a]} ${a}</b><small>${a === 'Cash' ? 'Cash in hand' : 'Bank account'}</small></span></label>`).join('')}</div></div>`;
 function projectSelect(cur, optional) {
+  if (!can('projects')) return '<input type="hidden" name="project" value="">';
   const ps = S.projects.filter(p => !p.deleted);
   const isNew = !optional && (!ps.length || cur === '__new');
   return `<label class="fld"><span>Project${optional ? ' <em>(optional)</em>' : ''}</span><select name="project">
     ${optional ? `<option value="">No project — general</option>` : ''}
-    ${ps.map(p => `<option value="${p.id}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+    ${ps.map(p => `<option value="${esc(p.id)}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
     ${optional ? '' : `<option value="__new" ${isNew ? 'selected' : ''}>＋ New project…</option>`}
   </select></label>
   ${optional ? '' : `<label class="fld newp" ${isNew ? '' : 'hidden'}><span>New project name</span><input name="newProject" placeholder="e.g. Warehouse — Juba" maxlength="80"></label>`}`;
 }
 function whenField(at, editable) {
-  if (editable) return `<label class="fld"><span>Date &amp; time</span><input type="datetime-local" name="at" value="${at}" required></label>`;
-  return `<div class="fld"><span>Date &amp; time</span><div class="when"><div><b>${fmtWhen(stamp())}</b><small>Set automatically</small></div><button type="button" class="btn small ghost" data-act="unlockDate">🔒 Change</button></div></div>`;
+  if (editable) return `<label class="fld"><span>Date &amp; time</span><input type="datetime-local" name="at" value="${esc(at)}" required></label>`;
+  return `<div class="fld"><span>Date &amp; time</span><div class="when"><div><b>${fmtWhen(stamp())}</b><small>Set automatically</small></div>${can('date') ? '<button type="button" class="btn small ghost" data-act="unlockDate">🔒 Change</button>' : ''}</div></div>`;
 }
 
 /* ---------- views ---------- */
@@ -534,6 +554,11 @@ function render() {
   const ready = !!S;
   $('#hdr').hidden = $('#tabs').hidden = !ready;
   if (!ready) { main.innerHTML = viewSetup(); $('[autofocus]', main)?.focus(); return; }
+  if (mustSignIn()) { $('#hdr').hidden = $('#tabs').hidden = true; main.innerHTML = viewSignIn(); $('[autofocus]', main)?.focus(); return; }
+  if (tab === 'proj' && !can('projects')) tab = 'home';
+  $('#tabs [data-tab=proj]').hidden = !can('projects');
+  $('#whoChip').hidden = !signedIn();
+  $('#whoChip').textContent = signedIn() ? `👤 ${session.user.name.split(' ')[0]}` : '';
   $('#coName').textContent = S.company;
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
@@ -544,9 +569,10 @@ function render() {
 let setupMode = ''; // '' = decide when drawn: an invite link in the address opens 'join'
 const isPhone = () => matchMedia('(pointer: coarse)').matches;
 const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const APP_LOGO = `<div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>`;
 function viewSetup() {
   const mode = setupMode || (inviteFromHash() ? 'join' : 'choose');
-  const logo = `<div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>`;
+  const logo = APP_LOGO;
   const tip = isPhone() && !isInstalled() ? `<p class="note">📲 <b>First install the app:</b> iPhone — in Safari tap <b>Share → Add to Home Screen</b>. Android — in Chrome tap <b>⋮ → Add to Home screen</b>. Then open <b>Accounts</b> from your home screen.</p>` : '';
   const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="choose">← Back</button></p>`;
   if (mode === 'join') return `<section class="setup card pad">${logo}
@@ -555,6 +581,7 @@ function viewSetup() {
     <form data-form="join">
       <label class="fld"><span>Invite link</span><input name="invite" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" autofocus></label>
       <p class="invite-hint"></p>
+      <div class="loginfields" hidden>${signInFields(false)}</div>
       <details class="manual"><summary>Join with the web app link and code instead</summary>
         <label class="fld"><span>Web app link</span><input name="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
         <label class="fld"><span>Company code</span><input name="key" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab"></label>
@@ -599,8 +626,10 @@ function viewHome() {
   const spent = byCur(E), recv = byCur(R), bal = balances();
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
-  return `${updateBanner()}${lookalikeBanner()}${backupBanner()}
-  <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances">
+  const seeMoney = can('money');
+  return `${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
+  ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">Your expenses — only you and the office see them.</p>`}
+  <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
     ${CURS.map(c => `<div class="balrow">
       <div class="balhead"><span class="cur-tag">${c}</span><span class="baltot${bal[c].Total < 0 ? ' neg' : ''}">${plain(bal[c].Total)}</span><small>total</small></div>
@@ -610,9 +639,9 @@ function viewHome() {
   </section>
   <div class="actions">
     <button class="tile out" data-act="addExpense"><span class="ic">−</span><span><b>Add expense</b><small>Money paid out</small></span></button>
-    <button class="tile in" data-act="addCredit"><span class="ic">+</span><span><b>Money received</b><small>From a project</small></span></button>
+    <button class="tile in" data-act="addCredit" ${seeMoney ? '' : 'hidden'}><span class="ic">+</span><span><b>Money received</b><small>From a project</small></span></button>
     <button class="tile bulk" data-act="addBulk"><span class="ic">☰</span><span><b>Add many at once</b><small>Several payments together, with a total</small></span></button>
-    <button class="tile bulk move" data-act="addMove"><span class="ic">⇄</span><span><b>Move money</b><small>Cash into the bank, or bank to cash — not spending</small></span></button>
+    <button class="tile bulk move" data-act="addMove" ${seeMoney ? '' : 'hidden'}><span class="ic">⇄</span><span><b>Move money</b><small>Cash into the bank, or bank to cash — not spending</small></span></button>
   </div>
   <div class="minis">
     <div class="mini"><small>Spent today</small>${curLines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
@@ -632,7 +661,7 @@ function backupBanner() {
 function itemRow(x, k, showDate) {
   const when = [showDate ? fmtDay(x.at.slice(0, 10)) : '', fmtTime(x.at), x.by && 'by ' + x.by];
   if (k === 'T') {
-    return `<button class="row move" data-act="open" data-kind="T" data-id="${x.id}">
+    return `<button class="row move" data-act="open" data-kind="T" data-id="${esc(x.id)}">
     <span class="dot">⇄</span>
     <span class="main"><span class="t"><span class="tt">${ACCOUNT_ICON[x.from]} ${x.from} → ${ACCOUNT_ICON[x.to]} ${x.to}</span>${x.manualDate ? '<i class="tag warn">Date set</i>' : ''}</span><span class="s">${[x.note, ...when].filter(Boolean).map(esc).join(' · ')}</span></span>
     <span class="amt">${money(x.amount, x.cur)}</span></button>`;
@@ -641,8 +670,8 @@ function itemRow(x, k, showDate) {
   const title = isE ? x.reason : `From ${projName(x.project)}`;
   const acct = accountOf(x.mode);
   const sub = [isE ? x.paidTo : x.note, isE ? x.location : '', `${ACCOUNT_ICON[acct]} ${acct}`, ...when].filter(Boolean).map(esc).join(' · ');
-  const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '');
-  return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${x.id}">
+  const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '') + (waitingFor(x.id).length ? '<i class="tag warn">Change waiting</i>' : '');
+  return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${esc(x.id)}">
     <span class="dot">${isE ? '−' : '+'}</span>
     <span class="main"><span class="t"><span class="tt">${esc(title)}</span>${tags}</span><span class="s">${sub}</span></span>
     <span class="amt">${isE ? '−' : '+'}${money(x.amount, x.cur)}</span></button>`;
@@ -651,12 +680,12 @@ function itemRow(x, k, showDate) {
 function viewHistory() {
   const all = live(S[COLL[histKind]]);
   const months = [...new Set(all.map(x => x.at.slice(0, 7)))].sort().reverse();
-  return `<div class="seg" role="tablist">
+  return `<div class="seg" role="tablist" ${can('money') ? '' : 'hidden'}>
       ${[['E', '− Out'], ['R', '+ In'], ['T', '⇄ Moves']].map(([k, label]) => `<button data-act="hist" data-k="${k}" class="${histKind === k ? 'on' : ''}" role="tab" aria-selected="${histKind === k}">${label}</button>`).join('')}
     </div>
     <div class="filters">
       <input type="search" id="q" placeholder="Search name, reason, place, USD/SSP…" value="${esc(histQuery)}" aria-label="Search">
-      <select id="month" aria-label="Month"><option value="">All time</option>${months.map(m => `<option value="${m}" ${m === histMonth ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select>
+      <select id="month" aria-label="Month"><option value="">All time</option>${months.map(m => `<option value="${esc(m)}" ${m === histMonth ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select>
     </div>
     <div id="histRes">${histResults()}</div>`;
 }
@@ -684,7 +713,7 @@ function viewProjects() {
 }
 function projCard(p) {
   const s = projStats(p.id);
-  return `<button class="card proj" data-act="openProject" data-id="${p.id}">
+  return `<button class="card proj" data-act="openProject" data-id="${esc(p.id)}">
     <span class="ph"><b>${esc(p.name)}</b><span class="chev">›</span></span>
     ${projBar(s)}${projStatsGrid(s)}
   </button>`;
@@ -693,20 +722,21 @@ function projCard(p) {
 function viewSheet() {
   return `<div class="stack">
       ${syncCard()}
-      <section class="card pad">
+      ${loginsCard()}
+      <section class="card pad" ${can('import') ? '' : 'hidden'}>
         <h3>📥 Old entries</h3>
         <p class="muted">Have expenses or cash/bank moves from before you started using the app? Paste the whole list in once — they go to every device and the Google Sheet.</p>
         <button class="btn ghost" data-act="importOld">Import old entries 🔒</button>
       </section>
-      <section class="card pad">
+      <section class="card pad" ${can('backup') ? '' : 'hidden'}>
         <h3>💾 Backup file</h3>
         <p class="muted">${S.lastBackup ? 'Last backup: <b>' + fmtAbs(S.lastBackup) + '</b>.' : '<b>No backup file yet.</b>'} ${S.link ? 'Your records are also kept in the company Google Sheet.' : 'Your records are saved on this device only — connect the Google Sheet above, or save a backup file every week.'}</p>
-        <div class="two"><button class="btn ghost" data-act="backup">Save backup</button><button class="btn ghost" data-act="restore">Restore 🔒</button></div>
+        <div class="two"><button class="btn ghost" data-act="backup">Save backup</button>${can('restore') ? '<button class="btn ghost" data-act="restore">Restore 🔒</button>' : ''}</div>
         <input type="file" id="restoreFile" accept=".json,application/json" hidden>
       </section>
       <section class="card pad">
         <h3>⚙️ Settings</h3>
-        <div class="setrow"><span>${esc(S.company)}<br><span class="muted">Company name, password · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
       </section>
@@ -717,7 +747,7 @@ function viewSheet() {
 function expenseForm(old) {
   const d = old || { cur: defCur(), amount: '', paidTo: '', reason: '', location: S.lastLoc || '', project: S.lastExpProject || '', mode: S.lastMode || 'Cash' };
   openSheet(`${head(old ? 'Edit expense' : 'Add expense', 'out', old?.id)}
-    <form data-form="expense" data-id="${old?.id || ''}">
+    <form data-form="expense" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${textField('paidTo', 'Paid to', 'Who did you pay?', d.paidTo)}
@@ -726,31 +756,31 @@ function expenseForm(old) {
       ${projectSelect(d.project, true)}
       ${accountChips(d.mode, 'Paid from')}
       ${whenField(old?.at, !!old)}
-      ${byField()}
+      ${byField()}${approvalNote(old)}
       <p class="err"></p>
-      <button class="btn out">${old ? 'Save changes' : 'Save expense'}</button>
+      <button class="btn out">${old ? saveLabel() : 'Save expense'}</button>
     </form>${datalists()}`);
 }
 function creditForm(old, presetProject) {
   const d = old || { cur: defCur(), amount: '', project: presetProject || S.lastProject || '', mode: 'Bank', note: '' };
   openSheet(`${head(old ? 'Edit money received' : 'Money received', 'in', old?.id)}
-    <form data-form="credit" data-id="${old?.id || ''}">
+    <form data-form="credit" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${projectSelect(d.project, false)}
       ${accountChips(d.mode, 'Received into')}
       ${textField('note', 'Note', 'e.g. 2nd installment', d.note, false)}
       ${whenField(old?.at, !!old)}
-      ${byField()}
+      ${byField()}${approvalNote(old)}
       <p class="err"></p>
-      <button class="btn in">${old ? 'Save changes' : 'Save money received'}</button>
+      <button class="btn in">${old ? saveLabel() : 'Save money received'}</button>
     </form>${datalists()}`);
 }
 function moveForm(old) {
   const d = old || { cur: defCur(), amount: '', from: 'Cash', note: '' };
   openSheet(`${head(old ? 'Edit money move' : 'Move money', '', old?.id)}
     <p class="hint">Putting cash into the bank (or taking cash out) is not spending — the total stays the same.</p>
-    <form data-form="move" data-id="${old?.id || ''}">
+    <form data-form="move" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       <div class="fld"><span>Which way?</span><div class="curseg">
@@ -759,9 +789,9 @@ function moveForm(old) {
       </div></div>
       ${textField('note', 'Note', 'e.g. Deposit at the bank', d.note, false)}
       ${whenField(old?.at, !!old)}
-      ${byField()}
+      ${byField()}${approvalNote(old)}
       <p class="err"></p>
-      <button class="btn primary">${old ? 'Save changes' : 'Save move'}</button>
+      <button class="btn primary">${old ? saveLabel() : 'Save move'}</button>
     </form>${datalists()}`);
 }
 const bulkRow = () => `<div class="brow"><span class="n"></span><input name="amount" inputmode="decimal" placeholder="Amount" autocomplete="off" aria-label="Amount"><input name="paidTo" placeholder="Paid to" list="dl-paidTo" autocomplete="off" maxlength="160" aria-label="Paid to"><input name="reason" placeholder="Reason" list="dl-reason" autocomplete="off" maxlength="160" aria-label="Reason"><button type="button" class="x" data-act="delRow" aria-label="Remove line">×</button></div>`;
@@ -790,15 +820,15 @@ function bulkForm() {
 function projectForm(old) {
   const vc = old?.valueCur || defCur();
   openSheet(`${head(old ? 'Edit project' : 'New project', '', old?.id)}
-    <form data-form="project" data-id="${old?.id || ''}">
+    <form data-form="project" data-id="${esc(old?.id || '')}">
       <label class="fld"><span>Project name</span><input name="name" required maxlength="80" value="${esc(old?.name)}" placeholder="e.g. Warehouse — Juba" autofocus></label>
       ${curChips(vc, 'Project value is in')}
       ${amountField(old?.value, vc, 'value', 'Total project value', false)}
       <p class="muted" style="margin:-8px 0 14px">If you add the project value, the app shows how much is still pending from the client.</p>
-      ${byField()}
+      ${byField()}${approvalNote(old)}
       <p class="err"></p>
-      <button class="btn primary">${old ? 'Save changes' : 'Add project'}</button>
-      ${old ? `<p class="center"><button type="button" class="link" data-act="delProject" data-id="${old.id}">Delete this project</button></p>` : ''}
+      <button class="btn primary">${old ? saveLabel() : 'Add project'}</button>
+      ${old && can('delete') ? `<p class="center"><button type="button" class="link" data-act="delProject" data-id="${esc(old.id)}">Delete this project</button></p>` : ''}
     </form>${datalists()}`);
 }
 function settingsForm() {
@@ -825,8 +855,10 @@ function detail(k, id) {
   const look = { E: ['Expense', 'out', '−'], R: ['Money received', 'in', '+'], T: ['Money moved', '', ''] }[k];
   openSheet(`${head(look[0], look[1], r.id)}
     <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
+    ${waitingNote(id)}
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
-    <div class="two"><button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${id}">✏️ Edit 🔒</button><button class="btn danger" data-act="del" data-kind="${k}" data-id="${id}">🗑 Delete 🔒</button></div>`);
+    <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : ''}</div>
+    ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}`);
 }
 function projectDetail(id) {
   const p = S.projects.find(x => x.id === id); if (!p) return;
@@ -836,8 +868,9 @@ function projectDetail(id) {
   openSheet(`${head(p.name, '', p.id)}
     ${projBar(s)}
     <div style="margin-bottom:16px">${projStatsGrid(s)}</div>
-    <div class="two"><button class="btn in" data-act="addCredit" data-project="${id}">＋ Money received</button><button class="btn ghost" data-act="editProject" data-id="${id}">✏️ Edit 🔒</button></div>
-    <button class="btn ghost" data-act="assignPick" data-id="${id}" style="margin-top:10px">＋ Add existing expenses 🔒</button>
+    ${waitingNote(id)}
+    <div class="two"><button class="btn in" data-act="addCredit" data-project="${esc(id)}">＋ Money received</button>${canChange() ? `<button class="btn ghost" data-act="editProject" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}</div>
+    ${can('edit') ? `<button class="btn ghost" data-act="assignPick" data-id="${esc(id)}" style="margin-top:10px">＋ Add existing expenses 🔒</button>` : ''}
     <h3 class="subh">Money received (${R.length})</h3>
     ${R.length ? `<div class="card list inset">${R.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}
     <h3 class="subh">Spent on this project (${E.length})</h3>
@@ -863,6 +896,7 @@ function saveExpense(f) {
   if (old) {
     const changes = diff(old, rec);
     if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    if (!can('edit')) return requestChange('E', old, rec, changes, by);
     update({ expenses: S.expenses.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
   } else {
@@ -888,6 +922,7 @@ function saveMove(f) {
   if (old) {
     const changes = diff(old, rec);
     if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    if (!can('edit')) return requestChange('T', old, rec, changes, by);
     update({ transfers: S.transfers.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
   } else {
@@ -907,11 +942,11 @@ async function assignSheet(pid) {
   const list = live(S.expenses).filter(e => e.project !== pid).sort((a, b) => byAt(b, a));
   openSheet(`${head('Add expenses to project', '', p.name)}
     <p class="hint">Tick the expenses that belong to <b>${esc(p.name)}</b>. Expenses without a project are shown.</p>
-    <form data-form="assign" data-id="${pid}">
+    <form data-form="assign" data-id="${esc(pid)}">
       ${list.some(e => e.project) ? '<label class="fld check"><input type="checkbox" name="others"> Also show expenses that are in another project</label>' : ''}
       <div class="two"><button type="button" class="btn small ghost" data-act="pickAll">Select all</button><button type="button" class="btn small ghost" data-act="pickNone">Select none</button></div>
       <div class="picklist">${list.length ? list.map(e => `<label class="pick" data-other="${e.project ? 1 : 0}" ${e.project ? 'hidden' : ''}>
-        <input type="checkbox" name="pick" value="${e.id}"><span class="pd">${fmtDate(e.at.slice(0, 10))}</span>
+        <input type="checkbox" name="pick" value="${esc(e.id)}"><span class="pd">${fmtDate(e.at.slice(0, 10))}</span>
         <span class="pr">${esc(e.reason)}<small>${esc(e.paidTo)}${e.project ? ' · now in ' + esc(projName(e.project)) : ''}</small></span><b>${money(e.amount, e.cur)}</b></label>`).join('') : '<p class="muted">No other expenses.</p>'}</div>
       ${byField()}
       <div class="foot"><div class="btotal"><span id="pickCount">0 selected</span><b id="pickSum"></b></div><p class="err"></p><button class="btn primary" id="pickBtn" disabled>Add to project</button></div>
@@ -963,6 +998,7 @@ function saveCredit(f) {
   if (old) {
     const changes = diff(old, rec);
     if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    if (!can('edit')) return requestChange('R', old, rec, changes, by);
     update({ credits: S.credits.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
   } else {
@@ -1024,6 +1060,7 @@ function saveProject(f) {
   if (old) {
     const changes = [old.name !== name && `Name: ${old.name} → ${name}`, (old.value !== value || (old.valueCur || 'USD') !== valueCur) && `Project value: ${money(old.value || 0, old.valueCur || 'USD')} → ${money(value, valueCur)}`].filter(Boolean);
     if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    if (!can('edit')) return requestChange('P', old, { name, value, valueCur }, changes, by);
     update({ projects: S.projects.map(p => p.id === old.id ? { ...p, name, value, valueCur, editedAt: stampSec(), editedBy: by } : p), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
   } else {
     const [[id], seq] = nextIds('P', 1, S.seq);
@@ -1050,7 +1087,7 @@ async function doSetup(f) {
   const v = Object.fromEntries(new FormData(f));
   if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
   const salt = randHex();
-  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
+  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
   save();
   navigator.storage?.persist?.();
   render(); scrollTo(0, 0); toast('All set! Add your first entry.');
@@ -1060,7 +1097,7 @@ async function deleteRecord(k, id) {
   if (!await unlock('Enter the password to delete this entry.')) return;
   const key = COLL[k];
   const r = S[key].find(x => x.id === id);
-  const by = clean(prompt(`Delete ${id} — ${money(r.amount, r.cur)}?\n\nIt will be removed from all totals. A record stays in the Change Log.\n\nType your name to confirm:`, S.lastBy || ''));
+  const by = confirmBy(`Delete ${id} — ${money(r.amount, r.cur)}?\n\nIt will be removed from all totals. A record stays in the Change Log.`);
   if (!by) return;
   update({ [key]: S[key].map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, describe(k, r)]], by), lastBy: by });
   closeSheet(); render(); toast('Deleted');
@@ -1070,7 +1107,7 @@ async function deleteProject(id) {
   if (used) return alert('This project has entries. Delete or move those entries first.');
   if (!await unlock('Enter the password to delete this project.')) return;
   const p = S.projects.find(x => x.id === id);
-  const by = clean(prompt(`Delete project "${p.name}"?\n\nType your name to confirm:`, S.lastBy || ''));
+  const by = confirmBy(`Delete project "${p.name}"?`);
   if (!by) return;
   update({ projects: S.projects.map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, `Project "${p.name}"`]], by), lastBy: by });
   closeSheet(); render(); toast('Project deleted');
@@ -1125,17 +1162,24 @@ const SYNC_DELAY_MS = 2000;
 const SYNC_EVERY_MS = 2 * 60 * 1000;
 const SYNC_TIMEOUT_MS = 45000;
 const APP_URL = 'https://surapaneni-bala.github.io/company-accounts/';
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers' };
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers', C: 'changes' };
+// Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
+// records (it didn't know them) but moved on past them, so after updating it downloads everything once.
+const KINDS_SEEN = 2; // 2 = change requests (C)
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string',
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur),
   P: d => typeof d.id === 'string' && typeof d.name === 'string',
   L: d => typeof d.lid === 'string' && typeof d.text === 'string' && typeof d.at === 'string',
   T: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && ACCOUNTS.includes(d.from) && ACCOUNTS.includes(d.to) && d.from !== d.to,
+  C: d => typeof d.id === 'string' && SAFE_ID.test(d.target) && ['E', 'R', 'T', 'P'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string' && AT_RE.test(d.at),
 };
+// ids end up inside the app's pages: only plain ones are ever accepted (the sheet checks this too)
+const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before cash ↔ bank moves can reach the sheet. Everything else is syncing; the moves are kept safe on this device.';
+const notAllowedMsg = n => `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
 const SCRIPT_URL = 'https://raw.githubusercontent.com/surapaneni-bala/company-accounts/main/apps-script/Code.gs';
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error
 let syncBusy = false, syncAgain = false, syncTimer = 0;
@@ -1150,12 +1194,15 @@ const validLinkUrl = u => /^https:\/\/script\.google\.com\/(a\/macros\/[\w.-]+|m
 const b64u = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
 const appUrl = () => /^https?:$/.test(location.protocol) ? location.origin + location.pathname : APP_URL;
-const inviteLink = () => `${appUrl()}#join=${b64u(JSON.stringify({ u: S.link.u, k: S.link.k }))}`;
 const inviteFromHash = () => (location.hash.match(/join=[\w-]+/) || [''])[0];
+// Once the company has logins, invites carry only the web app link: each person signs in instead of using the company code.
+const inviteLink = () => `${appUrl()}#join=${b64u(JSON.stringify(S.link.logins ? { u: S.link.u } : { u: S.link.u, k: S.link.k }))}`;
 function decodeInvite(code) {
   try {
     const j = JSON.parse(unb64u(code));
-    return validLinkUrl(j.u) && typeof j.k === 'string' && j.k ? { u: j.u, k: j.k.toUpperCase() } : null;
+    if (!validLinkUrl(j.u)) return null;
+    if (j.k === undefined) return { u: j.u, k: '' };
+    return typeof j.k === 'string' && j.k ? { u: j.u, k: j.k.toUpperCase() } : null;
   } catch { return null; }
 }
 // Find the invite in whatever was pasted: a whole chat message, the link pasted twice in a row,
@@ -1173,24 +1220,30 @@ function parseInvite(text) {
 }
 function manualLink(f) {
   const u = (f.elements.url ? f.elements.url.value : '').trim(), k = (f.elements.key ? f.elements.key.value : '').trim().toUpperCase();
-  return validLinkUrl(u) && k ? { u, k } : null;
+  const user = f.elements.username ? f.elements.username.value.trim() : '';
+  return validLinkUrl(u) && (k || user) ? { u, k } : null; // with logins, the web app link + username is enough
 }
 function inviteHint(f) {
-  const v = f.elements.invite.value.trim(), box = $('.invite-hint', f);
-  box.className = 'invite-hint ' + (!v ? '' : parseInvite(v) ? 'good' : 'bad');
-  box.textContent = !v ? '' : parseInvite(v) ? '✓ Invite link OK — tap Join.' : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : '✗ This is not an invite link. It starts with https://surapaneni-bala.github.io/company-accounts/#join=';
+  const v = f.elements.invite.value.trim(), box = $('.invite-hint', f), link = parseInvite(v);
+  const needLogin = !!link && !link.k;
+  if (needLogin) $('.loginfields', f).hidden = false;
+  box.className = 'invite-hint ' + (!v ? '' : link ? 'good' : 'bad');
+  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Join.' : '✓ Invite link OK — tap Join.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${APP_URL}#join=`;
 }
 
+// Every request says who is asking: this phone's sign-in, or (no sign-in yet) the company code.
+// Signing in and setting up logins send their own details instead.
 async function callServer(link, body) {
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), SYNC_TIMEOUT_MS);
+  const who = body.op === 'login' || body.op === 'setup' ? {} : signedIn() ? { token: session.token } : { key: link.k };
   let res;
   // text/plain body = no CORS preflight, which Apps Script cannot answer
-  try { res = await fetch(link.u, { method: 'POST', body: JSON.stringify({ ...body, key: link.k }), signal: ctl.signal }); }
+  try { res = await fetch(link.u, { method: 'POST', body: JSON.stringify({ ...body, ...who }), signal: ctl.signal }); }
   catch { throw Object.assign(new Error('No internet'), { offline: true }); }
   finally { clearTimeout(timer); }
   const j = await res.json().catch(() => null);
   if (!j) throw new SyncError('The Google Sheet did not answer. Check the web app link, and that "Who has access" is set to "Anyone".');
-  if (!j.ok) throw new SyncError(j.error || 'Sync failed');
+  if (!j.ok) throw Object.assign(new SyncError(j.error || 'Sync failed'), { code: j.code });
   return j;
 }
 
@@ -1211,16 +1264,24 @@ async function whyUnreachable(link) {
   return { msg: BLOCKED_MSG };
 }
 // First contact with a sheet: on failure explain why; company (Workspace) links get retried in their plain form.
-async function firstContact(link) {
-  try { return { link, res: await callServer(link, { since: 0, push: [] }) }; } catch (e) {
+async function firstContact(link, body = { since: 0, push: [] }) {
+  try { return { link, res: await callServer(link, body) }; } catch (e) {
     if (!e.offline) throw e;
     const why = await whyUnreachable(link);
     if (!why.alt) throw new SyncError(why.msg);
     const plain = { ...link, u: why.alt };
-    return { link: plain, res: await callServer(plain, { since: 0, push: [] }) };
+    return { link: plain, res: await callServer(plain, body) };
   }
 }
 
+// A big backlog goes in batches: the sheet takes at most 200 records at once from logins other than admins.
+// Records it refused last time go last, so they can never hold the others up.
+const MAX_PUSH = 200;
+let lastRefused = new Set();
+function nextBatch() {
+  const all = pendingRecords();
+  return [...all.filter(p => !lastRefused.has(p.id)), ...all.filter(p => lastRefused.has(p.id))].slice(0, MAX_PUSH);
+}
 function pendingRecords() {
   const want = new Set(S.dirty), out = [];
   for (const [k, key] of Object.entries(KIND_KEY)) {
@@ -1239,7 +1300,7 @@ function applyPull(pull) {
   const next = {};
   let changed = false;
   for (const [k, key] of Object.entries(KIND_KEY)) {
-    const recs = pull.filter(p => p.k === k && p.d && VALID[k](p.d) && p.id === recId(key, p.d));
+    const recs = pull.filter(p => p.k === k && p.d && SAFE_ID.test(p.id) && VALID[k](p.d) && p.id === recId(key, p.d));
     if (!recs.length) continue;
     const list = [...S[key]], at = new Map(list.map((r, i) => [recId(key, r), i]));
     for (const p of recs) {
@@ -1249,8 +1310,9 @@ function applyPull(pull) {
     }
     next[key] = list;
   }
-  const s = pull.find(p => p.k === 'S' && p.d && p.d.pass && p.d.pass.hash && p.u > (S.settingsU || 0));
-  if (s) { Object.assign(next, { company: String(s.d.company || S.company), pass: s.d.pass, settingsU: s.u }); changed = true; }
+  // only admins (and phones without a login) receive the company password with the settings
+  const s = pull.find(p => p.k === 'S' && p.d && (p.d.company || (p.d.pass && p.d.pass.hash)) && p.u > (S.settingsU || 0));
+  if (s) { Object.assign(next, { company: String(s.d.company || S.company), settingsU: s.u }, s.d.pass && s.d.pass.hash ? { pass: s.d.pass } : {}); changed = true; }
   S = { ...S, ...next };
   return changed;
 }
@@ -1260,7 +1322,7 @@ async function syncNow() {
   if (!S || !S.link) return;
   if (syncBusy) { syncAgain = true; return; }
   syncBusy = true; sync = { ...sync, state: 'syncing' }; paintSync();
-  const push = pendingRecords();
+  const push = nextBatch();
   try {
     const res = await callServer(S.link, { since: S.link.since || 0, push });
     if (!S.link) return; // disconnected while this was running
@@ -1268,14 +1330,20 @@ async function syncNow() {
     if (changed) repairImportedMoves(); // a device on an old version may have sent mistaken expenses
     // a record edited while the request was running stays queued
     // records the sheet's script cannot store yet stay queued until it is updated
-    const accepted = new Set(res.kinds || OLD_SERVER_KINDS);
-    const refused = new Set(push.filter(p => !accepted.has(p.k)).map(p => p.id));
-    const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow();
-    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || S.link.sheet }, dirty: S.dirty.filter(id => refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id)) };
+    // records this login may not change stay queued too, until an admin signs in on this phone
+    const accepted = new Set(res.kinds || OLD_SERVER_KINDS), notAllowed = new Set(res.refused || []);
+    const refused = new Set([...push.filter(p => !accepted.has(p.k)).map(p => p.id), ...notAllowed]);
+    const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link;
+    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || S.link.sheet, v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id)) };
     save();
-    sync = refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };
-    if (changed && !typing()) render();
+    if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
+    lastRefused = refused;
+    if (S.dirty.some(id => !sent.has(id))) syncAgain = true; // more waiting than one batch: send the rest straight after
+    sync = notAllowed.size ? { state: 'error', at: stampSec(), err: notAllowedMsg(notAllowed.size) }
+      : refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };
+    if ((changed || was.logins !== S.link.logins || was.v !== S.link.v) && !typing()) render();
   } catch (e) {
+    if (e.code === 'LOGIN' && S.link) return signedOutByServer(e.message);
     sync = { ...sync, state: e.offline ? 'offline' : 'error', err: e.message };
   } finally {
     syncBusy = false; paintSync();
@@ -1312,8 +1380,8 @@ function syncCard() {
     <p class="muted">${esc(syncText())}</p>
     ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>' : ''}
     ${S.link.sheet ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
-    <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="syncNow">Sync now</button><button class="btn ghost" data-act="invite">📲 Add a phone 🔒</button></div>
-    <p class="center"><button class="link" data-act="disconnect">Disconnect this device 🔒</button></p></section>`;
+    <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="syncNow">Sync now</button>${can('phones') ? '<button class="btn ghost" data-act="invite">📲 Add a phone 🔒</button>' : ''}</div>
+    ${signedIn() ? '' : '<p class="center"><button class="link" data-act="disconnect">Disconnect this device 🔒</button></p>'}</section>`;
 }
 
 function howUpdateSheet() {
@@ -1327,7 +1395,7 @@ function howUpdateSheet() {
       <li>Under <b>Version</b> choose <b>New version</b>. Leave “Execute as: Me” and “Who has access: Anyone”. Click <b>Deploy</b>.<br><em>Not “New deployment” — that makes a different link.</em></li>
       <li>Come back here and tap <b>Sync now</b>.</li>
     </ol>
-    <p class="note">Check: open your web app link (ends in /exec) in a browser. After the update it shows <b>"version":2</b>.</p>
+    <p class="note">Check: open your web app link (ends in /exec) in a browser. After the update it shows <b>"version":3</b>.</p>
     <button class="btn in" data-act="syncNow">Sync now</button>`);
 }
 function connectForm() {
@@ -1362,12 +1430,17 @@ async function doJoin(f) {
     if (f.elements.url.value.trim() || f.elements.key.value.trim()) return formErr(f, validLinkUrl(f.elements.url.value.trim()) ? 'key' : 'url', validLinkUrl(f.elements.url.value.trim()) ? 'Type the company code.' : 'The web app link starts with https://script.google.com/ and ends with /exec');
     return formErr(f, 'invite', f.elements.invite.value.trim() ? 'This invite link is cut off or changed. Copy it again from the message — or open “Join with the web app link and code” below.' : 'Paste the invite link first.');
   }
+  const username = clean(f.elements.username.value), password = f.elements.password.value;
+  if (!link.k || username) return joinSignedIn(f, link, username, password);
   $('.err', f).textContent = 'Joining…';
   let res;
   try { ({ link, res } = await firstContact(link)); }
-  catch (e) { return formErr(f, null, /^No internet/.test(e.message) ? 'No internet. Joining needs internet once — try again when connected.' : e.message); }
+  catch (e) {
+    if (e.code === 'LOGIN') { $('.loginfields', f).hidden = false; return formErr(f, 'username', 'This company now uses logins. Type your username and password, then tap Join.'); }
+    return formErr(f, null, /^No internet/.test(e.message) ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
+  }
   if (!(res.pull || []).some(p => p.k === 'S')) return formErr(f, null, 'That Google Sheet has no company yet. Connect the main computer first.');
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
+  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
   applyPull(res.pull);
   S = { ...S, link: { ...S.link, since: res.seq } };
   save(); navigator.storage?.persist?.();
@@ -1376,17 +1449,37 @@ async function doJoin(f) {
   sync = { state: 'ok', at: stampSec(), err: '' };
   tab = 'home'; render(); toast(`Joined ${S.company} ✓`);
 }
+// a new phone joining a company that has logins: sign in, then load what this person may see
+async function joinSignedIn(f, link, username, password) {
+  $('.loginfields', f).hidden = false;
+  if (!username || !password) return formErr(f, username ? 'password' : 'username', 'Type your username and password.');
+  $('.err', f).textContent = 'Signing in…';
+  const dev = newDev();
+  let res;
+  try { ({ link, res } = await firstContact(link, { op: 'login', username, password, device: dev })); }
+  catch (e) {
+    const offline = /^No internet/.test(e.message);
+    return formErr(f, offline ? null : 'password', offline ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
+  }
+  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev, dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { u: link.u, k: '', since: 0, sheet: '', logins: true } };
+  await signedInAs(res, password);
+  navigator.storage?.persist?.();
+  history.replaceState(null, '', location.pathname);
+  tab = 'home';
+  await syncNow();
+  render(); toast(`Welcome, ${res.me.name} ✓`);
+}
 async function inviteSheet() {
   if (!await unlock('Enter the password to add a phone. The invite link gives access to the company records.')) return;
   openSheet(`${head('Add a phone')}
     <ol class="steps">
       <li>Send this link to the phone (WhatsApp or email).</li>
       <li>On the phone, open the link. <b>iPhone:</b> in Safari tap <b>Share → Add to Home Screen</b>. <b>Android:</b> in Chrome tap <b>⋮ → Add to Home screen</b>.</li>
-      <li>Open <b>Accounts</b> from the home screen and tap <b>Join my company</b>. If the link is not filled in already, paste it.</li>
+      <li>Open <b>Accounts</b> from the home screen and tap <b>Join my company</b>. If the link is not filled in already, paste it.${S.link.logins ? ' Then type the username and password you gave them.' : ''}</li>
     </ol>
     <label class="fld"><span>Invite link</span><input id="inviteLink" readonly value="${esc(inviteLink())}"></label>
     <div class="two"><button class="btn in" data-act="copyInvite">Copy link</button>${navigator.share ? '<button class="btn ghost" data-act="shareInvite">Send…</button>' : ''}</div>
-    <p class="note" style="margin-top:14px">Anyone with this link can see and add company records. Only send it to your own staff.</p>`);
+    <p class="note" style="margin-top:14px">${S.link.logins ? 'The link alone opens nothing: each person signs in with the login you gave them (👥 Logins).' : 'Anyone with this link can see and add company records. Only send it to your own staff.'}</p>`);
 }
 async function disconnect() {
   if (!await unlock('Enter the password to disconnect this device from the Google Sheet.')) return;
@@ -1399,7 +1492,322 @@ async function disconnect() {
 }
 function migrate(s) {
   const dev = s.dev || newDev();
-  return { ...s, dev, transfers: s.transfers || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, link: s.link || null, log: s.log.map((l, i) => l.lid ? l : { ...l, lid: `L-${dev}-old${i}` }) };
+  const relearn = s.link && (s.kindsSeen || 1) < KINDS_SEEN;
+  return { ...s, dev, transfers: s.transfers || [], changes: s.changes || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, kindsSeen: KINDS_SEEN,
+    link: relearn ? { ...s.link, since: 0 } : (s.link || null), log: s.log.map((l, i) => l.lid ? l : { ...l, lid: `L-${dev}-old${i}` }) };
+}
+
+/* ---------- logins ---------- */
+// Each person signs in with their own username and password. The Google Sheet checks it and decides
+// what they receive and may change; the app only hides what they can't use. Until the sheet has
+// logins (or for a phone that hasn't signed in yet) everything works as before, with the company password.
+// The sign-in lives in its own storage slot, so it never ends up in a backup file.
+const SESSION_KEY = KEY + '-login';
+const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper' };
+const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Sees everything · adds entries · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
+const RIGHTS = {
+  admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones'],
+  manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup'], // suggest = edits wait for an admin's approval
+  store: ['add'],
+};
+const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [] };
+
+// { token, user: { id, name, username, role }, check: { salt, hash } } — or { out: true, why } once signed out
+let session = loadSession();
+let usersCache = [];
+function loadSession() { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } }
+function saveSession(s) {
+  session = s;
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch (e) { alert('⚠️ Could not save the sign-in: ' + e.message); }
+}
+const signedIn = () => !!(session && session.token);
+const myName = () => (signedIn() ? session.user.name : '');
+const can = what => !signedIn() || RIGHTS[session.user.role].includes(what);
+const mustSignIn = () => !!(S && S.link && session && session.out);
+const signInBanner = () => (S.link?.logins && !signedIn() ? `<div class="banner new"><span>👤 Everyone can now have their own login. Sign in with yours.</span><button class="btn small" data-act="signIn">Sign in</button></div>` : '');
+
+// The phone's own check of a login password (for "unlock" without internet): PBKDF2 with many rounds,
+// so a copy taken from the phone is slow to crack.
+async function slowHash(pw, salt) {
+  const enc = new TextEncoder(), key = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(salt), iterations: 200000 }, key, 256);
+  return [...new Uint8Array(bits)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+// only the entries this phone hasn't sent yet (they must never be lost)
+const onlyUnsent = () => { const d = new Set(S.dirty); return Object.fromEntries(Object.keys(SYNC_KEYS).map(key => [key, S[key].filter(r => d.has(recId(key, r)))])); };
+
+// Signed in: remember who, and a check of the password so "unlock" works offline.
+// The company code is removed from this phone, so a closed login can't fall back to it.
+async function signedInAs(res, password) {
+  const salt = randHex();
+  saveSession({ token: res.token, user: res.me, check: { salt, hash: await slowHash(password, salt) } });
+  // reload the company settings as this person may see them (only admins get the company password);
+  // a store keeper sees only their own entries: drop everything else this phone held (it's all on the sheet)
+  const clear = { settingsU: 0, ...(res.me.role === 'admin' ? {} : { pass: null }), ...(res.me.role === 'store' ? onlyUnsent() : {}) };
+  S = { ...S, ...clear, link: { ...S.link, k: '', since: 0, logins: true }, lastBy: res.me.name };
+  save();
+}
+// The sheet ended this sign-in (password reset, login disabled, or logins now required).
+function signedOutByServer(why) {
+  saveSession({ out: true, why });
+  // nothing stays on a phone that lost access — except changes it hasn't sent yet
+  S = { ...S, ...(S.dirty.length ? {} : NOTHING_SEEN), link: { ...S.link, since: 0 } };
+  save(); closeSheet(); render();
+}
+async function signOut() {
+  const n = S.dirty.length;
+  if (n) return alert(`This phone has ${n} change${n === 1 ? '' : 's'} not sent to the Google Sheet yet.\n\nConnect to the internet and wait until it says "Up to date", then sign out.`);
+  if (!confirm('Sign out of this phone?\n\nThe company records leave this phone. They come back when someone signs in.')) return;
+  const token = session.token;
+  saveSession({ out: true }); // the sign-in screen shows at once, so nothing new can be added meanwhile
+  closeSheet(); render();
+  try { await callServer(S.link, { op: 'logout', token }); } catch { /* already signed out on the sheet: fine */ }
+  if (!S.dirty.length) { S = { ...S, ...NOTHING_SEEN, link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
+  render();
+}
+
+const signInFields = (autofocus = true) => `
+  <label class="fld"><span>Username</span><input name="username" required autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="30" ${autofocus ? 'autofocus' : ''}></label>
+  <label class="fld"><span>Password</span><input type="password" name="password" required autocomplete="current-password"></label>`;
+function viewSignIn() {
+  const n = S.dirty.length;
+  return `<section class="setup card pad">${APP_LOGO}
+    <h1>Sign in</h1>
+    <p>${esc(S.company || 'Company accounts')}</p>
+    ${session.why ? `<p class="note">${esc(session.why)}</p>` : ''}
+    <form data-form="signin">${signInFields()}
+      <p class="err"></p>
+      <button class="btn primary">Sign in</button>
+    </form>
+    ${n ? `<p class="muted">${n} change${n === 1 ? '' : 's'} on this phone ${n === 1 ? 'is' : 'are'} waiting. ${n === 1 ? 'It is' : 'They are'} sent after you sign in.</p>` : ''}
+    <p class="muted center">Forgot your password? Ask an admin to give you a new one.</p>
+  </section>`;
+}
+function signInSheet() {
+  openSheet(`${head('Sign in')}
+    <p class="hint">Use the username and password an admin gave you.</p>
+    <form data-form="signin">${signInFields()}<p class="err"></p><button class="btn primary">Sign in</button></form>`);
+}
+async function doSignIn(f) {
+  const v = Object.fromEntries(new FormData(f));
+  $('.err', f).textContent = 'Signing in…';
+  let res;
+  try { res = await callServer(S.link, { op: 'login', username: v.username, password: v.password, device: S.dev }); }
+  catch (e) { return formErr(f, e.offline ? null : 'password', e.offline ? 'No internet. Signing in needs internet.' : e.message); }
+  await signedInAs(res, v.password);
+  update({ log: logWith([['Signed in', '—', `${res.me.name} signed in on this phone (${S.dev})`]], res.me.name) });
+  closeSheet(); tab = 'home'; render(); toast(`Welcome, ${res.me.name} ✓`);
+  syncNow();
+}
+
+/* the owner's first login, proven with a one-time setup code that only appears inside the Google Sheet */
+function setupLoginsSheet() {
+  openSheet(`${head('Set up logins')}
+    <p class="hint">You become the first admin. Then you give logins to the Managing Director and your staff. Phones that haven't signed in keep working until you choose <b>Require logins</b>.</p>
+    <form data-form="setupLogins">
+      <label class="fld"><span>Setup code <em>(open your Google Sheet → <b>Read me</b> tab → at the bottom)</em></span><input name="code" required maxlength="12" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" autofocus></label>
+      <label class="fld"><span>Your name</span><input name="name" required maxlength="60" value="${esc(S.lastBy || '')}" autocomplete="name"></label>
+      <label class="fld"><span>Choose a username <em>(what you type to sign in)</em></span><input name="username" required maxlength="30" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="e.g. john"></label>
+      <label class="fld"><span>Your new password</span><input type="password" name="pw" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+      <label class="fld"><span>Type it again</span><input type="password" name="pw2" required minlength="8" autocomplete="new-password"></label>
+      <p class="err"></p>
+      <button class="btn primary">Set up logins</button>
+    </form>`);
+}
+async function doSetupLogins(f) {
+  const v = Object.fromEntries(new FormData(f));
+  if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
+  $('.err', f).textContent = 'Setting up…';
+  let res;
+  try { res = await callServer(S.link, { op: 'setup', key: S.link.k, setupCode: v.code, name: clean(v.name), username: v.username, newPassword: v.pw, device: S.dev }); }
+  catch (e) { return formErr(f, null, e.offline ? 'No internet. This needs internet.' : e.message); }
+  if (!res.token) return formErr(f, null, 'The Google Sheet script is too old for logins. Update it to version 3 first (Sheet tab → Show me how).');
+  await signedInAs(res, v.pw);
+  update({ log: logWith([['Logins', '—', `Logins set up. ${res.me.name} (${res.me.username}) is the first admin.`]], res.me.name) });
+  render(); toast('Logins are ready ✓ Now give the others theirs.');
+  syncNow();
+  usersSheet();
+}
+
+/* admins: give, change and close logins */
+async function usersSheet() {
+  openSheet(`${head('Logins')}<p class="muted">Loading…</p>`);
+  let res;
+  try { res = await callServer(S.link, { op: 'users' }); }
+  catch (e) { return openSheet(`${head('Logins')}<p class="err">${esc(e.offline ? 'No internet. Managing logins needs internet.' : e.message)}</p>`); }
+  usersCache = res.users;
+  const active = res.users.filter(u => u.active).length;
+  openSheet(`${head('Logins', '', `${active} active`)}
+    <button class="btn primary" data-act="userForm">＋ Give someone a login</button>
+    <div class="card list inset" style="margin-top:14px">${res.users.map(userRow).join('')}</div>
+    <h3 class="subh">Old invite links</h3>
+    <p class="muted">${res.required ? '🔒 Only signed-in people can use the app. Old invite links and the company code no longer work.' : 'Phones that joined with an old invite link still work without a login. When everyone has signed in with their own login, switch this on.'}</p>
+    <button class="btn ${res.required ? 'ghost' : 'out'}" data-act="requireLogins" data-on="${res.required ? '' : '1'}">${res.required ? 'Allow old invite links again' : 'Require logins for everyone'}</button>`);
+}
+const lastSeen = u => (u.lastLogin ? ` · signed in ${fmtAbs(stamp(new Date(u.lastLogin)))}` : ' · not signed in yet');
+const userRow = u => `<button class="row" data-act="userForm" data-id="${esc(u.id)}">
+  <span class="dot">${u.active ? '👤' : '⛔'}</span>
+  <span class="main"><span class="t"><span class="tt">${esc(u.name)}</span>${u.active ? '' : '<i class="tag warn">Blocked</i>'}${session.user.id === u.id ? '<i class="tag">You</i>' : ''}</span>
+  <span class="s">${esc(u.username)} · ${ROLES[u.role]}${lastSeen(u)}</span></span></button>`;
+function userForm(id) {
+  const u = usersCache.find(x => x.id === id);
+  const role = u ? u.role : 'store';
+  openSheet(`${head(u ? u.name : 'New login', '', u ? u.username : '')}
+    <form data-form="user" data-id="${esc(u?.id || '')}">
+      <label class="fld"><span>Name</span><input name="name" required maxlength="60" value="${esc(u?.name)}" placeholder="e.g. Mary" ${u ? '' : 'autofocus'}></label>
+      <label class="fld"><span>Username <em>(what they type to sign in)</em></span><input name="username" required maxlength="30" autocapitalize="off" autocorrect="off" spellcheck="false" value="${esc(u?.username)}" placeholder="e.g. mary"></label>
+      <div class="fld"><span>What may they do?</span><div class="curseg roles">${Object.keys(ROLES).map(r => `<label><input type="radio" name="role" value="${esc(r)}" ${r === role ? 'checked' : ''}><span><b>${ROLES[r]}</b><small>${ROLE_HELP[r]}</small></span></label>`).join('')}</div></div>
+      <label class="fld"><span>${u ? 'New password <em>(leave empty to keep theirs)</em>' : 'Password'}</span><input name="password" ${u ? '' : 'required'} minlength="8" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="At least 8 characters"></label>
+      ${u ? `<label class="fld check"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> Login is open <em>(untick to block this person)</em></label>` : ''}
+      <p class="err"></p>
+      <button class="btn primary">${u ? 'Save changes' : 'Create login'}</button>
+    </form>
+    <p class="center"><button class="link" data-act="users">← All logins</button></p>`);
+}
+async function saveUserForm(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const id = f.dataset.id;
+  const user = { name: clean(v.name), username: clean(v.username).toLowerCase(), role: v.role, ...(id ? { id, active: !!v.active } : {}), ...(v.password ? { password: v.password } : {}) };
+  $('.err', f).textContent = 'Saving…';
+  try { usersCache = (await callServer(S.link, { op: 'saveUser', user })).users; }
+  catch (e) { return formErr(f, null, e.offline ? 'No internet. Managing logins needs internet.' : e.message); }
+  const what = [id ? 'Login changed' : 'Login given', `${user.name} (${user.username}) · ${ROLES[user.role]}`, id && !user.active && 'blocked', id && v.password && 'new password'].filter(Boolean).join(' · ');
+  update({ log: logWith([['Logins', id || '—', what]]) });
+  toast(id ? 'Saved ✓' : `Login created ✓ Tell ${user.name}: username "${user.username}" and the password`);
+  if (id === session.user.id && (user.role !== session.user.role || v.password)) return syncNow(); // own role or password changed: sign in again
+  usersSheet();
+}
+async function requireLogins(on) {
+  if (on && !confirm('Require logins for everyone?\n\nPhones that have not signed in stop syncing until they sign in. Old invite links and the company code stop working.\n\nOnly do this when everyone has their own login.')) return;
+  try { await callServer(S.link, { op: 'require', on: !!on }); }
+  catch (e) { return alert(e.offline ? 'No internet.' : e.message); }
+  update({ log: logWith([['Logins', '—', on ? 'Logins required for everyone — old invite links stopped' : 'Old invite links allowed again']]) });
+  toast(on ? 'Done 🔒 Only signed-in people can use the app now' : 'Old invite links work again');
+  usersSheet();
+}
+
+/* my login */
+function accountSheet() {
+  const u = session.user;
+  openSheet(`${head(u.name, '', `${u.username} · ${ROLES[u.role]}`)}
+    <form data-form="password">
+      <h3 class="subh" style="margin-top:0">Change my password</h3>
+      <label class="fld"><span>Current password</span><input type="password" name="old" required autocomplete="current-password"></label>
+      <label class="fld"><span>New password</span><input type="password" name="pw" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+      <label class="fld"><span>New password again</span><input type="password" name="pw2" required minlength="8" autocomplete="new-password"></label>
+      <p class="err"></p>
+      <button class="btn primary">Change password</button>
+    </form>
+    <button class="btn ghost" data-act="signOut" style="margin-top:14px">Sign out of this phone</button>`);
+}
+async function doChangePassword(f) {
+  const v = Object.fromEntries(new FormData(f));
+  if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two new passwords don't match.");
+  $('.err', f).textContent = 'Saving…';
+  try { await callServer(S.link, { op: 'password', old: v.old, password: v.pw }); }
+  catch (e) { return formErr(f, e.offline ? null : 'old', e.offline ? 'No internet. Changing your password needs internet.' : e.message); }
+  const salt = randHex();
+  saveSession({ ...session, check: { salt, hash: await slowHash(v.pw, salt) } });
+  closeSheet(); toast('Password changed ✓');
+}
+
+function loginsCard() {
+  if (!S.link) return '';
+  if (signedIn()) {
+    return `<section class="card pad"><h3>👤 ${esc(session.user.name)}</h3>
+      <p class="muted">Signed in as <b>${esc(session.user.username)}</b> · ${ROLES[session.user.role]}</p>
+      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">My password · Sign out</button></div></section>`;
+  }
+  if (S.link.logins) {
+    return `<section class="card pad"><h3>👥 Logins</h3><p class="muted">Everyone can have their own username and password. Sign in with yours.</p>
+      <button class="btn primary" data-act="signIn">Sign in</button></section>`;
+  }
+  if ((S.link.v || 2) < 3) {
+    return `<section class="card pad"><h3>👥 Logins</h3><p class="muted">Give each person their own username and password. This needs the newest Google Sheet script (version 3).</p>
+      <button class="btn ghost" data-act="howUpdate">Show me how to update it</button></section>`;
+  }
+  return `<section class="card pad"><h3>👥 Logins</h3><p class="muted">Give each person their own username and password, and decide what they may see and do. You become the first admin.</p>
+    <button class="btn primary" data-act="setupLogins">Set up logins 🔒</button></section>`;
+}
+
+/* ---------- edits waiting for approval ---------- */
+// An office manager's edit doesn't change the entry: it becomes a change request (kind C) that an admin
+// approves or rejects. Until then the entry and every total keep the old values.
+const canChange = () => can('edit') || can('suggest');
+const saveLabel = () => (can('edit') ? 'Save changes' : 'Send for approval');
+const approvalNote = old => (old && !can('edit') ? '<p class="note">An admin approves this change first. Until then the entry and the totals stay as they are.</p>' : '');
+const waiting = () => (S.changes || []).filter(c => c.status === 'waiting');
+const waitingFor = id => waiting().filter(c => c.target === id);
+const recordsOf = kind => S[kind === 'P' ? 'projects' : COLL[kind]] || [];
+const targetOf = c => recordsOf(c.kind).find(x => x.id === c.target);
+// the fields an edit may change, per kind (the Google Sheet checks the same list)
+const EDITABLE = {
+  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate'],
+  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate'],
+  T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
+  P: ['name', 'value', 'valueCur'],
+};
+const editPart = c => Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f)));
+// what approving would really change, worked out from the entry itself — never from the text sent with the request
+function changeLines(c, r) {
+  if (!r) return [];
+  const next = { ...r, ...editPart(c) };
+  if (c.kind !== 'P') return diff(r, next);
+  const vc = x => x.valueCur || 'USD';
+  return [r.name !== next.name && `Name: ${r.name} → ${next.name}`,
+    (Number(r.value || 0) !== Number(next.value || 0) || vc(r) !== vc(next)) && `Project value: ${money(+r.value || 0, vc(r))} → ${money(+next.value || 0, vc(next))}`].filter(Boolean);
+}
+const waitingNote = id => waitingFor(id).map(c => `<p class="note">✏️ <b>Change waiting for approval</b> — ${esc(changeLines(c, targetOf(c)).join(' ; ') || 'no real change')} · asked by ${esc(c.by)}, ${esc(fmtAbs(c.at))}</p>`).join('');
+
+function requestChange(kind, old, rec, changes, by) {
+  const [[id], seq] = nextIds('C', 1, S.seq);
+  const before = Object.fromEntries(Object.keys(rec).map(f => [f, old[f] ?? '']));
+  update({
+    changes: [...S.changes, { id, kind, target: old.id, before, after: rec, text: changes.join(' ; '), by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
+    log: logWith([['Change asked', old.id, `${changes.join(' ; ')} — waiting for an admin`]], by), lastBy: by,
+  });
+  closeSheet(); render(); toast('Sent for approval ✓ It changes when an admin approves it.');
+}
+function approvalsBanner() {
+  const n = waiting().length;
+  if (!n) return '';
+  if (can('edit')) return `<div class="banner"><span>✏️ ${n} change${n === 1 ? '' : 's'} waiting for your approval.</span><button class="btn small" data-act="approvals">Review</button></div>`;
+  const mine = waiting().filter(c => c.by === myName()).length;
+  return mine ? `<div class="banner new"><span>✏️ ${mine} of your changes ${mine === 1 ? 'is' : 'are'} waiting for an admin to approve.</span></div>` : '';
+}
+function approvalsSheet() {
+  const list = waiting().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  openSheet(`${head('Changes to approve', '', `${list.length} waiting`)}
+    ${list.length ? list.map(changeCard).join('') : '<p class="muted">Nothing is waiting. ✓</p>'}`);
+}
+function changeCard(c) {
+  const r = targetOf(c);
+  const gone = !r || r.deleted, lines = changeLines(c, r);
+  // the entry was changed by someone else after this request: show it so the admin looks first
+  const moved = r && Object.keys(c.before || {}).some(f => String(r[f] ?? '') !== String(c.before[f] ?? ''));
+  return `<section class="card pad" style="margin-bottom:12px">
+    <p style="margin:0 0 6px"><b>${esc(r ? (c.kind === 'P' ? `Project "${r.name}"` : describe(c.kind, r)) : c.target)}</b></p>
+    <ul style="margin:0 0 8px;padding-left:20px">${(lines.length ? lines : ['No real change — reject it']).map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+    <p class="muted" style="margin:0 0 10px">Asked by ${esc(c.by)} · ${esc(fmtAbs(c.at))}</p>
+    ${gone ? '<p class="note">This entry was deleted — the change can only be rejected.</p>' : moved ? '<p class="note">⚠️ This entry was changed after the request. Check it before approving.</p>' : ''}
+    <div class="two"><button class="btn danger" data-act="decide" data-id="${esc(c.id)}" data-ok="">Reject</button><button class="btn in" data-act="decide" data-id="${esc(c.id)}" data-ok="1" ${gone ? 'disabled' : ''}>Approve</button></div>
+  </section>`;
+}
+async function decide(id, ok) {
+  if (!await unlock('Enter the password to approve or reject changes.')) return;
+  const c = S.changes.find(x => x.id === id);
+  if (!c || c.status !== 'waiting') return approvalsSheet();
+  const me = myName() || S.lastBy || 'Admin', key = c.kind === 'P' ? 'projects' : COLL[c.kind];
+  const r = targetOf(c), next = r && { ...r, ...editPart(c) };
+  if (ok && (!r || r.deleted || !VALID[c.kind](next))) return alert("This change can't be applied: the entry is gone or the new values aren't valid. Reject it instead.");
+  const what = changeLines(c, r).join(' ; ') || 'no real change';
+  const patch = {
+    changes: S.changes.map(x => (x.id === id ? { ...x, status: ok ? 'approved' : 'rejected', decidedBy: me, decidedAt: stampSec() } : x)),
+    log: logWith([[ok ? 'Approved' : 'Rejected', c.target, `${what} — asked by ${c.by}`]], me),
+  };
+  if (ok) patch[key] = S[key].map(x => (x.id === c.target ? { ...next, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
+  update(patch);
+  render(); approvalsSheet(); toast(ok ? 'Approved ✓ The entry is changed' : 'Rejected — the entry stays as it was');
 }
 
 /* ---------- import old entries (paste rows from a list or sheet) ---------- */
@@ -1518,7 +1926,7 @@ const moveKey = x => [x.at.slice(0, 10), x.cur, cents(x.amount), x.from].join('|
 // The importer before cash/bank moves saved "Cash → Bank" lines as expenses. Turn each into the move
 // it was meant to be. Ids are made from the expense id, so every device repairs to the same records.
 function repairImportedMoves() {
-  if (!S) return 0;
+  if (!S || !can('delete')) return 0; // the repair deletes expenses, so only admins (or phones without logins) run it
   const bad = live(S.expenses).map(e => ({ e, m: clean(e.mode).match(MOVE_RE) }))
     .filter(({ m }) => m && m[1].toLowerCase() !== m[2].toLowerCase());
   if (!bad.length) return 0;
@@ -1544,15 +1952,16 @@ function lookalikeExpenses() {
   return live(S.expenses).filter(e => moves.has([e.at.slice(0, 10), e.cur, cents(e.amount)].join('|')) && /deposit|bank|withdraw|transfer/i.test(`${e.reason} ${e.paidTo}`));
 }
 function lookalikeBanner() {
-  const e = lookalikeExpenses()[0];
+  const e = can('delete') && lookalikeExpenses()[0];
   if (!e) return '';
-  return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${e.id}">Show it</button></div>`;
+  return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${esc(e.id)}">Show it</button></div>`;
 }
 
 /* ---------- app updates ---------- */
 // GitHub Pages lets phones keep the app files for 10 minutes, so the app asks for version.json
 // (never cached) to learn about a newer version, and "Update now" fetches a completely fresh copy.
 let newerVersion = '';
+const CACHE_PREFIX = 'accounts-'; // same as in sw.js
 async function latestVersion() {
   const res = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
   if (!res.ok) throw new Error('version check failed');
@@ -1571,10 +1980,11 @@ async function updateApp() {
   try { v = await latestVersion(); } catch { return alert('No internet. Connect to the internet to update the app.'); }
   if (v === APP_VERSION) { newerVersion = ''; render(); return toast(`You have the newest version ✓ (${APP_VERSION.slice(0, 7)})`); }
   toast('Updating the app…');
-  // only the saved app files are removed — your records are stored separately and stay
+  // only this app's saved files are removed — your records are stored separately and stay
   try {
-    await Promise.all((await caches.keys()).map(k => caches.delete(k)));
-    await Promise.all((await navigator.serviceWorker.getRegistrations()).map(r => r.unregister()));
+    await Promise.all((await caches.keys()).filter(k => k.startsWith(CACHE_PREFIX)).map(k => caches.delete(k)));
+    const reg = await navigator.serviceWorker.getRegistration(); // the one for this page only
+    if (reg) await reg.unregister();
   } catch (e) { console.warn('Could not clear the old app files:', e.message); }
   location.replace(`${location.pathname}?v=${v}`); // a new address, so no stored copy can be used
 }
@@ -1623,8 +2033,18 @@ const ACTIONS = {
   assignPick: b => assignSheet(b.dataset.id),
   pickAll: b => { const f = b.closest('form'); $$('.pick:not([hidden]) input', f).forEach(i => (i.checked = true)); updatePick(f); },
   pickNone: b => { const f = b.closest('form'); $$('input[name=pick]', f).forEach(i => (i.checked = false)); updatePick(f); },
+  signIn: () => signInSheet(),
+  setupLogins: () => setupLoginsSheet(),
+  users: () => usersSheet(),
+  userForm: b => userForm(b.dataset.id),
+  requireLogins: b => requireLogins(!!b.dataset.on),
+  account: () => accountSheet(),
+  signOut: () => signOut(),
+  approvals: () => approvalsSheet(),
+  decide: b => decide(b.dataset.id, !!b.dataset.ok),
 };
-const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport };
+const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -1671,7 +2091,7 @@ document.addEventListener('paste', e => {
   t.dispatchEvent(new Event('input', { bubbles: true }));
 });
 // another tab of this app saved something: pick it up so neither tab overwrites the other
-addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
+addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } if (e.key === SESSION_KEY) { session = loadSession(); render(); } });
 // sync as soon as the internet comes back, when the app is reopened, and every few minutes
 addEventListener('online', () => scheduleSync(0));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { scheduleSync(0); checkForUpdate(); } });
