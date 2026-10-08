@@ -1,2 +1,6 @@
 tools/.mock-state.json
 .DS_Store
+
+# owner's real data, brand files and business plans — never publish (repo is public)
+private/
+.claude/

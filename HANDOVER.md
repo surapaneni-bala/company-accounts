@@ -1,8 +1,13 @@
 # Handover — Company Accounts
 
-Last updated **7 Oct 2026** · live app version **5b2a803** · Google Sheet script **version 2**
+Last updated **8 Oct 2026** · live app version **5b2a803** (unchanged) · owner's Google Sheet script **version 2**
+· **Stage 1 (logins, script version 3) built and tested locally, not released** — see [§6](#6-where-things-stand-open-items)
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
+
+**Where the project lives on the owner's Mac:** a clone of this repo in their home folder (the folder name is in
+the assistant's memory notes, not here). Its `private/` folder is git-ignored and holds the owner's real data and plans: `private/PLAN.md` (the whole super-app plan, stages and the
+owner's decisions — read it next), `private/brand/` (logo, letterhead), `private/old-files/` (their old lists).
 
 > **This repository is public.** Never commit the owner's real data: names, amounts, suppliers,
 > project names, company code or web app link. Use made-up values in tests and placeholders, and run
@@ -66,6 +71,7 @@ src/            app source, joined in this order by tools/build.js into one page
   shell.html    page, all CSS, markers <!--APP-->
   core.js       state, helpers, password, all screens and forms, saving, backup
   sync.js       Google Sheet sync, invite links, join/connect, "update the script" help
+  auth.js       logins: sign in/out, set up logins, admin "Logins" screens, can()/RIGHTS per role
   import.js     paste import (expenses + moves), repairs, double-count warning
   update.js     new-version check (version.json) and "Update now"
   main.js       button/form wiring, events, start-up, service-worker registration
@@ -73,6 +79,8 @@ src/            app source, joined in this order by tools/build.js into one page
   manifest.webmanifest, icons (tools/make-icons.py draws them)
 apps-script/Code.gs   the sync server that lives inside the Google Sheet (owner pastes it)
 docs/           BUILT output, served by GitHub Pages — never edit by hand
+docs/test/      the TEST COPY (node tools/build.js --test): own storage key bepl-test-v1, own offline-copy
+                prefix test-accounts-, purple "TEST COPY" bar, home-screen name TEST
 tools/          build, tests, local Google stand-in, real-Chrome checks
 ```
 
@@ -95,7 +103,11 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
 ```
 
 - Every change goes through `update(patch)`. It stamps changed records with `u` (time in ms) and
-  queues them in `dirty` when the device is connected.
+  queues them in `dirty` when the device is connected. When someone is signed in, **new** records also get
+  `uid` (their login id); edits keep the original `uid`.
+- The sign-in is stored separately in `localStorage['company-accounts-v1-login']` (never in backups):
+  `{ token, user: {id, name, username, role}, check: {salt, hash} }` (check = their password, for offline
+  unlock), or `{ out: true, why }` when signed out. `S.link` also keeps `v` (script version) and `logins`.
 - Money is added up in whole cents (`cents()`).
 - `accountOf(mode)` maps older payment types: Card/Cheque count as Bank, anything else counts as Cash.
 
@@ -119,6 +131,30 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
   account" breaks the app, because the reply is a sign-in page and the browser treats it as a CORS
   failure. The app now detects this and says so.
 
+### Logins (script version 3)
+
+- Requests carry `token` (signed in) or `key` (company code, no login). Until an admin turns on **Require logins**
+  (Script property `REQUIRE_LOGIN=1`), key-only requests keep full access exactly like version 2 — so old phones
+  keep working during the switch. After it, they get `{ ok:false, code:'LOGIN' }`.
+- Ops (`{ op, … }`): `setup` (first admin; needs company code + the company password, checked against the S
+  record; only when no users exist), `login`, `logout`, `password`, and admin-only `users`, `saveUser`, `require`.
+- Hidden tabs: `_users` (salted SHA-256 ×1000 password hashes) and `_sessions` (only the hash of each token;
+  ended after 30 days unused, on password reset, role change or block). 5 wrong passwords → 15-minute lock.
+  The last active admin can't be demoted or blocked.
+- Server rules (`view_` = what is sent, `allowed_` = what is accepted): admin everything; manager sees all,
+  may add new records but **never change an existing one** — her edits are **change requests** (kind `C`:
+  `{kind, target, before, after, text, by, status: waiting|approved|rejected, decidedBy}`) that an admin
+  approves (the app then applies `after` to the target) or rejects; store keeper only their own E and L (by
+  `uid`). Only admins receive the company password inside S. Refused records come back in `refused` and stay
+  queued on the phone. A copy the sheet already has (same or older `u`) is ignored before any rule is checked,
+  so a phone resending after a lost reply is never refused.
+- `KINDS_SEEN` (sync.js) goes up whenever the app learns a new record kind; `migrate()` then sets `since` to 0
+  once, because an older version skipped the unknown records but moved past them.
+- Sync replies also carry `me` (the signed-in person) and `logins` (whether the company has logins).
+- Phone side: signing in removes the company code from the phone; a store keeper's phone drops everything
+  else it held (only when nothing is unsent). Being signed out by the sheet removes the company records from
+  the phone unless some are unsent. The client only hides buttons — the sheet enforces every rule.
+
 ### Offline copy and updates
 
 - `sw.js` serves app files from its cache first. The cache name is the build version.
@@ -134,7 +170,9 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
 
 ```bash
 node tools/build.js                 # src/ → docs/ (index.html, sw.js, version.json, manifest, icons)
+node tools/build.js --test          # src/ → docs/test/ (the practice copy; does NOT touch the live docs/ files)
 node tools/test-sheet-server.js     # runs the real Code.gs on fake Google services (sync, balances, tabs)
+node tools/test-auth.js             # logins and roles on the same fake Google services
 node tools/test-invite.js           # invite links survive WhatsApp wrapping, double paste, encoding
 ```
 
@@ -183,6 +221,18 @@ git commit -m "fix: …" && git push
 - Commits use the `type: description` style. No attribution lines (the owner's setting).
 
 ## 6. Where things stand (open items)
+
+**Stage 1 — logins (built 8 Oct 2026, not released).** Code.gs version 3, `src/auth.js`, the test copy build.
+Verified locally: all three test files pass; the owner's real old list, entered in the live version (5b2a803) and
+opened by the new code, gives the same totals to the cent; old-version phones keep syncing with script v3 until
+"Require logins"; store keeper / office manager / admin / blocked / signed-out flows checked in the browser.
+Release order (nothing disturbs the live app until step 4):
+1. Push the source + `docs/test/` only (the live `docs/` files are NOT rebuilt, so phones see no update).
+2. The owner makes a separate TEST Google Sheet with Code.gs v3, opens `…/company-accounts/test/` on the
+   iPhone, restores their backup file into it, connects it to the TEST sheet, and tries logins.
+3. Fix whatever they find. 4. Owner pastes Code.gs v3 into the real sheet (Manage deployments → New version);
+   then `node tools/build.js` and push, so phones get "Update now". 5. Set up logins; everyone signs in;
+   only then "Require logins".
 
 **Waiting on the owner (we can't do these for them):**
 1. **Update the Google Sheet script to version 2.** They last saw the "script needs updating"
