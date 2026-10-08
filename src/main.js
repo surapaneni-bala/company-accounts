@@ -41,8 +41,18 @@ const ACTIONS = {
   assignPick: b => assignSheet(b.dataset.id),
   pickAll: b => { const f = b.closest('form'); $$('.pick:not([hidden]) input', f).forEach(i => (i.checked = true)); updatePick(f); },
   pickNone: b => { const f = b.closest('form'); $$('input[name=pick]', f).forEach(i => (i.checked = false)); updatePick(f); },
+  signIn: () => signInSheet(),
+  setupLogins: () => setupLoginsSheet(),
+  users: () => usersSheet(),
+  userForm: b => userForm(b.dataset.id),
+  requireLogins: b => requireLogins(!!b.dataset.on),
+  account: () => accountSheet(),
+  signOut: () => signOut(),
+  approvals: () => approvalsSheet(),
+  decide: b => decide(b.dataset.id, !!b.dataset.ok),
 };
-const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport };
+const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -89,7 +99,7 @@ document.addEventListener('paste', e => {
   t.dispatchEvent(new Event('input', { bubbles: true }));
 });
 // another tab of this app saved something: pick it up so neither tab overwrites the other
-addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } });
+addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } if (e.key === SESSION_KEY) { session = loadSession(); render(); } });
 // sync as soon as the internet comes back, when the app is reopened, and every few minutes
 addEventListener('online', () => scheduleSync(0));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { scheduleSync(0); checkForUpdate(); } });

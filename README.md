@@ -60,18 +60,45 @@ Joining needs internet once. After that the phone works offline.
 - The badge at the top shows sync: **✓ Synced**, **⏳ 3 to sync** (waiting for internet), or **⚠️** if
   something needs attention. Waiting entries are safe on the device and sync by themselves.
 
+## Logins (each person their own username and password)
+Needs the sheet script **version 3** (see *Updating the sync script later*).
+
+1. **Set up (once, by the owner):** open your Google Sheet → **Read me** tab: at the bottom is a **setup code**
+   (only someone who can open the Sheet sees it). In the app: **Sheet** tab → **👥 Logins → Set up logins** →
+   type that code, your name, a username and a new password. You are now the first **Admin**.
+2. **Give logins:** **Sheet** tab → **👥 Logins → ＋ Give someone a login**. Pick what they may do:
+   - **Admin** — everything, including giving logins (owner, Managing Director).
+   - **Office manager** — sees everything and adds entries. **Her edits wait for an admin to approve them**;
+     until then the entry and the totals stay as they were. Can't delete, change settings or give logins.
+   - **Store keeper** — adds expenses and sees only their own; sees no company money, projects or totals.
+3. **Each person signs in** on their phone: an existing phone shows **Sign in**; a new phone opens the invite
+   link (**Add a phone**) and types its username and password. "Entered by" then fills in by itself.
+4. When **everyone** has signed in: **👥 Logins → Require logins for everyone**. From then on old invite links
+   and the company code stop working. (It can be switched back.)
+
+- **Forgot a password?** An admin opens **👥 Logins**, taps the person, types a new password.
+- **Someone leaves?** An admin opens their login and unticks **Login is open**. Their phone is signed out at its
+  next sync and the company records leave it.
+- **Approving changes:** when an office manager edits something, admins see **✏️ changes waiting for your
+  approval** on Home → **Review** → **Approve** or **Reject**. Both are written in the Change Log.
+- **Edit / delete** asks for **your own** password. Passwords need at least 8 characters. 5 wrong tries lock a
+  login for 15 minutes (phones already signed in keep working).
+- Only use invite links that come from an admin, and type your password only into the app you installed from
+  them. Don't send the whole Google Sheet file to anyone: its hidden tabs hold the scrambled passwords.
+- Change your own password or sign out: tap your name at the top.
+
 ## The Google Sheet
 Tabs: **Summary** (Cash / Bank / Total balances, projects, month by month, who entered what), **Expenses**,
 **Money Received**, **Cash & Bank moves**, **Ledger** (running Cash / Bank / Total balances), **Change Log**. They update after every sync —
-**don't type in them**. The hidden `_sync` tab is the master copy: never edit or delete it.
+**don't type in them**. The hidden `_sync` tab is the master copy: never edit or delete it. The hidden `_users`
+and `_sessions` tabs hold the logins (passwords are stored scrambled): never edit them either.
 Need Excel? In Google Sheets: **File → Download → Microsoft Excel**.
 
 ## Good to know
 - The password stops casual changes; it is not bank-level security.
 - On a phone, don't delete the app while the badge shows **⏳ to sync** — those entries are only on that phone.
-- Anyone with an invite link can see and add records. Only send it to your own staff.
-  To shut everyone out, in Apps Script: **Project settings → Script properties** → change `KEY`,
-  then reconnect the main computer and send new invite links.
+- Until **Require logins** is on, anyone with an old invite link can see and add records. Only send links to
+  your own staff. With logins required, a link alone opens nothing.
 
 ## Updating the sync script later
 If `apps-script/Code.gs` changes: paste the new code in Apps Script → **Save** → **Deploy → Manage
@@ -82,8 +109,9 @@ deployments** → ✏️ → **Version: New version** → **Deploy**. The web ap
 ## For developers
 Start with **[HANDOVER.md](HANDOVER.md)**: how everything works, how to test and publish, and what is open.
 
-- Source: `src/` (`core.js`, `sync.js`, `main.js`, `shell.html`). Build: `node tools/build.js` → `docs/` (served by GitHub Pages).
-- Sync server: `apps-script/Code.gs`. Test it locally: `node tools/test-sheet-server.js`.
+- Source: `src/` (`core.js`, `sync.js`, `auth.js`, `main.js`, `shell.html`). Build: `node tools/build.js` → `docs/` (served by GitHub Pages).
+  `node tools/build.js --test` → `docs/test/`, a practice copy with its own storage and offline copy.
+- Sync server: `apps-script/Code.gs`. Test it locally: `node tools/test-sheet-server.js` and `node tools/test-auth.js`.
 - Try the app without Google: `node tools/mock-server.js` (prints a company code, web app link
   `http://127.0.0.1:8770/exec`) and serve `docs/` on `http://127.0.0.1:<port>/`.
 - Icons: `python3 tools/make-icons.py`.

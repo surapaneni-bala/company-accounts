@@ -7,14 +7,47 @@
  *
  * The hidden "_sync" tab is the master copy of every record. Summary, Expenses, Money Received,
  * Cash & Bank moves, Ledger and Change Log are rebuilt from it after every change.
+ *
+ * Logins (version 3): the hidden "_users" and "_sessions" tabs hold each person's login. Passwords
+ * and sign-in tokens are stored only as scrambled hashes. Until an admin switches on "Require logins",
+ * phones with the company code keep working exactly as before.
  */
 const SYNC_TAB = '_sync';
 const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log'];
-// record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move)
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T'];
+// record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
+// Change request (an office manager's edit, waiting for an admin to approve it)
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C'];
 const ACCOUNTS = ['Cash', 'Bank'];
+// every id the app makes looks like E-K7Q-0001, L-K7Q-lq2x0 or settings; anything else could carry markup into the app's pages
+const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
+const AT_RE = /^\d{4}-\d\d-\d\dT\d\d:\d\d$/;
+const CURS = ['USD', 'SSP'];
+// the fields an edit may change, per kind: an approved change request touches only these
+const EDITABLE = {
+  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate'],
+  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate'],
+  T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
+  P: ['name', 'value', 'valueCur'],
+};
+// The same checks the app makes before it shows a record. Anything else is refused: it would also break the tabs.
+const SHAPES = {
+  E: d => money_(d) && str_(d.paidTo) && str_(d.reason),
+  R: d => money_(d),
+  T: d => money_(d) && ACCOUNTS.indexOf(d.from) >= 0 && ACCOUNTS.indexOf(d.to) >= 0 && d.from !== d.to,
+  P: d => str_(d.name),
+  L: d => str_(d.text) && str_(d.at),
+  S: d => str_(d.company) && isObj_(d.pass) && str_(d.pass.salt) && str_(d.pass.hash),
+  C: d => !!EDITABLE[d.kind] && SAFE_ID.test(d.target) && isObj_(d.before) && isObj_(d.after) && str_(d.text) && AT_RE.test(d.at)
+    && ['waiting', 'approved', 'rejected'].indexOf(d.status) >= 0 && Object.keys(d.after).every(f => EDITABLE[d.kind].indexOf(f) >= 0),
+};
+const str_ = v => typeof v === 'string';
+const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
+const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
+// limits for logins other than admins (the app never sends more than MAX_PUSH records at once)
+const MAX_PUSH = 200;
+const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 2; // shown when the web app link is opened in a browser
+const VERSION = 3; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -63,52 +96,295 @@ function setup() {
 
 /* ---------- web app ---------- */
 function doGet() {
-  return json_({ ok: true, app: 'company-accounts', version: VERSION, kinds: KINDS });
+  return json_({ ok: true, app: 'company-accounts', version: VERSION, kinds: KINDS, logins: users_().length > 0, required: required_() });
 }
 
-// Body: { key, since, push: [{ id, k, u, d }] }  →  { ok, seq, sheet, pull: [{ id, k, u, d }] }
+// Sync body:  { key | token, since, push: [{ id, k, u, d }] }  →  { ok, seq, sheet, pull, refused, me }
+// Login body: { op: 'login' | 'setup' | 'logout' | 'password' | 'users' | 'saveUser' | 'require', … }
 function doPost(e) {
   let req;
   try { req = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'Bad request' }); }
-  const key = PropertiesService.getScriptProperties().getProperty('KEY');
-  if (!key) return json_({ ok: false, error: 'The Google Sheet is not set up yet: run setup() in Apps Script.' });
-  if (String(req.key || '').toUpperCase() !== key) return json_({ ok: false, error: 'Wrong company code.' });
+  if (!req || typeof req !== 'object') return json_({ ok: false, error: 'Bad request' });
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_WAIT_MS)) return json_({ ok: false, error: 'The Google Sheet is busy. It will retry by itself.' });
   try {
-    const ss = SpreadsheetApp.getActive();
-    const sh = syncTab_(ss);
-    const rows = readAll_(sh);
-    const result = merge_(rows, req.push, Number(req.since) || 0);
-    if (result.changed) {
-      sh.getRange(2, 1, result.rows.length, 5).setValues(result.rows);
-      rebuild_(ss, result.rows.map(toRec_));
-    }
-    return json_({ ok: true, version: VERSION, seq: result.seq, sheet: ss.getUrl(), kinds: KINDS, pull: result.pull });
+    return json_(req.op ? account_(req) : sync_(req));
   } finally {
     lock.releaseLock();
   }
 }
 
+function sync_(req) {
+  const who = who_(req);
+  if (who.error) return { ok: false, error: who.error, code: who.code };
+  const user = who.user;
+  const ss = SpreadsheetApp.getActive();
+  const sh = syncTab_(ss);
+  const rows = readAll_(sh);
+  const result = merge_(rows, req.push, Number(req.since) || 0, user);
+  let warning = '';
+  if (result.changed) {
+    sh.getRange(2, 1, result.rows.length, 5).setValues(result.rows);
+    // the records are saved; a problem drawing the readable tabs must never stop syncing
+    try { rebuild_(ss, result.rows.map(toRec_)); } catch (err) { warning = 'The readable tabs could not be refreshed: ' + err.message; Logger.log(warning); }
+  }
+  if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
+  return {
+    ok: true, version: VERSION, seq: result.seq, sheet: user && user.role === 'store' ? '' : ss.getUrl(), kinds: KINDS,
+    pull: result.pull.map(r => view_(user, r)).filter(Boolean), refused: result.refused, me: user ? public_(user) : null,
+    logins: !!user || users_().length > 0, warning: warning,
+  };
+}
+
+// Who is asking: a signed-in person (token), or a phone with the company code (no login, full access as before).
+function who_(req) {
+  if (req.token) {
+    const u = sessionUser_(String(req.token));
+    return u ? { user: u } : { error: SIGNED_OUT, code: 'LOGIN' };
+  }
+  const key = PropertiesService.getScriptProperties().getProperty('KEY');
+  if (!key) return { error: 'The Google Sheet is not set up yet: run setup() in Apps Script.' };
+  if (required_()) return { error: 'Please sign in with your username and password.', code: 'LOGIN' };
+  if (String(req.key || '').toUpperCase() !== key) return { error: 'Wrong company code.' };
+  return { user: null };
+}
+
+// What each login receives. Store keepers get only their own entries; only admins get the company password.
+function view_(user, rec) {
+  if (!user || user.role === 'admin') return rec;
+  if (rec.k === 'S') return { id: rec.id, k: rec.k, u: rec.u, d: { company: rec.d.company } };
+  if (user.role === 'manager') return rec;
+  return (rec.k === 'E' || rec.k === 'L') && rec.d.uid === user.id ? rec : null;
+}
+// What each login may change. before = the stored copy (null for a new record).
+function allowed_(user, p, before) {
+  if (!user || user.role === 'admin') return true;
+  if (before) return false; // only admins change what is already there (an office manager's edit is a change request)
+  if (p.d.uid !== user.id || p.d.deleted) return false; // a new record carries its sender's login and isn't born deleted
+  if (user.role === 'manager') return ['E', 'R', 'T', 'P', 'L', 'C'].indexOf(p.k) >= 0 && (p.k !== 'C' || p.d.status === 'waiting');
+  return p.k === 'E' || p.k === 'L'; // store keeper: own expenses and notes
+}
+
 // Pure merge: newest copy of each record wins. rows are [id, kind, u, seq, json].
-function merge_(rows, push, since) {
+// user = the signed-in person (null = company code); records they may not change are refused.
+function merge_(rows, push, since, user) {
   const out = rows.map(r => r.slice());
-  const index = {};
+  const index = Object.create(null); // ids come from phones: no inherited names like "constructor"
   out.forEach((r, i) => { index[r[0]] = i; });
   let seq = out.reduce((m, r) => Math.max(m, Number(r[3]) || 0), 0);
   let changed = false;
-  (Array.isArray(push) ? push : []).forEach(p => {
-    if (!p || typeof p.id !== 'string' || !p.id || KINDS.indexOf(p.k) < 0 || typeof p.u !== 'number' || !p.d || typeof p.d !== 'object') return;
+  const refused = [];
+  const limited = !!user && user.role !== 'admin', now = Date.now();
+  (Array.isArray(push) ? push : []).forEach((p, n) => {
+    if (!p || typeof p.id !== 'string' || !p.id || KINDS.indexOf(p.k) < 0 || typeof p.u !== 'number' || !isObj_(p.d)) return;
+    if (!SAFE_ID.test(p.id) || (p.k !== 'S' && (p.k === 'L' ? p.d.lid : p.d.id) !== p.id) || !SHAPES[p.k](p.d)) { refused.push(p.id); return; }
+    if (limited && (n >= MAX_PUSH || JSON.stringify(p.d).length > MAX_RECORD)) { refused.push(p.id); return; }
     const i = index[p.id];
-    if (i !== undefined && Number(out[i][2]) >= p.u) return;
+    if (i !== undefined && out[i][1] !== p.k) { refused.push(p.id); return; } // a record never changes kind
+    const u = limited ? Math.min(p.u, now) : p.u; // a phone can't stamp its copy in the future and so block later edits
+    if (i !== undefined && Number(out[i][2]) >= u) return; // already have this copy or a newer one (e.g. sent again after a lost reply)
+    if (!allowed_(user || null, p, i === undefined ? null : JSON.parse(out[i][4]))) { refused.push(p.id); return; }
+    const t = p.k === 'C' ? index[p.d.target] : 0;
+    if (t === undefined || (p.k === 'C' && out[t][1] !== p.d.kind)) { refused.push(p.id); return; } // a change request needs its entry
+    const d = limited ? Object.assign({}, p.d, { by: user.name }) : p.d; // signed by the login that sent it
     seq += 1;
     changed = true;
-    const row = [p.id, p.k, p.u, seq, JSON.stringify(p.d)];
+    const row = [p.id, p.k, u, seq, JSON.stringify(d)];
     if (i === undefined) { index[p.id] = out.length; out.push(row); } else { out[i] = row; }
   });
   const pull = out.filter(r => Number(r[3]) > since).map(toRec_);
-  return { rows: out, seq: seq, changed: changed, pull: pull };
+  return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused };
 }
+
+/* ---------- logins ---------- */
+const USERS_TAB = '_users';
+const SESSIONS_TAB = '_sessions';
+const USER_COLS = ['id', 'username', 'name', 'role', 'salt', 'hash', 'active', 'fails', 'lockUntil', 'createdAt', 'createdBy', 'lastLogin'];
+const SESSION_COLS = ['token', 'uid', 'createdAt', 'seen', 'device'];
+const ROLES = ['admin', 'manager', 'store']; // admin = everything · manager = sees all, adds and edits · store = own entries
+const PW_MIN = 8;
+const PW_ROUNDS = 1000; // ponytail: repeated SHA-256 (Apps Script has no PBKDF2) slows down guessing; raise it if signing in stays quick
+const MAX_FAILS = 5;
+const LOCK_MS = 15 * 60 * 1000;
+const SESSION_MS = 30 * 864e5; // signed out after 30 days without using the app
+const SEEN_EVERY_MS = 864e5;   // "last used" is written at most once a day
+const MAX_SESSIONS = 10; // signed-in phones per person; the oldest is signed out
+const SIGNED_OUT = 'You have been signed out. Please sign in again.';
+// one message for every failure, so nobody learns which usernames exist or are locked
+const WRONG_LOGIN = 'Wrong username or password. After 5 wrong tries, wait 15 minutes.';
+
+function account_(req) {
+  if (req.op === 'login') return login_(req);
+  if (req.op === 'setup') return setupLogins_(req);
+  const me = req.token ? sessionUser_(String(req.token)) : null;
+  if (!me) return { ok: false, error: SIGNED_OUT, code: 'LOGIN' };
+  if (req.op === 'logout') { endSessions_('', sha_(String(req.token)), true); return { ok: true }; }
+  if (req.op === 'password') return changePassword_(me, req);
+  if (me.role !== 'admin') return { ok: false, error: 'Only an admin can do this.' };
+  if (req.op === 'users') return { ok: true, users: users_().map(public_), required: required_() };
+  if (req.op === 'saveUser') return saveUser_(me, req.user || {});
+  if (req.op === 'require') {
+    PropertiesService.getScriptProperties().setProperty('REQUIRE_LOGIN', req.on ? '1' : '0');
+    return { ok: true, required: !!req.on };
+  }
+  return { ok: false, error: 'Unknown request' };
+}
+const required_ = () => PropertiesService.getScriptProperties().getProperty('REQUIRE_LOGIN') === '1';
+
+// The very first login is the owner's. It needs the company code AND a one-time setup code that is written only
+// inside the Google Sheet ("Read me" tab), so only the person who owns the sheet can become the first admin.
+function setupLogins_(req) {
+  if (users_().length) return { ok: false, error: 'Logins are already set up. Ask an admin to give you a login.' };
+  const props = PropertiesService.getScriptProperties(), key = props.getProperty('KEY');
+  if (!key || String(req.key || '').toUpperCase() !== key) return { ok: false, error: 'Wrong company code.' };
+  if (String(req.setupCode || '').trim().toUpperCase() !== setupCode_()) return { ok: false, error: 'Wrong setup code. Open your Google Sheet, "Read me" tab: the setup code is at the bottom.' };
+  const made = saveUser_({ name: 'Setup' }, { name: req.name, username: req.username, role: 'admin', password: req.newPassword, active: true });
+  if (!made.ok) return made;
+  const list = users_();
+  list[0].lastLogin = Date.now();
+  saveUsers_(list);
+  props.deleteProperty('SETUP_CODE');
+  readMe_().getRange(SETUP_ROW, 1, 2, 1).setValues([['Logins are set up. Admins give logins in the app: Sheet tab → Logins.'], ['']]);
+  return { ok: true, token: startSession_(list[0], req.device), me: public_(list[0]) };
+}
+const SETUP_ROW = 11;
+const readMe_ = () => SpreadsheetApp.getActive().getSheetByName('Read me') || SpreadsheetApp.getActive().insertSheet('Read me', 0);
+function setupCode_() {
+  const props = PropertiesService.getScriptProperties();
+  let code = props.getProperty('SETUP_CODE');
+  if (!code) {
+    code = Utilities.getUuid().replace(/-/g, '').slice(0, 8).toUpperCase();
+    props.setProperty('SETUP_CODE', code);
+    const rm = readMe_();
+    rm.getRange(SETUP_ROW, 1, 2, 1).setValues([['Logins setup code — type it once in the app (Sheet tab → Logins → Set up logins). Only someone who can open this sheet can see it:'], [code]]);
+    rm.getRange(SETUP_ROW + 1, 1).setFontSize(22).setFontWeight('bold').setFontColor(COLOR.in);
+  }
+  return code;
+}
+
+function login_(req) {
+  const list = users_(), now = Date.now();
+  const u = list.filter(x => x.username === cleanUsername_(req.username))[0];
+  if (!u || !u.active || u.lockUntil > now) return { ok: false, error: WRONG_LOGIN };
+  if (pwHash_(u.salt, String(req.password || '')) !== u.hash) return wrongTry_(list, u);
+  u.fails = 0; u.lockUntil = 0; u.lastLogin = now;
+  saveUsers_(list);
+  return { ok: true, token: startSession_(u, req.device), me: public_(u) };
+}
+
+// Admins add a login or change one: name, username, role, password reset, disable/enable.
+function saveUser_(me, input) {
+  const list = users_(), now = Date.now();
+  const old = input.id ? list.filter(x => x.id === String(input.id))[0] : null;
+  if (input.id && !old) return { ok: false, error: 'That login no longer exists.' };
+  const u = old ? Object.assign({}, old) : { id: 'U-' + Utilities.getUuid().slice(0, 8).toUpperCase(), active: true, fails: 0, lockUntil: 0, createdAt: now, createdBy: me.name, lastLogin: 0, salt: '', hash: '' };
+  if (input.name !== undefined) u.name = String(input.name).trim().replace(/\s+/g, ' ');
+  if (input.username !== undefined) u.username = cleanUsername_(input.username);
+  if (input.role !== undefined) u.role = String(input.role);
+  if (input.active !== undefined) u.active = !!input.active;
+  const pw = input.password === undefined || input.password === '' ? null : String(input.password);
+  if (!old && pw === null) return { ok: false, error: 'Give the new login a password.' };
+  if (!/^[a-z0-9._-]{2,30}$/.test(u.username)) return { ok: false, error: 'Username: 2 to 30 letters or numbers, no spaces.' };
+  if (list.some(x => x.id !== u.id && x.username === u.username)) return { ok: false, error: 'This username is already taken.' };
+  if (!u.name || u.name.length > 60) return { ok: false, error: "Type the person's name." };
+  if (ROLES.indexOf(u.role) < 0) return { ok: false, error: 'Pick what this person may do.' };
+  if (pw !== null && pw.length < PW_MIN) return { ok: false, error: 'The password needs at least ' + PW_MIN + ' characters.' };
+  const admins = list.filter(x => x.id !== u.id && x.active && x.role === 'admin').length + (u.active && u.role === 'admin' ? 1 : 0);
+  if (!admins) return { ok: false, error: 'There must always be at least one admin.' };
+  if (pw !== null) { u.salt = newSecret_().slice(0, 32); u.hash = pwHash_(u.salt, pw); u.fails = 0; u.lockUntil = 0; }
+  saveUsers_(old ? list.map(x => (x.id === u.id ? u : x)) : list.concat([u]));
+  // a new password, a new role or a disabled login: signed out everywhere, so the phone reloads what it may see
+  if (old && (pw !== null || !u.active || u.role !== old.role)) endSessions_(u.id, '', false);
+  return { ok: true, users: users_().map(public_) };
+}
+
+// a wrong password counts towards the 15-minute lock, whether signing in or changing it
+function wrongTry_(list, u) {
+  u.fails += 1;
+  if (u.fails >= MAX_FAILS) { u.fails = 0; u.lockUntil = Date.now() + LOCK_MS; }
+  saveUsers_(list);
+  return { ok: false, error: WRONG_LOGIN };
+}
+
+function changePassword_(me, req) {
+  const list = users_();
+  const u = list.filter(x => x.id === me.id)[0];
+  if (u.lockUntil > Date.now()) return { ok: false, error: WRONG_LOGIN };
+  if (pwHash_(u.salt, String(req.old || '')) !== u.hash) return Object.assign(wrongTry_(list, u), { error: 'Your current password is wrong. After 5 wrong tries, wait 15 minutes.' });
+  const pw = String(req.password || '');
+  if (pw.length < PW_MIN) return { ok: false, error: 'The new password needs at least ' + PW_MIN + ' characters.' };
+  u.salt = newSecret_().slice(0, 32); u.hash = pwHash_(u.salt, pw);
+  saveUsers_(list);
+  endSessions_(u.id, sha_(String(req.token)), false); // other phones sign in again; this one stays
+  return { ok: true };
+}
+
+/* sessions: one row per signed-in phone; the token itself is never stored, only its hash */
+function sessionUser_(token) {
+  const h = sha_(token), now = Date.now();
+  const sessions = rowsOf_(SESSIONS_TAB, SESSION_COLS);
+  const s = sessions.filter(x => String(x.token) === h)[0];
+  if (!s || now - Number(s.seen) > SESSION_MS) return null;
+  const u = users_().filter(x => x.id === String(s.uid))[0];
+  if (!u || !u.active) return null;
+  if (now - Number(s.seen) > SEEN_EVERY_MS) { s.seen = now; saveRows_(SESSIONS_TAB, SESSION_COLS, sessions); }
+  return u;
+}
+function startSession_(u, device) {
+  const token = newSecret_(), now = Date.now();
+  const live = rowsOf_(SESSIONS_TAB, SESSION_COLS).filter(s => now - Number(s.seen) <= SESSION_MS);
+  const theirs = live.filter(s => String(s.uid) === u.id).sort((a, b) => Number(b.seen) - Number(a.seen)).slice(0, MAX_SESSIONS - 1);
+  const keep = live.filter(s => String(s.uid) !== u.id).concat(theirs);
+  saveRows_(SESSIONS_TAB, SESSION_COLS, keep.concat([{ token: sha_(token), uid: u.id, createdAt: now, seen: now, device: String(device || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 20) }]));
+  return token;
+}
+// only = true: end just the session with this token hash. Otherwise end all of uid's sessions except that one.
+function endSessions_(uid, tokenHash, only) {
+  const left = rowsOf_(SESSIONS_TAB, SESSION_COLS).filter(s => (only ? String(s.token) !== tokenHash : String(s.uid) !== uid || String(s.token) === tokenHash));
+  saveRows_(SESSIONS_TAB, SESSION_COLS, left);
+}
+
+function users_() {
+  return rowsOf_(USERS_TAB, USER_COLS).map(u => Object.assign(u, {
+    id: String(u.id), username: String(u.username), name: String(u.name), role: String(u.role), salt: String(u.salt), hash: String(u.hash),
+    active: String(u.active) === 'true', fails: Number(u.fails) || 0, lockUntil: Number(u.lockUntil) || 0, lastLogin: Number(u.lastLogin) || 0,
+  }));
+}
+const saveUsers_ = list => saveRows_(USERS_TAB, USER_COLS, list.map(u => Object.assign({}, u, { active: u.active ? 'true' : 'false' })));
+const public_ = u => ({ id: u.id, username: u.username, name: u.name, role: u.role, active: u.active, lastLogin: u.lastLogin || 0 });
+const cleanUsername_ = s => String(s || '').trim().toLowerCase();
+
+// small hidden tables: a header row, then one object per row; stored as plain text so nothing is reformatted
+function rowsOf_(name, cols) {
+  const sh = SpreadsheetApp.getActive().getSheetByName(name);
+  const n = sh ? sh.getLastRow() - 1 : 0;
+  return n > 0 ? sh.getRange(2, 1, n, cols.length).getValues().map(r => {
+    const o = {};
+    cols.forEach((c, i) => { o[c] = r[i]; });
+    return o;
+  }) : [];
+}
+function saveRows_(name, cols, objs) {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(name);
+  if (!sh) { sh = ss.insertSheet(name); sh.hideSheet(); }
+  const data = [cols].concat(objs.map(o => cols.map(c => (o[c] === undefined || o[c] === null ? '' : String(o[c])))));
+  const had = sh.getLastRow();
+  // write first, then remove leftover rows: a failure halfway never leaves the table empty
+  sh.getRange(1, 1, data.length, cols.length).setNumberFormat('@').setValues(data);
+  if (had > data.length) sh.getRange(data.length + 1, 1, had - data.length, cols.length).clearContent();
+}
+
+function sha_(s) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8)
+    .map(b => ('0' + ((b + 256) % 256).toString(16)).slice(-2)).join('');
+}
+function pwHash_(salt, pw) {
+  let h = sha_(salt + '|' + pw);
+  for (let i = 1; i < PW_ROUNDS; i++) h = sha_(salt + h);
+  return h;
+}
+const newSecret_ = () => (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, ''); // 64 random hex characters
 
 /* ---------- storage ---------- */
 function syncTab_(ss) {
@@ -128,9 +404,10 @@ function toRec_(r) { return { id: String(r[0]), k: String(r[1]), u: Number(r[2])
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
 /* ---------- readable tabs ---------- */
-function rebuild_(ss, recs) {
+function rebuild_(ss, all) {
+  const recs = all.filter(r => SHAPES[r.k] && SHAPES[r.k](r.d)); // a damaged record is left out instead of breaking every tab
   const of = k => recs.filter(r => r.k === k).map(r => r.d);
-  const projects = {};
+  const projects = Object.create(null);
   of('P').forEach(p => { projects[p.id] = p; });
   const pname = id => (id ? (projects[id] ? projects[id].name : 'Unknown project') : 'General (no project)');
   const live = k => of(k).filter(x => !x.deleted && (k !== 'T' || (ACCOUNTS.indexOf(x.from) >= 0 && ACCOUNTS.indexOf(x.to) >= 0))).sort(byAt_);
@@ -185,7 +462,7 @@ function freshTab_(ss, name, color) {
   return sh;
 }
 function title_(sh, text, sub) {
-  sh.getRange(1, 1).setValue(text).setFontSize(18).setFontWeight('bold').setFontColor(COLOR.ink);
+  sh.getRange(1, 1).setValue(safe_(text)).setFontSize(18).setFontWeight('bold').setFontColor(COLOR.ink);
   sh.getRange(2, 1).setValue(sub).setFontStyle('italic').setFontColor(COLOR.muted);
 }
 // Styled table at row r: dark header, zebra rows, column formats, optional bold total row.
@@ -260,7 +537,7 @@ function summary_(ss, c) {
     ['TOTAL', '', '', '', '', recv.USD, spent.USD, bal.USD, recv.SSP, spent.SSP, bal.SSP]);
 
   r = section_(sh, r + 2, 'Month by month');
-  const months = {};
+  const months = Object.create(null);
   c.E.concat(c.R).forEach(x => { months[x.at.slice(0, 7)] = true; });
   const mRows = Object.keys(months).sort().map(m => {
     const e = c.E.filter(x => x.at.indexOf(m) === 0), g = c.R.filter(x => x.at.indexOf(m) === 0);
@@ -270,7 +547,7 @@ function summary_(ss, c) {
     ['', 'USD', 'USD', 'USD', 'SSP', 'SSP', 'SSP', ''], ['TOTAL', recv.USD, spent.USD, bal.USD, recv.SSP, spent.SSP, bal.SSP, c.E.length + c.R.length]);
 
   r = section_(sh, r + 2, 'Entries by person');
-  const people = {};
+  const people = Object.create(null);
   c.E.concat(c.R).forEach(x => { people[x.by || '—'] = true; });
   const pRows = Object.keys(people).sort().map(n => {
     const e = c.E.filter(x => (x.by || '—') === n), g = c.R.filter(x => (x.by || '—') === n);

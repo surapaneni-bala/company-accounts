@@ -30,14 +30,20 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
+// A new record made by a signed-in person also carries their login (uid); edits keep the original one.
 function update(patch) {
   const now = Date.now(), dirty = new Set(S.dirty || []), stamped = {};
+  const uid = signedIn() ? { uid: session.user.id } : {};
   for (const key of Object.keys(SYNC_KEYS)) {
     if (!patch[key]) continue;
-    const before = new Set(S[key]);
-    stamped[key] = patch[key].map(r => { if (before.has(r)) return r; dirty.add(recId(key, r)); return { ...r, u: now }; });
+    const before = new Set(S[key]), known = new Set(S[key].map(r => recId(key, r)));
+    stamped[key] = patch[key].map(r => {
+      if (before.has(r)) return r;
+      dirty.add(recId(key, r));
+      return { ...r, ...(known.has(recId(key, r)) ? {} : uid), u: now };
+    });
   }
   if ('company' in patch || 'pass' in patch) { dirty.add('settings'); stamped.settingsU = now; }
   S = { ...S, ...patch, ...stamped, dirty: S.link ? [...dirty] : [] };
@@ -127,13 +133,16 @@ function unlock(why) {
   if (isUnlocked()) return Promise.resolve(true);
   return new Promise(resolve => {
     const d = $('#pw');
-    $('#pwWhy').textContent = why; $('#pwIn').value = ''; $('#pwErr').textContent = '';
+    // signed in: your own password; otherwise the company password, as before logins
+    const pass = signedIn() ? session.check : S.pass;
+    $('#pwWhy').textContent = signedIn() ? why.replace('the password', 'your password') : why;
+    $('#pwIn').value = ''; $('#pwErr').textContent = ''; $('#pwIn').placeholder = signedIn() ? 'Your password' : 'Password';
     d.returnValue = '';
     d.showModal(); $('#pwIn').focus();
     $('#pwCancel').onclick = () => d.close();
     $('#pwForm').onsubmit = async e => {
       e.preventDefault();
-      if (await hashPw($('#pwIn').value, S.pass.salt) === S.pass.hash) {
+      if (pass && await (signedIn() ? slowHash : hashPw)($('#pwIn').value, pass.salt) === pass.hash) {
         unlockedUntil = Date.now() + UNLOCK_MS; d.close('ok'); renderLock(); resolve(true);
       } else {
         $('#pwErr').textContent = 'Wrong password. Try again.';
@@ -175,23 +184,31 @@ function suggestions(field) {
 }
 const datalists = () => ['paidTo', 'reason', 'location', 'by'].map(f => `<datalist id="dl-${f}">${suggestions(f).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('');
 const textField = (name, label, ph, val, req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input name="${name}" placeholder="${ph}" value="${esc(val)}" ${['paidTo', 'reason', 'location'].includes(name) ? `list="dl-${name}"` : ''} autocomplete="off" maxlength="160" ${req ? 'required' : ''}></label>`;
-const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${c}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
-const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${val || ''}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
-const byField = () => `<label class="fld"><span>Your name <em>(who is entering this)</em></span><input name="by" placeholder="Type your name" value="${esc(S.lastBy || '')}" list="dl-by" autocomplete="off" maxlength="60" required></label>`;
-const accountChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="curseg">${ACCOUNTS.map(a => `<label><input type="radio" name="mode" value="${a}" ${a === accountOf(cur) ? 'checked' : ''}><span><b>${ACCOUNT_ICON[a]} ${a}</b><small>${a === 'Cash' ? 'Cash in hand' : 'Bank account'}</small></span></label>`).join('')}</div></div>`;
+const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${esc(c)}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
+const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${esc(val || '')}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
+const byField = () => (signedIn()
+  ? `<input type="hidden" name="by" value="${esc(myName())}"><p class="muted">Entered by <b>${esc(myName())}</b></p>`
+  : `<label class="fld"><span>Your name <em>(who is entering this)</em></span><input name="by" placeholder="Type your name" value="${esc(S.lastBy || '')}" list="dl-by" autocomplete="off" maxlength="60" required></label>`);
+// who confirms a delete: the signed-in person, or a typed name on phones without logins
+function confirmBy(text) {
+  if (signedIn()) return confirm(text) ? myName() : '';
+  return clean(prompt(`${text}\n\nType your name to confirm:`, S.lastBy || ''));
+}
+const accountChips = (cur, label) => `<div class="fld"><span>${label}</span><div class="curseg">${ACCOUNTS.map(a => `<label><input type="radio" name="mode" value="${esc(a)}" ${a === accountOf(cur) ? 'checked' : ''}><span><b>${ACCOUNT_ICON[a]} ${a}</b><small>${a === 'Cash' ? 'Cash in hand' : 'Bank account'}</small></span></label>`).join('')}</div></div>`;
 function projectSelect(cur, optional) {
+  if (!can('projects')) return '<input type="hidden" name="project" value="">';
   const ps = S.projects.filter(p => !p.deleted);
   const isNew = !optional && (!ps.length || cur === '__new');
   return `<label class="fld"><span>Project${optional ? ' <em>(optional)</em>' : ''}</span><select name="project">
     ${optional ? `<option value="">No project — general</option>` : ''}
-    ${ps.map(p => `<option value="${p.id}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+    ${ps.map(p => `<option value="${esc(p.id)}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
     ${optional ? '' : `<option value="__new" ${isNew ? 'selected' : ''}>＋ New project…</option>`}
   </select></label>
   ${optional ? '' : `<label class="fld newp" ${isNew ? '' : 'hidden'}><span>New project name</span><input name="newProject" placeholder="e.g. Warehouse — Juba" maxlength="80"></label>`}`;
 }
 function whenField(at, editable) {
-  if (editable) return `<label class="fld"><span>Date &amp; time</span><input type="datetime-local" name="at" value="${at}" required></label>`;
-  return `<div class="fld"><span>Date &amp; time</span><div class="when"><div><b>${fmtWhen(stamp())}</b><small>Set automatically</small></div><button type="button" class="btn small ghost" data-act="unlockDate">🔒 Change</button></div></div>`;
+  if (editable) return `<label class="fld"><span>Date &amp; time</span><input type="datetime-local" name="at" value="${esc(at)}" required></label>`;
+  return `<div class="fld"><span>Date &amp; time</span><div class="when"><div><b>${fmtWhen(stamp())}</b><small>Set automatically</small></div>${can('date') ? '<button type="button" class="btn small ghost" data-act="unlockDate">🔒 Change</button>' : ''}</div></div>`;
 }
 
 /* ---------- views ---------- */
@@ -200,6 +217,11 @@ function render() {
   const ready = !!S;
   $('#hdr').hidden = $('#tabs').hidden = !ready;
   if (!ready) { main.innerHTML = viewSetup(); $('[autofocus]', main)?.focus(); return; }
+  if (mustSignIn()) { $('#hdr').hidden = $('#tabs').hidden = true; main.innerHTML = viewSignIn(); $('[autofocus]', main)?.focus(); return; }
+  if (tab === 'proj' && !can('projects')) tab = 'home';
+  $('#tabs [data-tab=proj]').hidden = !can('projects');
+  $('#whoChip').hidden = !signedIn();
+  $('#whoChip').textContent = signedIn() ? `👤 ${session.user.name.split(' ')[0]}` : '';
   $('#coName').textContent = S.company;
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
@@ -210,9 +232,10 @@ function render() {
 let setupMode = ''; // '' = decide when drawn: an invite link in the address opens 'join'
 const isPhone = () => matchMedia('(pointer: coarse)').matches;
 const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const APP_LOGO = `<div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>`;
 function viewSetup() {
   const mode = setupMode || (inviteFromHash() ? 'join' : 'choose');
-  const logo = `<div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>`;
+  const logo = APP_LOGO;
   const tip = isPhone() && !isInstalled() ? `<p class="note">📲 <b>First install the app:</b> iPhone — in Safari tap <b>Share → Add to Home Screen</b>. Android — in Chrome tap <b>⋮ → Add to Home screen</b>. Then open <b>Accounts</b> from your home screen.</p>` : '';
   const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="choose">← Back</button></p>`;
   if (mode === 'join') return `<section class="setup card pad">${logo}
@@ -221,6 +244,7 @@ function viewSetup() {
     <form data-form="join">
       <label class="fld"><span>Invite link</span><input name="invite" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" autofocus></label>
       <p class="invite-hint"></p>
+      <div class="loginfields" hidden>${signInFields(false)}</div>
       <details class="manual"><summary>Join with the web app link and code instead</summary>
         <label class="fld"><span>Web app link</span><input name="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
         <label class="fld"><span>Company code</span><input name="key" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab"></label>
@@ -265,8 +289,10 @@ function viewHome() {
   const spent = byCur(E), recv = byCur(R), bal = balances();
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
-  return `${updateBanner()}${lookalikeBanner()}${backupBanner()}
-  <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances">
+  const seeMoney = can('money');
+  return `${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
+  ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">Your expenses — only you and the office see them.</p>`}
+  <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
     ${CURS.map(c => `<div class="balrow">
       <div class="balhead"><span class="cur-tag">${c}</span><span class="baltot${bal[c].Total < 0 ? ' neg' : ''}">${plain(bal[c].Total)}</span><small>total</small></div>
@@ -276,9 +302,9 @@ function viewHome() {
   </section>
   <div class="actions">
     <button class="tile out" data-act="addExpense"><span class="ic">−</span><span><b>Add expense</b><small>Money paid out</small></span></button>
-    <button class="tile in" data-act="addCredit"><span class="ic">+</span><span><b>Money received</b><small>From a project</small></span></button>
+    <button class="tile in" data-act="addCredit" ${seeMoney ? '' : 'hidden'}><span class="ic">+</span><span><b>Money received</b><small>From a project</small></span></button>
     <button class="tile bulk" data-act="addBulk"><span class="ic">☰</span><span><b>Add many at once</b><small>Several payments together, with a total</small></span></button>
-    <button class="tile bulk move" data-act="addMove"><span class="ic">⇄</span><span><b>Move money</b><small>Cash into the bank, or bank to cash — not spending</small></span></button>
+    <button class="tile bulk move" data-act="addMove" ${seeMoney ? '' : 'hidden'}><span class="ic">⇄</span><span><b>Move money</b><small>Cash into the bank, or bank to cash — not spending</small></span></button>
   </div>
   <div class="minis">
     <div class="mini"><small>Spent today</small>${curLines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
@@ -298,7 +324,7 @@ function backupBanner() {
 function itemRow(x, k, showDate) {
   const when = [showDate ? fmtDay(x.at.slice(0, 10)) : '', fmtTime(x.at), x.by && 'by ' + x.by];
   if (k === 'T') {
-    return `<button class="row move" data-act="open" data-kind="T" data-id="${x.id}">
+    return `<button class="row move" data-act="open" data-kind="T" data-id="${esc(x.id)}">
     <span class="dot">⇄</span>
     <span class="main"><span class="t"><span class="tt">${ACCOUNT_ICON[x.from]} ${x.from} → ${ACCOUNT_ICON[x.to]} ${x.to}</span>${x.manualDate ? '<i class="tag warn">Date set</i>' : ''}</span><span class="s">${[x.note, ...when].filter(Boolean).map(esc).join(' · ')}</span></span>
     <span class="amt">${money(x.amount, x.cur)}</span></button>`;
@@ -307,8 +333,8 @@ function itemRow(x, k, showDate) {
   const title = isE ? x.reason : `From ${projName(x.project)}`;
   const acct = accountOf(x.mode);
   const sub = [isE ? x.paidTo : x.note, isE ? x.location : '', `${ACCOUNT_ICON[acct]} ${acct}`, ...when].filter(Boolean).map(esc).join(' · ');
-  const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '');
-  return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${x.id}">
+  const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '') + (waitingFor(x.id).length ? '<i class="tag warn">Change waiting</i>' : '');
+  return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${esc(x.id)}">
     <span class="dot">${isE ? '−' : '+'}</span>
     <span class="main"><span class="t"><span class="tt">${esc(title)}</span>${tags}</span><span class="s">${sub}</span></span>
     <span class="amt">${isE ? '−' : '+'}${money(x.amount, x.cur)}</span></button>`;
@@ -317,12 +343,12 @@ function itemRow(x, k, showDate) {
 function viewHistory() {
   const all = live(S[COLL[histKind]]);
   const months = [...new Set(all.map(x => x.at.slice(0, 7)))].sort().reverse();
-  return `<div class="seg" role="tablist">
+  return `<div class="seg" role="tablist" ${can('money') ? '' : 'hidden'}>
       ${[['E', '− Out'], ['R', '+ In'], ['T', '⇄ Moves']].map(([k, label]) => `<button data-act="hist" data-k="${k}" class="${histKind === k ? 'on' : ''}" role="tab" aria-selected="${histKind === k}">${label}</button>`).join('')}
     </div>
     <div class="filters">
       <input type="search" id="q" placeholder="Search name, reason, place, USD/SSP…" value="${esc(histQuery)}" aria-label="Search">
-      <select id="month" aria-label="Month"><option value="">All time</option>${months.map(m => `<option value="${m}" ${m === histMonth ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select>
+      <select id="month" aria-label="Month"><option value="">All time</option>${months.map(m => `<option value="${esc(m)}" ${m === histMonth ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select>
     </div>
     <div id="histRes">${histResults()}</div>`;
 }
@@ -350,7 +376,7 @@ function viewProjects() {
 }
 function projCard(p) {
   const s = projStats(p.id);
-  return `<button class="card proj" data-act="openProject" data-id="${p.id}">
+  return `<button class="card proj" data-act="openProject" data-id="${esc(p.id)}">
     <span class="ph"><b>${esc(p.name)}</b><span class="chev">›</span></span>
     ${projBar(s)}${projStatsGrid(s)}
   </button>`;
@@ -359,20 +385,21 @@ function projCard(p) {
 function viewSheet() {
   return `<div class="stack">
       ${syncCard()}
-      <section class="card pad">
+      ${loginsCard()}
+      <section class="card pad" ${can('import') ? '' : 'hidden'}>
         <h3>📥 Old entries</h3>
         <p class="muted">Have expenses or cash/bank moves from before you started using the app? Paste the whole list in once — they go to every device and the Google Sheet.</p>
         <button class="btn ghost" data-act="importOld">Import old entries 🔒</button>
       </section>
-      <section class="card pad">
+      <section class="card pad" ${can('backup') ? '' : 'hidden'}>
         <h3>💾 Backup file</h3>
         <p class="muted">${S.lastBackup ? 'Last backup: <b>' + fmtAbs(S.lastBackup) + '</b>.' : '<b>No backup file yet.</b>'} ${S.link ? 'Your records are also kept in the company Google Sheet.' : 'Your records are saved on this device only — connect the Google Sheet above, or save a backup file every week.'}</p>
-        <div class="two"><button class="btn ghost" data-act="backup">Save backup</button><button class="btn ghost" data-act="restore">Restore 🔒</button></div>
+        <div class="two"><button class="btn ghost" data-act="backup">Save backup</button>${can('restore') ? '<button class="btn ghost" data-act="restore">Restore 🔒</button>' : ''}</div>
         <input type="file" id="restoreFile" accept=".json,application/json" hidden>
       </section>
       <section class="card pad">
         <h3>⚙️ Settings</h3>
-        <div class="setrow"><span>${esc(S.company)}<br><span class="muted">Company name, password · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
       </section>
@@ -383,7 +410,7 @@ function viewSheet() {
 function expenseForm(old) {
   const d = old || { cur: defCur(), amount: '', paidTo: '', reason: '', location: S.lastLoc || '', project: S.lastExpProject || '', mode: S.lastMode || 'Cash' };
   openSheet(`${head(old ? 'Edit expense' : 'Add expense', 'out', old?.id)}
-    <form data-form="expense" data-id="${old?.id || ''}">
+    <form data-form="expense" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${textField('paidTo', 'Paid to', 'Who did you pay?', d.paidTo)}
@@ -392,31 +419,31 @@ function expenseForm(old) {
       ${projectSelect(d.project, true)}
       ${accountChips(d.mode, 'Paid from')}
       ${whenField(old?.at, !!old)}
-      ${byField()}
+      ${byField()}${approvalNote(old)}
       <p class="err"></p>
-      <button class="btn out">${old ? 'Save changes' : 'Save expense'}</button>
+      <button class="btn out">${old ? saveLabel() : 'Save expense'}</button>
     </form>${datalists()}`);
 }
 function creditForm(old, presetProject) {
   const d = old || { cur: defCur(), amount: '', project: presetProject || S.lastProject || '', mode: 'Bank', note: '' };
   openSheet(`${head(old ? 'Edit money received' : 'Money received', 'in', old?.id)}
-    <form data-form="credit" data-id="${old?.id || ''}">
+    <form data-form="credit" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${projectSelect(d.project, false)}
       ${accountChips(d.mode, 'Received into')}
       ${textField('note', 'Note', 'e.g. 2nd installment', d.note, false)}
       ${whenField(old?.at, !!old)}
-      ${byField()}
+      ${byField()}${approvalNote(old)}
       <p class="err"></p>
-      <button class="btn in">${old ? 'Save changes' : 'Save money received'}</button>
+      <button class="btn in">${old ? saveLabel() : 'Save money received'}</button>
     </form>${datalists()}`);
 }
 function moveForm(old) {
   const d = old || { cur: defCur(), amount: '', from: 'Cash', note: '' };
   openSheet(`${head(old ? 'Edit money move' : 'Move money', '', old?.id)}
     <p class="hint">Putting cash into the bank (or taking cash out) is not spending — the total stays the same.</p>
-    <form data-form="move" data-id="${old?.id || ''}">
+    <form data-form="move" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       <div class="fld"><span>Which way?</span><div class="curseg">
@@ -425,9 +452,9 @@ function moveForm(old) {
       </div></div>
       ${textField('note', 'Note', 'e.g. Deposit at the bank', d.note, false)}
       ${whenField(old?.at, !!old)}
-      ${byField()}
+      ${byField()}${approvalNote(old)}
       <p class="err"></p>
-      <button class="btn primary">${old ? 'Save changes' : 'Save move'}</button>
+      <button class="btn primary">${old ? saveLabel() : 'Save move'}</button>
     </form>${datalists()}`);
 }
 const bulkRow = () => `<div class="brow"><span class="n"></span><input name="amount" inputmode="decimal" placeholder="Amount" autocomplete="off" aria-label="Amount"><input name="paidTo" placeholder="Paid to" list="dl-paidTo" autocomplete="off" maxlength="160" aria-label="Paid to"><input name="reason" placeholder="Reason" list="dl-reason" autocomplete="off" maxlength="160" aria-label="Reason"><button type="button" class="x" data-act="delRow" aria-label="Remove line">×</button></div>`;
@@ -456,15 +483,15 @@ function bulkForm() {
 function projectForm(old) {
   const vc = old?.valueCur || defCur();
   openSheet(`${head(old ? 'Edit project' : 'New project', '', old?.id)}
-    <form data-form="project" data-id="${old?.id || ''}">
+    <form data-form="project" data-id="${esc(old?.id || '')}">
       <label class="fld"><span>Project name</span><input name="name" required maxlength="80" value="${esc(old?.name)}" placeholder="e.g. Warehouse — Juba" autofocus></label>
       ${curChips(vc, 'Project value is in')}
       ${amountField(old?.value, vc, 'value', 'Total project value', false)}
       <p class="muted" style="margin:-8px 0 14px">If you add the project value, the app shows how much is still pending from the client.</p>
-      ${byField()}
+      ${byField()}${approvalNote(old)}
       <p class="err"></p>
-      <button class="btn primary">${old ? 'Save changes' : 'Add project'}</button>
-      ${old ? `<p class="center"><button type="button" class="link" data-act="delProject" data-id="${old.id}">Delete this project</button></p>` : ''}
+      <button class="btn primary">${old ? saveLabel() : 'Add project'}</button>
+      ${old && can('delete') ? `<p class="center"><button type="button" class="link" data-act="delProject" data-id="${esc(old.id)}">Delete this project</button></p>` : ''}
     </form>${datalists()}`);
 }
 function settingsForm() {
@@ -491,8 +518,10 @@ function detail(k, id) {
   const look = { E: ['Expense', 'out', '−'], R: ['Money received', 'in', '+'], T: ['Money moved', '', ''] }[k];
   openSheet(`${head(look[0], look[1], r.id)}
     <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
+    ${waitingNote(id)}
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
-    <div class="two"><button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${id}">✏️ Edit 🔒</button><button class="btn danger" data-act="del" data-kind="${k}" data-id="${id}">🗑 Delete 🔒</button></div>`);
+    <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : ''}</div>
+    ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}`);
 }
 function projectDetail(id) {
   const p = S.projects.find(x => x.id === id); if (!p) return;
@@ -502,8 +531,9 @@ function projectDetail(id) {
   openSheet(`${head(p.name, '', p.id)}
     ${projBar(s)}
     <div style="margin-bottom:16px">${projStatsGrid(s)}</div>
-    <div class="two"><button class="btn in" data-act="addCredit" data-project="${id}">＋ Money received</button><button class="btn ghost" data-act="editProject" data-id="${id}">✏️ Edit 🔒</button></div>
-    <button class="btn ghost" data-act="assignPick" data-id="${id}" style="margin-top:10px">＋ Add existing expenses 🔒</button>
+    ${waitingNote(id)}
+    <div class="two"><button class="btn in" data-act="addCredit" data-project="${esc(id)}">＋ Money received</button>${canChange() ? `<button class="btn ghost" data-act="editProject" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}</div>
+    ${can('edit') ? `<button class="btn ghost" data-act="assignPick" data-id="${esc(id)}" style="margin-top:10px">＋ Add existing expenses 🔒</button>` : ''}
     <h3 class="subh">Money received (${R.length})</h3>
     ${R.length ? `<div class="card list inset">${R.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}
     <h3 class="subh">Spent on this project (${E.length})</h3>
@@ -529,6 +559,7 @@ function saveExpense(f) {
   if (old) {
     const changes = diff(old, rec);
     if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    if (!can('edit')) return requestChange('E', old, rec, changes, by);
     update({ expenses: S.expenses.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
   } else {
@@ -554,6 +585,7 @@ function saveMove(f) {
   if (old) {
     const changes = diff(old, rec);
     if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    if (!can('edit')) return requestChange('T', old, rec, changes, by);
     update({ transfers: S.transfers.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
   } else {
@@ -573,11 +605,11 @@ async function assignSheet(pid) {
   const list = live(S.expenses).filter(e => e.project !== pid).sort((a, b) => byAt(b, a));
   openSheet(`${head('Add expenses to project', '', p.name)}
     <p class="hint">Tick the expenses that belong to <b>${esc(p.name)}</b>. Expenses without a project are shown.</p>
-    <form data-form="assign" data-id="${pid}">
+    <form data-form="assign" data-id="${esc(pid)}">
       ${list.some(e => e.project) ? '<label class="fld check"><input type="checkbox" name="others"> Also show expenses that are in another project</label>' : ''}
       <div class="two"><button type="button" class="btn small ghost" data-act="pickAll">Select all</button><button type="button" class="btn small ghost" data-act="pickNone">Select none</button></div>
       <div class="picklist">${list.length ? list.map(e => `<label class="pick" data-other="${e.project ? 1 : 0}" ${e.project ? 'hidden' : ''}>
-        <input type="checkbox" name="pick" value="${e.id}"><span class="pd">${fmtDate(e.at.slice(0, 10))}</span>
+        <input type="checkbox" name="pick" value="${esc(e.id)}"><span class="pd">${fmtDate(e.at.slice(0, 10))}</span>
         <span class="pr">${esc(e.reason)}<small>${esc(e.paidTo)}${e.project ? ' · now in ' + esc(projName(e.project)) : ''}</small></span><b>${money(e.amount, e.cur)}</b></label>`).join('') : '<p class="muted">No other expenses.</p>'}</div>
       ${byField()}
       <div class="foot"><div class="btotal"><span id="pickCount">0 selected</span><b id="pickSum"></b></div><p class="err"></p><button class="btn primary" id="pickBtn" disabled>Add to project</button></div>
@@ -629,6 +661,7 @@ function saveCredit(f) {
   if (old) {
     const changes = diff(old, rec);
     if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    if (!can('edit')) return requestChange('R', old, rec, changes, by);
     update({ credits: S.credits.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
   } else {
@@ -690,6 +723,7 @@ function saveProject(f) {
   if (old) {
     const changes = [old.name !== name && `Name: ${old.name} → ${name}`, (old.value !== value || (old.valueCur || 'USD') !== valueCur) && `Project value: ${money(old.value || 0, old.valueCur || 'USD')} → ${money(value, valueCur)}`].filter(Boolean);
     if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    if (!can('edit')) return requestChange('P', old, { name, value, valueCur }, changes, by);
     update({ projects: S.projects.map(p => p.id === old.id ? { ...p, name, value, valueCur, editedAt: stampSec(), editedBy: by } : p), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
   } else {
     const [[id], seq] = nextIds('P', 1, S.seq);
@@ -716,7 +750,7 @@ async function doSetup(f) {
   const v = Object.fromEntries(new FormData(f));
   if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
   const salt = randHex();
-  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
+  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
   save();
   navigator.storage?.persist?.();
   render(); scrollTo(0, 0); toast('All set! Add your first entry.');
@@ -726,7 +760,7 @@ async function deleteRecord(k, id) {
   if (!await unlock('Enter the password to delete this entry.')) return;
   const key = COLL[k];
   const r = S[key].find(x => x.id === id);
-  const by = clean(prompt(`Delete ${id} — ${money(r.amount, r.cur)}?\n\nIt will be removed from all totals. A record stays in the Change Log.\n\nType your name to confirm:`, S.lastBy || ''));
+  const by = confirmBy(`Delete ${id} — ${money(r.amount, r.cur)}?\n\nIt will be removed from all totals. A record stays in the Change Log.`);
   if (!by) return;
   update({ [key]: S[key].map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, describe(k, r)]], by), lastBy: by });
   closeSheet(); render(); toast('Deleted');
@@ -736,7 +770,7 @@ async function deleteProject(id) {
   if (used) return alert('This project has entries. Delete or move those entries first.');
   if (!await unlock('Enter the password to delete this project.')) return;
   const p = S.projects.find(x => x.id === id);
-  const by = clean(prompt(`Delete project "${p.name}"?\n\nType your name to confirm:`, S.lastBy || ''));
+  const by = confirmBy(`Delete project "${p.name}"?`);
   if (!by) return;
   update({ projects: S.projects.map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, `Project "${p.name}"`]], by), lastBy: by });
   closeSheet(); render(); toast('Project deleted');

@@ -114,7 +114,7 @@ const moveKey = x => [x.at.slice(0, 10), x.cur, cents(x.amount), x.from].join('|
 // The importer before cash/bank moves saved "Cash → Bank" lines as expenses. Turn each into the move
 // it was meant to be. Ids are made from the expense id, so every device repairs to the same records.
 function repairImportedMoves() {
-  if (!S) return 0;
+  if (!S || !can('delete')) return 0; // the repair deletes expenses, so only admins (or phones without logins) run it
   const bad = live(S.expenses).map(e => ({ e, m: clean(e.mode).match(MOVE_RE) }))
     .filter(({ m }) => m && m[1].toLowerCase() !== m[2].toLowerCase());
   if (!bad.length) return 0;
@@ -140,7 +140,7 @@ function lookalikeExpenses() {
   return live(S.expenses).filter(e => moves.has([e.at.slice(0, 10), e.cur, cents(e.amount)].join('|')) && /deposit|bank|withdraw|transfer/i.test(`${e.reason} ${e.paidTo}`));
 }
 function lookalikeBanner() {
-  const e = lookalikeExpenses()[0];
+  const e = can('delete') && lookalikeExpenses()[0];
   if (!e) return '';
-  return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${e.id}">Show it</button></div>`;
+  return `<div class="banner"><span>⚠️ The ${money(e.amount, e.cur)} expense on ${fmtDate(e.at.slice(0, 10))} (“${esc(e.reason)}”) looks like the same money as a cash ↔ bank move. If it is the deposit, delete this expense so it isn't counted as spending.</span><button class="btn small" data-act="open" data-kind="E" data-id="${esc(e.id)}">Show it</button></div>`;
 }

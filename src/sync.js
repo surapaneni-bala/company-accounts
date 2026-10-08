@@ -6,17 +6,24 @@ const SYNC_DELAY_MS = 2000;
 const SYNC_EVERY_MS = 2 * 60 * 1000;
 const SYNC_TIMEOUT_MS = 45000;
 const APP_URL = 'https://surapaneni-bala.github.io/company-accounts/';
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers' };
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers', C: 'changes' };
+// Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
+// records (it didn't know them) but moved on past them, so after updating it downloads everything once.
+const KINDS_SEEN = 2; // 2 = change requests (C)
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string',
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur),
   P: d => typeof d.id === 'string' && typeof d.name === 'string',
   L: d => typeof d.lid === 'string' && typeof d.text === 'string' && typeof d.at === 'string',
   T: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && ACCOUNTS.includes(d.from) && ACCOUNTS.includes(d.to) && d.from !== d.to,
+  C: d => typeof d.id === 'string' && SAFE_ID.test(d.target) && ['E', 'R', 'T', 'P'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string' && AT_RE.test(d.at),
 };
+// ids end up inside the app's pages: only plain ones are ever accepted (the sheet checks this too)
+const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before cash ↔ bank moves can reach the sheet. Everything else is syncing; the moves are kept safe on this device.';
+const notAllowedMsg = n => `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
 const SCRIPT_URL = 'https://raw.githubusercontent.com/surapaneni-bala/company-accounts/main/apps-script/Code.gs';
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error
 let syncBusy = false, syncAgain = false, syncTimer = 0;
@@ -31,12 +38,15 @@ const validLinkUrl = u => /^https:\/\/script\.google\.com\/(a\/macros\/[\w.-]+|m
 const b64u = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
 const appUrl = () => /^https?:$/.test(location.protocol) ? location.origin + location.pathname : APP_URL;
-const inviteLink = () => `${appUrl()}#join=${b64u(JSON.stringify({ u: S.link.u, k: S.link.k }))}`;
 const inviteFromHash = () => (location.hash.match(/join=[\w-]+/) || [''])[0];
+// Once the company has logins, invites carry only the web app link: each person signs in instead of using the company code.
+const inviteLink = () => `${appUrl()}#join=${b64u(JSON.stringify(S.link.logins ? { u: S.link.u } : { u: S.link.u, k: S.link.k }))}`;
 function decodeInvite(code) {
   try {
     const j = JSON.parse(unb64u(code));
-    return validLinkUrl(j.u) && typeof j.k === 'string' && j.k ? { u: j.u, k: j.k.toUpperCase() } : null;
+    if (!validLinkUrl(j.u)) return null;
+    if (j.k === undefined) return { u: j.u, k: '' };
+    return typeof j.k === 'string' && j.k ? { u: j.u, k: j.k.toUpperCase() } : null;
   } catch { return null; }
 }
 // Find the invite in whatever was pasted: a whole chat message, the link pasted twice in a row,
@@ -54,24 +64,30 @@ function parseInvite(text) {
 }
 function manualLink(f) {
   const u = (f.elements.url ? f.elements.url.value : '').trim(), k = (f.elements.key ? f.elements.key.value : '').trim().toUpperCase();
-  return validLinkUrl(u) && k ? { u, k } : null;
+  const user = f.elements.username ? f.elements.username.value.trim() : '';
+  return validLinkUrl(u) && (k || user) ? { u, k } : null; // with logins, the web app link + username is enough
 }
 function inviteHint(f) {
-  const v = f.elements.invite.value.trim(), box = $('.invite-hint', f);
-  box.className = 'invite-hint ' + (!v ? '' : parseInvite(v) ? 'good' : 'bad');
-  box.textContent = !v ? '' : parseInvite(v) ? '✓ Invite link OK — tap Join.' : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : '✗ This is not an invite link. It starts with https://surapaneni-bala.github.io/company-accounts/#join=';
+  const v = f.elements.invite.value.trim(), box = $('.invite-hint', f), link = parseInvite(v);
+  const needLogin = !!link && !link.k;
+  if (needLogin) $('.loginfields', f).hidden = false;
+  box.className = 'invite-hint ' + (!v ? '' : link ? 'good' : 'bad');
+  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Join.' : '✓ Invite link OK — tap Join.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${APP_URL}#join=`;
 }
 
+// Every request says who is asking: this phone's sign-in, or (no sign-in yet) the company code.
+// Signing in and setting up logins send their own details instead.
 async function callServer(link, body) {
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), SYNC_TIMEOUT_MS);
+  const who = body.op === 'login' || body.op === 'setup' ? {} : signedIn() ? { token: session.token } : { key: link.k };
   let res;
   // text/plain body = no CORS preflight, which Apps Script cannot answer
-  try { res = await fetch(link.u, { method: 'POST', body: JSON.stringify({ ...body, key: link.k }), signal: ctl.signal }); }
+  try { res = await fetch(link.u, { method: 'POST', body: JSON.stringify({ ...body, ...who }), signal: ctl.signal }); }
   catch { throw Object.assign(new Error('No internet'), { offline: true }); }
   finally { clearTimeout(timer); }
   const j = await res.json().catch(() => null);
   if (!j) throw new SyncError('The Google Sheet did not answer. Check the web app link, and that "Who has access" is set to "Anyone".');
-  if (!j.ok) throw new SyncError(j.error || 'Sync failed');
+  if (!j.ok) throw Object.assign(new SyncError(j.error || 'Sync failed'), { code: j.code });
   return j;
 }
 
@@ -92,16 +108,24 @@ async function whyUnreachable(link) {
   return { msg: BLOCKED_MSG };
 }
 // First contact with a sheet: on failure explain why; company (Workspace) links get retried in their plain form.
-async function firstContact(link) {
-  try { return { link, res: await callServer(link, { since: 0, push: [] }) }; } catch (e) {
+async function firstContact(link, body = { since: 0, push: [] }) {
+  try { return { link, res: await callServer(link, body) }; } catch (e) {
     if (!e.offline) throw e;
     const why = await whyUnreachable(link);
     if (!why.alt) throw new SyncError(why.msg);
     const plain = { ...link, u: why.alt };
-    return { link: plain, res: await callServer(plain, { since: 0, push: [] }) };
+    return { link: plain, res: await callServer(plain, body) };
   }
 }
 
+// A big backlog goes in batches: the sheet takes at most 200 records at once from logins other than admins.
+// Records it refused last time go last, so they can never hold the others up.
+const MAX_PUSH = 200;
+let lastRefused = new Set();
+function nextBatch() {
+  const all = pendingRecords();
+  return [...all.filter(p => !lastRefused.has(p.id)), ...all.filter(p => lastRefused.has(p.id))].slice(0, MAX_PUSH);
+}
 function pendingRecords() {
   const want = new Set(S.dirty), out = [];
   for (const [k, key] of Object.entries(KIND_KEY)) {
@@ -120,7 +144,7 @@ function applyPull(pull) {
   const next = {};
   let changed = false;
   for (const [k, key] of Object.entries(KIND_KEY)) {
-    const recs = pull.filter(p => p.k === k && p.d && VALID[k](p.d) && p.id === recId(key, p.d));
+    const recs = pull.filter(p => p.k === k && p.d && SAFE_ID.test(p.id) && VALID[k](p.d) && p.id === recId(key, p.d));
     if (!recs.length) continue;
     const list = [...S[key]], at = new Map(list.map((r, i) => [recId(key, r), i]));
     for (const p of recs) {
@@ -130,8 +154,9 @@ function applyPull(pull) {
     }
     next[key] = list;
   }
-  const s = pull.find(p => p.k === 'S' && p.d && p.d.pass && p.d.pass.hash && p.u > (S.settingsU || 0));
-  if (s) { Object.assign(next, { company: String(s.d.company || S.company), pass: s.d.pass, settingsU: s.u }); changed = true; }
+  // only admins (and phones without a login) receive the company password with the settings
+  const s = pull.find(p => p.k === 'S' && p.d && (p.d.company || (p.d.pass && p.d.pass.hash)) && p.u > (S.settingsU || 0));
+  if (s) { Object.assign(next, { company: String(s.d.company || S.company), settingsU: s.u }, s.d.pass && s.d.pass.hash ? { pass: s.d.pass } : {}); changed = true; }
   S = { ...S, ...next };
   return changed;
 }
@@ -141,7 +166,7 @@ async function syncNow() {
   if (!S || !S.link) return;
   if (syncBusy) { syncAgain = true; return; }
   syncBusy = true; sync = { ...sync, state: 'syncing' }; paintSync();
-  const push = pendingRecords();
+  const push = nextBatch();
   try {
     const res = await callServer(S.link, { since: S.link.since || 0, push });
     if (!S.link) return; // disconnected while this was running
@@ -149,14 +174,20 @@ async function syncNow() {
     if (changed) repairImportedMoves(); // a device on an old version may have sent mistaken expenses
     // a record edited while the request was running stays queued
     // records the sheet's script cannot store yet stay queued until it is updated
-    const accepted = new Set(res.kinds || OLD_SERVER_KINDS);
-    const refused = new Set(push.filter(p => !accepted.has(p.k)).map(p => p.id));
-    const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow();
-    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || S.link.sheet }, dirty: S.dirty.filter(id => refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id)) };
+    // records this login may not change stay queued too, until an admin signs in on this phone
+    const accepted = new Set(res.kinds || OLD_SERVER_KINDS), notAllowed = new Set(res.refused || []);
+    const refused = new Set([...push.filter(p => !accepted.has(p.k)).map(p => p.id), ...notAllowed]);
+    const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link;
+    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || S.link.sheet, v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id)) };
     save();
-    sync = refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };
-    if (changed && !typing()) render();
+    if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
+    lastRefused = refused;
+    if (S.dirty.some(id => !sent.has(id))) syncAgain = true; // more waiting than one batch: send the rest straight after
+    sync = notAllowed.size ? { state: 'error', at: stampSec(), err: notAllowedMsg(notAllowed.size) }
+      : refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };
+    if ((changed || was.logins !== S.link.logins || was.v !== S.link.v) && !typing()) render();
   } catch (e) {
+    if (e.code === 'LOGIN' && S.link) return signedOutByServer(e.message);
     sync = { ...sync, state: e.offline ? 'offline' : 'error', err: e.message };
   } finally {
     syncBusy = false; paintSync();
@@ -193,8 +224,8 @@ function syncCard() {
     <p class="muted">${esc(syncText())}</p>
     ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>' : ''}
     ${S.link.sheet ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
-    <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="syncNow">Sync now</button><button class="btn ghost" data-act="invite">📲 Add a phone 🔒</button></div>
-    <p class="center"><button class="link" data-act="disconnect">Disconnect this device 🔒</button></p></section>`;
+    <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="syncNow">Sync now</button>${can('phones') ? '<button class="btn ghost" data-act="invite">📲 Add a phone 🔒</button>' : ''}</div>
+    ${signedIn() ? '' : '<p class="center"><button class="link" data-act="disconnect">Disconnect this device 🔒</button></p>'}</section>`;
 }
 
 function howUpdateSheet() {
@@ -208,7 +239,7 @@ function howUpdateSheet() {
       <li>Under <b>Version</b> choose <b>New version</b>. Leave “Execute as: Me” and “Who has access: Anyone”. Click <b>Deploy</b>.<br><em>Not “New deployment” — that makes a different link.</em></li>
       <li>Come back here and tap <b>Sync now</b>.</li>
     </ol>
-    <p class="note">Check: open your web app link (ends in /exec) in a browser. After the update it shows <b>"version":2</b>.</p>
+    <p class="note">Check: open your web app link (ends in /exec) in a browser. After the update it shows <b>"version":3</b>.</p>
     <button class="btn in" data-act="syncNow">Sync now</button>`);
 }
 function connectForm() {
@@ -243,12 +274,17 @@ async function doJoin(f) {
     if (f.elements.url.value.trim() || f.elements.key.value.trim()) return formErr(f, validLinkUrl(f.elements.url.value.trim()) ? 'key' : 'url', validLinkUrl(f.elements.url.value.trim()) ? 'Type the company code.' : 'The web app link starts with https://script.google.com/ and ends with /exec');
     return formErr(f, 'invite', f.elements.invite.value.trim() ? 'This invite link is cut off or changed. Copy it again from the message — or open “Join with the web app link and code” below.' : 'Paste the invite link first.');
   }
+  const username = clean(f.elements.username.value), password = f.elements.password.value;
+  if (!link.k || username) return joinSignedIn(f, link, username, password);
   $('.err', f).textContent = 'Joining…';
   let res;
   try { ({ link, res } = await firstContact(link)); }
-  catch (e) { return formErr(f, null, /^No internet/.test(e.message) ? 'No internet. Joining needs internet once — try again when connected.' : e.message); }
+  catch (e) {
+    if (e.code === 'LOGIN') { $('.loginfields', f).hidden = false; return formErr(f, 'username', 'This company now uses logins. Type your username and password, then tap Join.'); }
+    return formErr(f, null, /^No internet/.test(e.message) ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
+  }
   if (!(res.pull || []).some(p => p.k === 'S')) return formErr(f, null, 'That Google Sheet has no company yet. Connect the main computer first.');
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
+  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
   applyPull(res.pull);
   S = { ...S, link: { ...S.link, since: res.seq } };
   save(); navigator.storage?.persist?.();
@@ -257,17 +293,37 @@ async function doJoin(f) {
   sync = { state: 'ok', at: stampSec(), err: '' };
   tab = 'home'; render(); toast(`Joined ${S.company} ✓`);
 }
+// a new phone joining a company that has logins: sign in, then load what this person may see
+async function joinSignedIn(f, link, username, password) {
+  $('.loginfields', f).hidden = false;
+  if (!username || !password) return formErr(f, username ? 'password' : 'username', 'Type your username and password.');
+  $('.err', f).textContent = 'Signing in…';
+  const dev = newDev();
+  let res;
+  try { ({ link, res } = await firstContact(link, { op: 'login', username, password, device: dev })); }
+  catch (e) {
+    const offline = /^No internet/.test(e.message);
+    return formErr(f, offline ? null : 'password', offline ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
+  }
+  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev, dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { u: link.u, k: '', since: 0, sheet: '', logins: true } };
+  await signedInAs(res, password);
+  navigator.storage?.persist?.();
+  history.replaceState(null, '', location.pathname);
+  tab = 'home';
+  await syncNow();
+  render(); toast(`Welcome, ${res.me.name} ✓`);
+}
 async function inviteSheet() {
   if (!await unlock('Enter the password to add a phone. The invite link gives access to the company records.')) return;
   openSheet(`${head('Add a phone')}
     <ol class="steps">
       <li>Send this link to the phone (WhatsApp or email).</li>
       <li>On the phone, open the link. <b>iPhone:</b> in Safari tap <b>Share → Add to Home Screen</b>. <b>Android:</b> in Chrome tap <b>⋮ → Add to Home screen</b>.</li>
-      <li>Open <b>Accounts</b> from the home screen and tap <b>Join my company</b>. If the link is not filled in already, paste it.</li>
+      <li>Open <b>Accounts</b> from the home screen and tap <b>Join my company</b>. If the link is not filled in already, paste it.${S.link.logins ? ' Then type the username and password you gave them.' : ''}</li>
     </ol>
     <label class="fld"><span>Invite link</span><input id="inviteLink" readonly value="${esc(inviteLink())}"></label>
     <div class="two"><button class="btn in" data-act="copyInvite">Copy link</button>${navigator.share ? '<button class="btn ghost" data-act="shareInvite">Send…</button>' : ''}</div>
-    <p class="note" style="margin-top:14px">Anyone with this link can see and add company records. Only send it to your own staff.</p>`);
+    <p class="note" style="margin-top:14px">${S.link.logins ? 'The link alone opens nothing: each person signs in with the login you gave them (👥 Logins).' : 'Anyone with this link can see and add company records. Only send it to your own staff.'}</p>`);
 }
 async function disconnect() {
   if (!await unlock('Enter the password to disconnect this device from the Google Sheet.')) return;
@@ -280,5 +336,7 @@ async function disconnect() {
 }
 function migrate(s) {
   const dev = s.dev || newDev();
-  return { ...s, dev, transfers: s.transfers || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, link: s.link || null, log: s.log.map((l, i) => l.lid ? l : { ...l, lid: `L-${dev}-old${i}` }) };
+  const relearn = s.link && (s.kindsSeen || 1) < KINDS_SEEN;
+  return { ...s, dev, transfers: s.transfers || [], changes: s.changes || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, kindsSeen: KINDS_SEEN,
+    link: relearn ? { ...s.link, since: 0 } : (s.link || null), log: s.log.map((l, i) => l.lid ? l : { ...l, lid: `L-${dev}-old${i}` }) };
 }

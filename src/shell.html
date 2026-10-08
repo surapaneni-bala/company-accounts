@@ -40,6 +40,7 @@ button { font: inherit; color: inherit; }
 .chip { border: 0; cursor: pointer; font-size: 13px; font-weight: 800; color: var(--in); background: var(--in-soft); padding: 8px 12px; border-radius: 999px; white-space: nowrap; }
 .chip.wait { color: var(--warn); background: var(--warn-soft); }
 .chip.bad { color: var(--out); background: var(--out-soft); }
+.chip.who { color: var(--ink); background: #E8ECF6; }
 .lockpill { border: 0; background: var(--warn-soft); color: var(--warn); font-weight: 800; font-size: 14px; padding: 8px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
 
 /* balance */
@@ -192,7 +193,7 @@ details.manual { margin: 4px 0 12px; } details.manual summary { cursor: pointer;
 
 /* bottom tabs */
 nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.93); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); z-index: 5; }
-nav.tabs .wrap { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+nav.tabs .wrap { max-width: 720px; margin: 0 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
 nav.tabs button { border: 0; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; border-radius: 14px; color: var(--muted); font-size: 13px; font-weight: 800; }
 nav.tabs button.on { color: var(--ink); background: var(--paper); }
 nav.tabs svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
@@ -243,6 +244,8 @@ dialog::backdrop { background: rgba(27,34,50,.5); backdrop-filter: blur(3px); }
 .curseg input:checked + span { background: var(--ink); border-color: var(--ink); color: #fff; }
 .curseg input:checked + span small { color: rgba(255,255,255,.75); }
 .curseg input:focus-visible + span { outline: 3px solid #3B5BDB; outline-offset: 2px; }
+.curseg.roles { grid-template-columns: 1fr; }
+.curseg.roles b { font-size: 18px; }
 .when { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--paper); border-radius: var(--r-sm); padding: 12px 14px; }
 .when small { display: block; color: var(--muted); font-size: 13px; font-weight: 700; }
 .err { color: var(--out); font-weight: 800; min-height: 1.2em; margin: 4px 0 10px; }
@@ -301,7 +304,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 <div class="app">
   <header class="top" id="hdr" hidden>
     <div><div class="co" id="coName"></div><div class="today-date" id="todayDate"></div></div>
-    <div class="top-r"><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
+    <div class="top-r"><button class="chip who" id="whoChip" data-act="account" hidden></button><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
   </header>
   <main id="main"></main>
 </div>
