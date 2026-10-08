@@ -11,7 +11,11 @@ const TEST = process.argv.includes('--test');
 const root = path.join(__dirname, '..');
 const out = path.join(root, 'docs', ...(TEST ? ['test'] : []));
 const TEST_SWAPS = {
-  'core.js': [["const KEY = 'company-accounts-v1';", "const KEY = 'bepl-test-v1';"]],
+  'core.js': [
+    ["const KEY = 'company-accounts-v1';", "const KEY = 'bepl-test-v1';"],
+    // a backup from the real app carries the real sheet's link and code: the test copy never reconnects to it
+    ["const fresh = migrate({ ...data, seq: {}, dev: newDev(), dirty: [] });", "const fresh = migrate({ ...data, link: null, seq: {}, dev: newDev(), dirty: [] });"],
+  ],
   'sync.js': [
     ["const APP_URL = 'https://surapaneni-bala.github.io/company-accounts/';", "const APP_URL = 'https://surapaneni-bala.github.io/company-accounts/test/';"],
     // the test copy's sheet script is published next to it, so the real one (main branch) is never swapped by accident

@@ -337,7 +337,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 <script>
 'use strict';
-const APP_VERSION = 'c8960c0106'; // filled in by tools/build.js
+const APP_VERSION = 'a718511e6c'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1148,7 +1148,7 @@ async function doRestore(file) {
   }
   // a fresh device code, so ids never clash with the device the backup came from;
   // migrate() also upgrades backups saved by older versions of the app
-  const fresh = migrate({ ...data, seq: {}, dev: newDev(), dirty: [] });
+  const fresh = migrate({ ...data, link: null, seq: {}, dev: newDev(), dirty: [] });
   S = { ...fresh, dirty: fresh.link ? allIds(fresh) : [] };
   update({ log: logWith([['Restored', '—', `Data restored from backup file "${file.name}"`]]) });
   unlockedUntil = 0; tab = 'home';

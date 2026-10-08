@@ -227,7 +227,10 @@ Verified locally: all three test files pass; the owner's real old list, entered 
 opened by the new code, gives the same totals to the cent; old-version phones keep syncing with script v3 until
 "Require logins"; store keeper / office manager / admin / blocked / signed-out flows checked in the browser.
 Release order (nothing disturbs the live app until step 4):
-1. Push the source + `docs/test/` only (the live `docs/` files are NOT rebuilt, so phones see no update).
+1. ✅ Done 8 Oct 2026: the source is on branch **`logins`**; `main` got only `docs/test/` (plus the `.gitignore`
+   rule for `private/`), so `main`'s sheet script — the link the live app's "Show me how" uses — stays version 2.
+   Keep it that way until release: the owner may be pasting it into the real sheet. The test copy's own script
+   is published at `/test/sheet-script.txt`, and restoring a backup in the test copy drops its sheet link.
 2. The owner makes a separate TEST Google Sheet with Code.gs v3, opens `…/company-accounts/test/` on the
    iPhone, restores their backup file into it, connects it to the TEST sheet, and tries logins.
 3. Fix whatever they find. 4. Owner pastes Code.gs v3 into the real sheet (Manage deployments → New version);
