@@ -22,7 +22,7 @@
   --warn: #8A5A00; --warn-soft: #FFF3D6;
   --r-lg: 28px; --r-md: 20px; --r-sm: 14px;
   --shadow: 0 1px 0 rgba(27,34,50,.04), 0 10px 28px -16px rgba(27,34,50,.28);
-  --font: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; /* the phone's own plain font, not a rounded one */
   --ease: cubic-bezier(.16,1,.3,1);
 }
 * { box-sizing: border-box; }
@@ -417,7 +417,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '951f09588c'; // filled in by tools/build.js
+const APP_VERSION = '8e88d02a9a'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1390,13 +1390,12 @@ function pdfPages(pages) {
   let size = 0;
   const add = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); size += b.length; };
   const obj = (n, body) => { offsets[n] = size; add(`${n} 0 obj\n${body}\nendobj\n`); };
-  const W = 595.28, H = 841.89; // A4 in points
-  const draw = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+  const W = 595.28; // A4 width in points; each page is as tall as its picture (an A4 page, or a slip as tall as it needs)
   add('%PDF-1.4\n');
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   obj(2, `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + 3 * i} 0 R`).join(' ')}] /Count ${pages.length} >>`);
   pages.forEach((p, i) => {
-    const n = 3 + 3 * i;
+    const n = 3 + 3 * i, H = Math.round(W * p.h / p.w * 100) / 100, draw = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
     obj(n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${n + 2} 0 R >> >> /Contents ${n + 1} 0 R >>`);
     obj(n + 1, `<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`);
     offsets[n + 2] = size;
@@ -1458,7 +1457,7 @@ const imgFrom = blob => new Promise((ok, no) => { const i = new Image(); i.onloa
 const canvasJpeg = (c, q) => new Promise(ok => c.toBlob(ok, 'image/jpeg', q));
 
 // A picked or photographed file → { data, mime, name }: photos become a smaller JPEG, PDFs pass as they are.
-async function prepareFile(file, side = PHOTO_SIDE, quality = 0.82) {
+async function prepareFile(file, side = PHOTO_SIDE, quality = 0.82, png = false) {
   const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
   if (isPdf) {
     if (file.size > MAX_FILE) throw new Error('This PDF is bigger than 8 MB.');
@@ -1469,7 +1468,10 @@ async function prepareFile(file, side = PHOTO_SIDE, quality = 0.82) {
   const k = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
   const c = document.createElement('canvas');
   c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  const g = c.getContext('2d');
+  if (png) { g.drawImage(img, 0, 0, c.width, c.height); const b = await new Promise(ok => c.toBlob(ok, 'image/png')); return { data: await b.arrayBuffer(), mime: 'image/png', name: (file.name || 'stamp').replace(/\.\w+$/, '') + '.png' }; }
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); // a see-through part turns white, not black
+  g.drawImage(img, 0, 0, c.width, c.height);
   const blob = await canvasJpeg(c, quality);
   return { data: await blob.arrayBuffer(), mime: 'image/jpeg', name: (file.name || 'photo').replace(/\.\w+$/, '') + '.jpg' };
 }
@@ -1537,7 +1539,7 @@ async function attachPicked(input) {
   input.value = '';
   if (!file) return;
   try {
-    const p = type === 'letterhead' || type === 'stamp' ? await prepareFile(file, SLIP_H, 0.92) : await prepareFile(file);
+    const p = type === 'stamp' ? await prepareFile(file, 900, 0.92, true) : type === 'letterhead' ? await prepareFile(file, SLIP_H, 0.92) : await prepareFile(file);
     if (type === 'stamp') stampPrev = null;
     await keepFile({ for: forId, type, name: p.name, mime: p.mime }, p.data);
   } catch (e) { return alert(e.message); }
@@ -1579,9 +1581,9 @@ const photoField = who => `<label class="fld"><span>Photo of ${esc(who)} with th
 // Laid out like the company's paper voucher (paid to | date, being payment for | amount, amount in words,
 // received by, prepared / checked / approved), printed on the letterhead, with the company stamp and its date.
 const SLIP_W = 1240, SLIP_H = 1754; // A4 at 150 dots per inch
-const SANS = '"Avenir Next", "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif';
-const SERIF = 'Georgia, "Times New Roman", "Noto Serif", serif';
-const SLIP_C = { navy: '#26306B', accent: '#C8501E', ink: '#1B2232', label: '#6B7190', rule: '#C9CDDD', tint: '#F4F5FA', stampInk: '#1D3FC4' };
+// one plain corporate family everywhere (Helvetica on iPhones and Macs, Arial or Roboto elsewhere); no heavy weights
+const SANS = '"Helvetica Neue", Helvetica, Arial, Roboto, sans-serif';
+const SLIP_C = { navy: '#26306B', accent: '#C8501E', ink: '#1B2232', label: '#6B7190', rule: '#C9CDDD', tint: 'rgba(38,48,107,.05)', stripe: 'rgba(38,48,107,.025)', stampInk: '#1D3FC4' };
 const SLIP_TITLE = { voucher: 'PAYMENT VOUCHER', receipt: 'RECEIPT', salary: 'SALARY SLIP', advance: 'ADVANCE VOUCHER', settlement: 'FINAL SETTLEMENT' };
 const STAMP_PLACE = { a: 72, r: 0.76, s: 0.12 }; // the date on the stamp: angle of the dotted line's middle (0 = right, 90 = down), its distance and letter size as parts of the stamp's radius
 const slipMoney = (n, cur) => `${cur} ${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -1600,6 +1602,25 @@ function fitInto(g, img, x, y, w, h, cover) {
   g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
   g.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
   g.restore();
+}
+// the signature pad cut down to the ink, so it can be set on the signature line at a proper size
+function inkOnly(cv) {
+  const w = cv.width, h = cv.height, px = cv.getContext('2d').getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 20) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) return null;
+  const c = document.createElement('canvas'), m = 4;
+  c.width = x1 - x0 + 1 + 2 * m; c.height = y1 - y0 + 1 + 2 * m;
+  c.getContext('2d').drawImage(cv, x0 - m, y0 - m, c.width, c.height, 0, 0, c.width, c.height);
+  return c;
+}
+// set on the line at (x, lineY): as big as fits in maxW × maxH, its bottom just above the line — but never blown up so
+// far that the pen line turns thick (the pad draws 3 screen points wide, i.e. 3 × the screen's pixel density)
+function placeSignature(g, sig, x, lineY, maxW, maxH) {
+  const ink = sig && inkOnly(sig);
+  if (!ink) return;
+  const k = Math.min(maxW / ink.width, Math.min(maxH, 130) / ink.height, 1.4 / (devicePixelRatio || 1));
+  g.drawImage(ink, x, lineY - 4 - ink.height * k, ink.width * k, ink.height * k);
 }
 const boxPath = (g, x, y, w, h, r = 14) => { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); };
 // letter-spaced text, drawn one letter at a time (works on every phone); align 'left' | 'right' | 'center'
@@ -1621,9 +1642,28 @@ const letterheadImage = () => brandImage('letterhead');
 // keep the letterhead and stamp on the phone, so slips made offline still carry them
 function warmLetterhead() { ['letterhead', 'stamp'].forEach(t => { const f = latestFile('settings', t); if (f && !f.pending) fileBlob(f.id).catch(() => {}); }); }
 
-// The stamp's ring: the box around its ink (anything not near-white), so any photo or scan of it lines up.
+// The stamp's ink alone: the background colour (read from the corners: white paper, a black square, or already
+// see-through) is made see-through, with soft edges, so the stamp sits on the page like real ink.
+function cleanStamp(img) {
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height, c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, w, h), px = d.data;
+  const at = (x, y) => (y * w + x) * 4, corners = [at(2, 2), at(w - 3, 2), at(2, h - 3), at(w - 3, h - 3)];
+  if (corners.every(i => px[i + 3] < 20)) return c; // already see-through
+  const bg = [0, 1, 2].map(k => corners.reduce((t, i) => t + px[i + k], 0) / 4);
+  for (let i = 0; i < px.length; i += 4) {
+    const dist = Math.max(Math.abs(px[i] - bg[0]), Math.abs(px[i + 1] - bg[1]), Math.abs(px[i + 2] - bg[2]));
+    px[i + 3] = Math.round(px[i + 3] * Math.min(1, Math.max(0, (dist - 40) / 70)));
+  }
+  g.putImageData(d, 0, 0);
+  return c;
+}
+// The stamp's ring: the box around its ink, so any photo or scan of it lines up.
 function inkCircle(img) {
-  const n = 240, k = n / Math.max(img.naturalWidth, img.naturalHeight), w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const n = 240, k = n / Math.max(iw, ih), w = Math.round(iw * k), h = Math.round(ih * k);
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
   const px = g.getImageData(0, 0, w, h).data;
@@ -1632,15 +1672,15 @@ function inkCircle(img) {
     const i = (y * w + x) * 4;
     if (px[i + 3] > 60 && px[i] + px[i + 1] + px[i + 2] < 600) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
   }
-  if (x1 <= x0) return { cx: img.naturalWidth / 2, cy: img.naturalHeight / 2, R: Math.min(img.naturalWidth, img.naturalHeight) / 2 };
+  if (x1 <= x0) return { cx: iw / 2, cy: ih / 2, R: Math.min(iw, ih) / 2 };
   return { cx: (x0 + x1 + 1) / 2 / k, cy: (y0 + y1 + 1) / 2 / k, R: Math.max(x1 - x0 + 1, y1 - y0 + 1) / 2 / k };
 }
 // The stamp, its ring `size` across and centred on (x, y), with the date written along its dotted line.
 function drawStamp(g, img, x, y, size, dateText, place) {
-  const c = img.circle || (img.circle = inkCircle(img)), k = size / (2 * c.R), p = { ...STAMP_PLACE, ...(place || {}) };
+  const ink = img.ink || (img.ink = cleanStamp(img)), c = img.circle || (img.circle = inkCircle(ink)), k = size / (2 * c.R), p = { ...STAMP_PLACE, ...(place || {}) };
   g.save();
-  g.globalCompositeOperation = 'multiply'; // the paper of the scan disappears, the ink stays
-  g.drawImage(img, x - c.cx * k, y - c.cy * k, img.naturalWidth * k, img.naturalHeight * k);
+  g.globalCompositeOperation = 'multiply'; // like real ink: the printing under it still shows
+  g.drawImage(ink, x - c.cx * k, y - c.cy * k, ink.width * k, ink.height * k);
   g.globalCompositeOperation = 'source-over';
   const R = size / 2, r = p.r * R, fs = Math.max(8, p.s * R);
   g.font = `700 ${fs}px ${SANS}`; g.fillStyle = SLIP_C.stampInk; g.textAlign = 'center';
@@ -1654,58 +1694,48 @@ function drawStamp(g, img, x, y, size, dateText, place) {
   g.restore();
 }
 
-/* s = { title, no, date, stampDate, party: [label, value], when: [label, value], forLabel, lines: [{ t, v, strong, muted }],
+/* s = { title, no, stampDate, party: [label, value], when: [label, value], forLabel, lines: [{ t, v, strong, muted }],
          amount, cur, extra: [[label, value]], signLabel, signName, sig: canvas, photo: image|null, preparedBy, ref } */
+// A slip is as tall as what it holds (A4 width): the letterhead's header at the top, the form, then the letterhead's
+// address strip (its bottom tenth) at the foot — no empty half page.
+const LH_FOOT = 0.1;
 async function renderSlip(s) {
-  const c = document.createElement('canvas');
-  c.width = SLIP_W; c.height = SLIP_H;
-  const g = c.getContext('2d'), C = SLIP_C, L = 90, R = SLIP_W - 90, CX = L + 660;
-  g.fillStyle = '#fff'; g.fillRect(0, 0, SLIP_W, SLIP_H);
+  const C = SLIP_C, L = 90, R = SLIP_W - 90, CX = L + 660;
   const [lh, stampImg] = await Promise.all([letterheadImage(), brandImage('stamp')]);
-  let y;
-  if (lh) { g.drawImage(lh, 0, 0, SLIP_W, SLIP_H); y = 268; } // the letterhead's own header and footer stay clear
-  else {
-    g.fillStyle = C.navy; g.font = `700 46px ${SERIF}`; g.fillText(S.company || 'Company', L, 120);
-    g.fillStyle = C.accent; g.fillRect(L, 142, 90, 5); y = 200;
-  }
+  const c = document.createElement('canvas'); // the form, on a see-through layer as tall as it needs
+  c.width = SLIP_W; c.height = 2600;
+  const g = c.getContext('2d');
+  let y = lh ? 268 : 200;
+  if (!lh) { g.fillStyle = C.navy; g.font = `700 46px ${SANS}`; g.fillText(S.company || 'Company', L, 120); g.fillStyle = C.accent; g.fillRect(L, 142, 90, 5); }
   // title and number
-  g.fillStyle = C.navy; g.font = `700 46px ${SERIF}`; spaced(g, s.title, L, y + 46, 4);
+  g.fillStyle = C.navy; g.font = `700 46px ${SANS}`; spaced(g, s.title, L, y + 46, 4);
   g.fillStyle = C.accent; g.fillRect(L, y + 66, 90, 5);
-  g.font = `600 18px ${SANS}`; g.fillStyle = SLIP_C.label; spaced(g, 'NO.', R, y + 16, 1.6, 'right');
+  g.font = `600 18px ${SANS}`; g.fillStyle = C.label; spaced(g, 'NO.', R, y + 16, 1.6, 'right');
   g.fillStyle = C.accent; g.font = `700 36px ${SANS}`; g.textAlign = 'right'; g.fillText(s.no, R, y + 52); g.textAlign = 'left';
   y += 110;
-  // measure first: a long slip (many pay lines) is set tighter, so it always ends above the letterhead's footer
-  const measure = tight => {
-    const m = { tight, lineH: tight ? 40 : 46, lineFont: tight ? 26 : 28, h4: tight ? 210 : 270, gap: tight ? 170 : 200 };
-    g.font = `700 32px ${SANS}`; m.party = wrapText(g, s.party[1] || '—', CX - L - 50); m.h1 = 76 + m.party.length * 40;
-    g.font = `500 ${m.lineFont}px ${SANS}`; m.lines = s.lines.flatMap(l => wrapText(g, l.t, CX - L - 220).map((t, i) => ({ ...l, t, v: i ? '' : l.v })));
-    m.h2 = Math.max(tight ? 220 : 250, 70 + m.lines.length * m.lineH + 20);
-    g.font = `italic 28px ${SERIF}`; m.words = wrapText(g, amountInWords(s.amount, s.cur), CX - L - 50);
-    m.h3 = Math.max(76 + m.words.length * 38, 70 + s.extra.length * (tight ? 56 : 64));
-    m.end = y + m.h1 + m.h2 + m.h3 + m.h4 + m.gap + 90;
-    return m;
-  };
-  const limit = lh ? 1570 : SLIP_H - 60, normal = measure(false), M = normal.end <= limit ? normal : measure(true);
-  // the form: a ruled box like the paper voucher; white under it so the letterhead's watermark stays faint
+  const lineFont = 28, lineH = 46, h4 = 270;
+  const lineFontOf = l => `${l.strong ? 700 : 500} ${l.muted ? lineFont - 4 : lineFont}px ${SANS}`;
+  // each pay line wraps only where its own amount leaves no room
+  const lines = s.lines.flatMap(l => { g.font = lineFontOf(l); const room = CX - L - 48 - (l.v ? g.measureText(l.v).width + 28 : 0); return wrapText(g, l.t, room).map((t, i) => ({ ...l, t, v: i ? '' : l.v })); });
+  g.font = `700 32px ${SANS}`; const party = wrapText(g, s.party[1] || '—', CX - L - 50), h1 = 76 + party.length * 40;
+  const h2 = Math.max(250, 70 + lines.length * lineH + 20);
+  g.font = `italic 28px ${SANS}`; const words = wrapText(g, amountInWords(s.amount, s.cur), CX - L - 50);
+  const h3 = Math.max(76 + words.length * 38, 70 + s.extra.length * 64);
   const top = y, cells = [];
   const row = (h, draw) => { cells.push([y, h]); draw(y, h); y += h; };
-  const box = (h) => { g.fillStyle = 'rgba(255,255,255,.9)'; g.fillRect(L, y, R - L, h); };
   // row 1: paid to | date
-  const { party, h1, lines, lineH, h2, words, h3, h4 } = M;
-  box(h1);
-  row(h1, (t) => {
+  row(h1, t => {
     slipLabel(g, s.party[0], L + 24, t + 34);
     g.fillStyle = C.ink; g.font = `700 32px ${SANS}`; party.forEach((p, i) => g.fillText(p, L + 24, t + 78 + i * 40));
     slipLabel(g, s.when[0], CX + 24, t + 34);
     g.fillStyle = C.ink; g.font = `700 30px ${SANS}`; wrapText(g, s.when[1], R - CX - 48).forEach((p, i) => g.fillText(p, CX + 24, t + 78 + i * 36));
   });
   // row 2: being payment for | amount in
-  box(h2);
-  row(h2, (t) => {
+  row(h2, t => {
     slipLabel(g, s.forLabel || 'Being payment for', L + 24, t + 34);
     lines.forEach((l, i) => {
       const ly = t + 82 + i * lineH;
-      g.fillStyle = l.muted ? C.label : C.ink; g.font = `${l.strong ? 700 : 500} ${l.muted ? M.lineFont - 4 : M.lineFont}px ${SANS}`;
+      g.fillStyle = l.muted ? C.label : C.ink; g.font = lineFontOf(l);
       g.fillText(l.t, L + 24, ly);
       if (l.v) { g.textAlign = 'right'; g.fillText(l.v, CX - 24, ly); g.textAlign = 'left'; }
       if (l.strong) { g.fillStyle = C.rule; g.fillRect(L + 24, ly - 36, CX - L - 48, 1); }
@@ -1720,51 +1750,61 @@ async function renderSlip(s) {
     const ax = CX + 24, aw = R - CX - 48, ay = t + 104, ah = Math.min(140, Math.max(96, h2 - 130));
     boxPath(g, ax, ay, aw, ah); g.fillStyle = C.tint; g.fill(); g.strokeStyle = C.navy; g.lineWidth = 2.5; g.stroke();
     const text = slipMoney(s.amount, s.cur);
-    let fs = 44; g.font = `800 ${fs}px ${SANS}`;
-    while (g.measureText(text).width > aw - 36 && fs > 22) { fs -= 2; g.font = `800 ${fs}px ${SANS}`; }
+    let fs = 44; g.font = `700 ${fs}px ${SANS}`;
+    while (g.measureText(text).width > aw - 36 && fs > 22) { fs -= 2; g.font = `700 ${fs}px ${SANS}`; }
     g.fillStyle = C.ink; g.textAlign = 'right'; g.fillText(text, ax + aw - 18, ay + ah / 2 + fs * 0.36); g.textAlign = 'left';
   });
   // row 3: amount in words | paid from (and the day's rate)
-  box(h3);
-  row(h3, (t) => {
+  row(h3, t => {
     slipLabel(g, 'Amount in words', L + 24, t + 34);
-    g.fillStyle = C.ink; g.font = `italic 28px ${SERIF}`; words.forEach((w, i) => g.fillText(w, L + 24, t + 76 + i * 38));
-    const step = M.tight ? 56 : 64;
+    g.fillStyle = C.ink; g.font = `italic 28px ${SANS}`; words.forEach((w, i) => g.fillText(w, L + 24, t + 76 + i * 38));
     s.extra.forEach(([lab, val], i) => {
-      slipLabel(g, lab, CX + 24, t + 34 + i * step);
-      g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; g.fillText(val, CX + 24, t + 64 + i * step);
+      slipLabel(g, lab, CX + 24, t + 34 + i * 64);
+      g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; g.fillText(val, CX + 24, t + 64 + i * 64);
     });
   });
-  // row 4: received by (name, signature) | photo
+  // row 4: received by (signature on its line, the name under it) | photo
   const split = s.photo ? CX : R;
-  box(h4);
-  row(h4, (t) => {
+  row(h4, t => {
+    const lineY = t + h4 - 52, lineW = Math.min(520, split - L - 48);
     slipLabel(g, s.signLabel, L + 24, t + 34);
-    g.fillStyle = C.ink; g.font = `700 28px ${SANS}`; g.fillText(s.signName || '', L + 24, t + 74);
-    if (s.sig) fitInto(g, s.sig, L + 24, t + 86, split - L - 48, h4 - 140, false);
-    g.fillStyle = C.rule; g.fillRect(L + 24, t + h4 - 44, Math.min(460, split - L - 48), 1.5);
-    g.fillStyle = C.label; g.font = `500 18px ${SANS}`; g.fillText('Signature', L + 24, t + h4 - 20);
-    if (s.photo) { fitInto(g, s.photo, CX + 14, t + 14, R - CX - 28, h4 - 28, true); slipLabel(g, 'Photo', CX + 24, t + h4 - 22); }
+    placeSignature(g, s.sig, L + 24, lineY, lineW, lineY - t - 52);
+    g.fillStyle = C.ink; g.fillRect(L + 24, lineY, lineW, 1.5);
+    g.font = `600 24px ${SANS}`; g.fillText(s.signName || '', L + 24, lineY + 30);
+    g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText('Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
+    if (s.photo) fitInto(g, s.photo, CX + 14, t + 14, R - CX - 28, h4 - 28, true);
   });
-  // the ruling: outer box, the column line and the lines between rows
+  // the ruling: outer box, the column line and the lines between rows (see-through: the watermark shows behind)
   g.strokeStyle = C.navy; g.lineWidth = 2.5; g.strokeRect(L, top, R - L, y - top);
   g.fillStyle = C.navy;
   cells.slice(1).forEach(([cy]) => g.fillRect(L, cy - 0.75, R - L, 1.5));
   cells.forEach(([cy, ch], i) => { if (i < 3 || s.photo) g.fillRect(CX - 0.75, cy, 1.5, ch); });
   // prepared / checked / approved; the company stamp goes over "approved", the way it is stamped on paper
-  y += M.gap;
+  y += 200;
   const colW = (R - L) / 3;
-  if (stampImg) drawStamp(g, stampImg, R - 112, y - Math.min(82, M.gap - 115), 216, s.stampDate, stampImg.place); // at the right edge, clear of the words and the box
+  if (stampImg) drawStamp(g, stampImg, R - 112, y - 82, 216, s.stampDate, stampImg.place);
   [['Prepared by', s.preparedBy || ''], ['Checked by', ''], ['Approved by', '']].forEach(([lab, name], i) => {
     const x = L + i * colW;
     g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
-    g.fillStyle = C.ink; g.fillRect(x, y, colW - 40, 1.5);
+    g.fillRect(x, y, colW - 40, 1.5);
     slipLabel(g, lab, x, y + 30); // drawn after the stamp, so the words stay readable
   });
-  g.fillStyle = C.label; g.font = `500 18px ${SANS}`;
-  g.fillText(`Ref ${s.ref} · made in the company app on ${fmtAbs(stamp())}`, L, Math.min(y + 80, limit));
-  const jpeg = new Uint8Array(await (await canvasJpeg(c, 0.9)).arrayBuffer());
-  return new Blob([jpegToPdf(jpeg, SLIP_W, SLIP_H)], { type: 'application/pdf' });
+  g.fillStyle = C.label; g.font = `400 18px ${SANS}`;
+  g.fillText(`Ref ${s.ref} · made in the company app on ${fmtAbs(stamp())}`, L, y + 76);
+  // the page: exactly as tall as the slip, on the letterhead (its header and watermark above, its address strip at the foot)
+  const footH = lh ? Math.round(SLIP_H * LH_FOOT) : 0, H = y + 104 + footH;
+  const page = document.createElement('canvas');
+  page.width = SLIP_W; page.height = H;
+  const p = page.getContext('2d');
+  p.fillStyle = '#fff'; p.fillRect(0, 0, SLIP_W, H);
+  if (lh) {
+    const iw = lh.naturalWidth, ih = lh.naturalHeight, k = SLIP_W / iw, body = Math.min(H - footH, ih * k - footH);
+    p.drawImage(lh, 0, 0, iw, body / k, 0, 0, SLIP_W, body);
+    p.drawImage(lh, 0, ih - footH / k, iw, footH / k, 0, H - footH, SLIP_W, footH);
+  }
+  p.drawImage(c, 0, 0);
+  const jpeg = new Uint8Array(await (await canvasJpeg(page, 0.9)).arrayBuffer());
+  return new Blob([jpegToPdf(jpeg, SLIP_W, H)], { type: 'application/pdf' });
 }
 
 /* ---------- statements: every entry for one person or project, on as many pages as it takes ---------- */
@@ -1780,13 +1820,12 @@ async function renderStatement(st) {
     c.width = SLIP_W; c.height = SLIP_H; pages.push(c);
     g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, SLIP_W, SLIP_H);
     if (lh) g.drawImage(lh, 0, 0, SLIP_W, SLIP_H);
-    else { g.fillStyle = C.navy; g.font = `700 46px ${SERIF}`; g.fillText(S.company || 'Company', L, 120); g.fillStyle = C.accent; g.fillRect(L, 142, 90, 5); }
-    g.fillStyle = 'rgba(255,255,255,.9)'; g.fillRect(L - 10, top - 10, W + 20, limit - top + 10); // the letterhead's watermark stays faint under the figures
+    else { g.fillStyle = C.navy; g.font = `700 46px ${SANS}`; g.fillText(S.company || 'Company', L, 120); g.fillStyle = C.accent; g.fillRect(L, 142, 90, 5); }
     y = top;
-    if (pages.length > 1) { g.fillStyle = C.navy; g.font = `700 28px ${SERIF}`; spaced(g, `${st.title} — CONTINUED`, L, y + 30, 2); g.fillStyle = C.label; g.font = `600 22px ${SANS}`; g.textAlign = 'right'; g.fillText(st.no, R, y + 30); g.textAlign = 'left'; y += 64; }
+    if (pages.length > 1) { g.fillStyle = C.navy; g.font = `700 28px ${SANS}`; spaced(g, `${st.title} — CONTINUED`, L, y + 30, 2); g.fillStyle = C.label; g.font = `600 22px ${SANS}`; g.textAlign = 'right'; g.fillText(st.no, R, y + 30); g.textAlign = 'left'; y += 64; }
   };
   page();
-  g.fillStyle = C.navy; g.font = `700 44px ${SERIF}`; spaced(g, st.title, L, y + 46, 3);
+  g.fillStyle = C.navy; g.font = `700 44px ${SANS}`; spaced(g, st.title, L, y + 46, 3);
   g.fillStyle = C.accent; g.fillRect(L, y + 66, 90, 5);
   g.font = `600 18px ${SANS}`; g.fillStyle = C.label; spaced(g, 'NO.', R, y + 16, 1.6, 'right');
   g.fillStyle = C.accent; g.font = `700 34px ${SANS}`; g.textAlign = 'right'; g.fillText(st.no, R, y + 52);
@@ -1815,10 +1854,10 @@ async function renderStatement(st) {
     if (y + 170 > limit) page();
     g.fillStyle = C.navy; g.font = `700 24px ${SANS}`; g.fillText(sec.title, L, y + 24); y += 40;
     headRow();
-    if (!sec.rows.length) { g.fillStyle = C.label; g.font = `italic 22px ${SERIF}`; g.fillText('Nothing yet.', L + 14, y + 30); y += 44; }
+    if (!sec.rows.length) { g.fillStyle = C.label; g.font = `italic 22px ${SANS}`; g.fillText('Nothing yet.', L + 14, y + 30); y += 44; }
     sec.rows.forEach((row, ri) => {
       if (y + 40 > limit - 60) { page(); headRow(); }
-      if (ri % 2) { g.fillStyle = '#FAFAFD'; g.fillRect(L, y, W, 40); }
+      if (ri % 2) { g.fillStyle = C.stripe; g.fillRect(L, y, W, 40); }
       row.forEach((cell, i) => {
         const c = sec.cols[i];
         g.fillStyle = C.ink; g.font = `${c.right ? 600 : 500} 22px ${SANS}`;
@@ -1847,8 +1886,8 @@ async function renderStatement(st) {
   y += st.summary.length * 44 + 20;
   if (st.verdict) {
     const tone = st.verdict.good ? '#0E7C57' : C.accent;
-    boxPath(g, L, y, W, 76); g.fillStyle = st.verdict.good ? '#E2F3EA' : '#FBEDE6'; g.fill(); g.strokeStyle = tone; g.lineWidth = 3; g.stroke();
-    g.fillStyle = tone; g.font = `800 30px ${SANS}`; spaced(g, st.verdict.text, L + W / 2, y + 49, 2, 'center');
+    boxPath(g, L, y, W, 76); g.fillStyle = st.verdict.good ? 'rgba(14,124,87,.08)' : 'rgba(200,80,30,.08)'; g.fill(); g.strokeStyle = tone; g.lineWidth = 3; g.stroke();
+    g.fillStyle = tone; g.font = `700 30px ${SANS}`; spaced(g, st.verdict.text, L + W / 2, y + 49, 2, 'center');
     y += 100;
   }
   if (st.sign && y + 200 + 120 + 40 > limit) page();
@@ -1856,11 +1895,12 @@ async function renderStatement(st) {
     const s = st.sign, h = 200, split = s.photo ? L + 660 : R;
     g.strokeStyle = C.navy; g.lineWidth = 2.5; g.strokeRect(L, y, W, h);
     if (s.photo) { g.fillStyle = C.navy; g.fillRect(split, y, 1.5, h); fitInto(g, s.photo, split + 14, y + 14, R - split - 28, h - 28, true); }
+    const lineY = y + h - 50, lineW = Math.min(520, split - L - 48);
     slipLabel(g, s.label, L + 24, y + 34);
-    g.fillStyle = C.ink; g.font = `700 28px ${SANS}`; g.fillText(s.name, L + 24, y + 72);
-    if (s.sig) fitInto(g, s.sig, L + 24, y + 84, split - L - 48, h - 136, false);
-    g.fillStyle = C.rule; g.fillRect(L + 24, y + h - 44, Math.min(460, split - L - 48), 1.5);
-    g.fillStyle = C.label; g.font = `500 18px ${SANS}`; g.fillText('Signature', L + 24, y + h - 20);
+    placeSignature(g, s.sig, L + 24, lineY, lineW, lineY - y - 50);
+    g.fillStyle = C.ink; g.fillRect(L + 24, lineY, lineW, 1.5);
+    g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; g.fillText(s.name, L + 24, lineY + 30);
+    g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText('Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
     y += h + 120;
     const colW = W / 3;
     if (stampImg) drawStamp(g, stampImg, R - 104, y - 45, 180, st.stampDate, stampImg.place); // clear of the page number below
@@ -3274,7 +3314,7 @@ function payslipSpec(r) {
   // the account up to the end of the month paid (salary), the last day (settlement) or today (advance), this payment included
   const end = r.pay === 'salary' && r.month ? [today(), `${r.month}-31`].sort()[0] : r.pay === 'settlement' && w.left ? w.left : today();
   const upTo = ledgerOf(w, end), due = paidNow === null ? null : round2(upTo.balance + paidNow / 100);
-  const after = { t: upTo.balance >= 0 ? 'Balance still owed after this payment' : 'Paid ahead of earnings after this payment', v: M(Math.abs(upTo.balance)), muted: true };
+  const after = { t: upTo.balance >= 0 ? 'Balance after this payment' : 'Paid ahead after this payment', v: M(Math.abs(upTo.balance)), muted: true };
   if (r.pay === 'salary' && r.month) {
     const m = upTo.months.find(x => x.month === r.month) || { days: 0, daysOff: 0, earned: 0 };
     lines.push({ t: 'Monthly wage (30-day month)', v: M(w.wage) });
@@ -3284,7 +3324,7 @@ function payslipSpec(r) {
     lines.push({ t: `Earned for ${monthName(r.month)}`, v: M(m.earned), strong: true });
     const other = due === null ? 0 : round2(due - m.earned);
     if (other) lines.push({ t: other > 0 ? 'Earlier months still unpaid' : 'Less advances and earlier payments', v: `${other > 0 ? '+' : '−'}${M(Math.abs(other))}` });
-    if (due !== null) lines.push({ t: `Total due up to the end of ${monthName(r.month)}`, v: M(due), strong: true });
+    if (due !== null) lines.push({ t: `Total due to end of ${MON[+r.month.slice(5, 7) - 1]} ${r.month.slice(0, 4)}`, v: M(due), strong: true });
   } else if (r.pay === 'advance') lines.push({ t: 'Advance on salary', v: slipMoney(r.amount, r.cur) });
   else if (due !== null) lines.push({ t: `Total due up to the last day of work${w.left ? `, ${fmtDate(w.left)}` : ''}`, v: M(due), strong: true });
   lines.push(after);
