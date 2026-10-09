@@ -5,6 +5,8 @@
 const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
 const MAX_FILE = 8 * 1024 * 1024; // the sheet script refuses bigger files
 const PHOTO_SIDE = 1600; // photos are shrunk on the phone: quicker to upload, still sharp on a slip
+const PDF_Q = 0.8; // slips and statements: side by side at 2× it looks the same as 0.9, and is a quarter smaller (quicker to upload)
+const TAKEN_PHOTO = [1280, 0.8]; // the payment photo as taken: a person and money, not small print — a third smaller than other photos
 const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑' };
 const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement' };
 let outbox = [];          // files waiting to upload (their details; the bytes stay in IndexedDB)
@@ -73,18 +75,27 @@ async function keepFile(meta, data) {
   return id;
 }
 
+// Why files are still only on this phone, in plain words (shown wherever a waiting file is).
+function uploadWhy() {
+  if (!S.link) return 'connect the Google Sheet to upload them.';
+  if ((S.link.v || 2) < 4) return can('settings') ? `they upload once the Google Sheet script is updated to version ${NEWEST_SCRIPT} (see "Show me how" below).` : "they upload once the company's Google Sheet script is updated — tell the owner.";
+  if (mustSignIn()) return 'sign in to upload them.';
+  if (uploading) return 'uploading now…';
+  return uploadErr || 'they upload by themselves when the internet is on.';
+}
+const SLOW_MSG = 'no internet, or it is very slow — they try again by themselves.';
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
 // ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
 async function uploadFiles() {
   if (uploading || !S || !S.link || mustSignIn() || !outbox.length || (S.link.v || 2) < 4) return;
-  uploading = true;
+  uploading = true; paintSync();
   try {
     for (const meta of outbox) {
       const rec = await fileGet(meta.id);
       if (!rec || !rec.pending) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
       let res;
       try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
-      catch (e) { uploadErr = e.offline || e.code === 'LOGIN' ? '' : `A file could not be uploaded: ${e.message}`; break; }
+      catch (e) { uploadErr = e.code === 'LOGIN' ? '' : e.offline ? SLOW_MSG : `a file could not be uploaded: ${e.message}`; break; }
       const { data, pending, ...d } = rec;
       update({ files: [...S.files, { ...d, fileId: res.fileId }] });
       await filePut({ ...rec, fileId: res.fileId, pending: false });
@@ -144,7 +155,7 @@ async function showFile(id) {
   openSheet(`${head(title, '', f.name)}
     ${f.mime === 'application/pdf' ? '<p class="filebig">📄</p>' : `<img class="viewimg" src="${URL.createObjectURL(blob)}" alt="${esc(title)}">`}
     <button class="btn in" data-act="shareShown">📤 Send or save</button>
-    ${f.pending ? '<p class="muted center">Kept on this phone. It uploads to the company Drive when the internet is on.</p>' : ''}`);
+    ${f.pending ? `<p class="muted center">Kept on this phone, not uploaded yet: ${esc(uploadWhy())}</p>` : ''}`);
 }
 const shareShown = () => shown && download(shown.blob, shown.name);
 
@@ -237,7 +248,7 @@ function framedPhoto(f) {
 // the photo as taken (whole, not framed) is kept with the entry too, to open or send later
 async function keepTakenPhoto(f, forId, no) {
   if (!f._frame) return;
-  const p = await prepareFile(f._frame.file);
+  const p = await prepareFile(f._frame.file, ...TAKEN_PHOTO);
   await keepFile({ for: forId, type: 'photo', name: `${no} photo.jpg`, mime: p.mime }, p.data);
 }
 // a photo box on a slip or statement: exactly 3 : 2, centred in its cell, so the framing is kept as it was
@@ -503,7 +514,7 @@ async function renderSlip(s) {
   p.fillStyle = '#fff'; p.fillRect(0, 0, SLIP_W, H);
   drawLetterhead(p, lh, wm, H);
   p.drawImage(c, 0, 0);
-  const jpeg = new Uint8Array(await (await canvasJpeg(page, 0.9)).arrayBuffer());
+  const jpeg = new Uint8Array(await (await canvasJpeg(page, PDF_Q)).arrayBuffer());
   return new Blob([jpegToPdf(jpeg, SLIP_W, H)], { type: 'application/pdf' });
 }
 
@@ -618,7 +629,7 @@ async function renderStatement(st) {
     const p = c.getContext('2d'); p.fillStyle = C.label; p.font = `500 18px ${SANS}`;
     p.fillText(made, L, limit + 20); p.textAlign = 'right'; p.fillText(`Page ${i + 1} of ${pages.length}`, R, limit + 20);
   });
-  const jpegs = await Promise.all(pages.map(async c => ({ data: new Uint8Array(await (await canvasJpeg(c, 0.88)).arrayBuffer()), w: SLIP_W, h: SLIP_H })));
+  const jpegs = await Promise.all(pages.map(async c => ({ data: new Uint8Array(await (await canvasJpeg(c, PDF_Q)).arrayBuffer()), w: SLIP_W, h: SLIP_H })));
   return new Blob([pdfPages(jpegs)], { type: 'application/pdf' });
 }
 // the voucher or receipt number made for an entry, if any
@@ -712,7 +723,7 @@ function readySheet(title, no, blob, name) {
   shown = { blob, name };
   openSheet(`${head(title[0] + title.slice(1).toLowerCase(), 'in', no)}
     <p class="okbig">✓ Ready</p>
-    <p class="hint center">Kept with the entry${S.link ? ' and saved to the company Google Drive' : ''}. Send it on WhatsApp now, or open it later from the entry.</p>
+    <p class="hint center">Kept with the entry${S.link ? ', and it goes to the company Google Drive by itself (the Sheet tab shows any file still waiting)' : ''}. Send it on WhatsApp now, or open it later from the entry.</p>
     <button class="btn in" data-act="shareShown">📤 Send on WhatsApp or save</button>
     <button class="btn ghost" data-act="close" style="margin-top:10px">Done</button>`);
 }

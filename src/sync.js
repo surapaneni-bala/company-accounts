@@ -4,7 +4,7 @@
 // else's whenever it has internet. The newest copy of each record wins (stamp u).
 const SYNC_DELAY_MS = 2000;
 const SYNC_EVERY_MS = 2 * 60 * 1000;
-const SYNC_TIMEOUT_MS = 45000;
+const SYNC_TIMEOUT_MS = 45000, SLOWEST_BPS = 4000; // a request gets 45 s plus the time its body takes at 32 kbps: a voucher can go up on a weak phone connection
 const APP_URL = 'https://app.b-e-p-l.com/';
 // the order is the order records are sent in: an employee before a change request about them, files last
 // (the sheet only takes a file record whose entry it already has)
@@ -87,11 +87,11 @@ function inviteHint(f) {
 // Every request says who is asking: this phone's sign-in, or (no sign-in yet) the company code.
 // Signing in and setting up logins send their own details instead.
 async function callServer(link, body) {
-  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), SYNC_TIMEOUT_MS);
   const who = body.op === 'login' || body.op === 'setup' ? {} : signedIn() ? { token: session.token } : { key: link.k };
+  const text = JSON.stringify({ ...body, ...who }), ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), SYNC_TIMEOUT_MS + text.length / SLOWEST_BPS * 1000);
   let res;
   // text/plain body = no CORS preflight, which Apps Script cannot answer
-  try { res = await fetch(link.u, { method: 'POST', body: JSON.stringify({ ...body, ...who }), signal: ctl.signal }); }
+  try { res = await fetch(link.u, { method: 'POST', body: text, signal: ctl.signal }); }
   catch { throw Object.assign(new Error('No internet'), { offline: true }); }
   finally { clearTimeout(timer); }
   const j = await res.json().catch(() => null);
@@ -231,8 +231,7 @@ function syncCard() {
     <p class="muted">Connect your company Google Sheet so phones and computers share the same records. The app keeps working offline and syncs when the internet is on.</p>
     <button class="btn in" data-act="connect">Connect to Google Sheet 🔒</button></section>`;
   return `<section class="card pad" id="syncCard"><h3>📊 Company Google Sheet</h3>
-    <p class="muted">${esc(syncText())}${outbox.length ? ` ${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload.` : ''}</p>
-    ${uploadErr ? `<p class="note">⚠️ ${esc(uploadErr)}</p>` : ''}
+    <p class="muted">${esc(syncText())}${outbox.length ? ` ${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload: ${esc(uploadWhy())}` : ''}</p>
     ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>'
       : (S.link.v || 2) < NEWEST_SCRIPT && can('settings') ? `<p class="note">A newer Google Sheet script is ready (version ${NEWEST_SCRIPT}; this sheet runs ${S.link.v || 2}). It is needed for employees, files, vouchers and days not worked. <button class="link" data-act="howUpdate">Show me how</button></p>` : ''}
     ${S.link.sheet ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}

@@ -6,6 +6,7 @@
 // 2. Run:           node tools/chrome-check.js <url> <file-with-expression.js> [--reload] [--offline]
 //    --reload   reload the page first (like reopening the app)
 //    --offline  cut the network before reloading (tests the offline copy)
+//    --slow=N   a slow phone connection: N bytes a second up (8000 = 64 kbps), 4× that down, 300 ms latency
 // The expression may return a promise; its value is printed as JSON.
 'use strict';
 const fs = require('fs');
@@ -27,6 +28,8 @@ const WAIT_MS = 3000; // let the page load and the service worker settle
   if (flags.includes('--offline')) await call('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   if (flags.includes('--reload') || flags.includes('--offline')) await call('Page.reload');
   await new Promise(r => setTimeout(r, WAIT_MS));
+  const slow = +(flags.find(f => f.startsWith('--slow=')) || '').slice(7);
+  if (slow) await call('Network.emulateNetworkConditions', { offline: false, latency: 300, downloadThroughput: slow * 4, uploadThroughput: slow });
   const r = await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
   console.log(JSON.stringify(r.result.result ? r.result.result.value : r.result));
   ws.close();

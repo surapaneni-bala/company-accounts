@@ -1,7 +1,7 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **245800c246** (employees, files, vouchers, app lock, statements, days not
-worked, logo, photo framing, B watermark, company contacts on PDFs) · script in this repo: **version 7** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
+Last updated **9 Oct 2026** · live app version **bd0ecba9f4** (employees, files, vouchers, app lock, statements, days not
+worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections) · script in this repo: **version 7** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
 
@@ -291,6 +291,7 @@ to `/test/` on an address that already has the real app reloads once while the t
 node tools/pages-like-server.js docs 8795          # behaves like GitHub Pages (10-minute caching)
 node tools/chrome-check.js http://127.0.0.1:8795/ expr.js            # e.g. expr.js: (async()=>({v:APP_VERSION}))()
 node tools/chrome-check.js http://127.0.0.1:8795/ expr.js --offline  # network cut: the app must still open
+node tools/chrome-check.js http://127.0.0.1:8795/ expr.js --slow=8000 # a 64 kbps phone connection (an upload must still finish)
 ```
 
 To test an update, edit `APP_VERSION` in the served `index.html`, the cache name in `sw.js` and
@@ -323,6 +324,12 @@ git commit -m "fix: …" && git push
 - Commits use the `type: description` style. No attribution lines (the owner's setting).
 
 ## 6. Where things stand (open items)
+
+**RELEASED 9 Oct 2026 (night): live app bd0ecba9f4** (`main` merged from `uploads`; script still v7): uploads no longer cut off
+on slow connections (request time limit grows with the body; a 300 KB upload at 64 kbps fails at 45.0 s on 245800c246 and
+finishes in 51.7 s on bd0ecba9f4, checked with `chrome-check.js --slow=8000`), a waiting file says why (`uploadWhy`), PDFs at
+JPEG 0.8 (voucher 117 KB) and the payment photo 1280 px (117 KB). Open question: the owner's voucher that never uploaded —
+most likely the real sheet still runs a script older than v4 (uploads never start); asked for a Sheet-tab screenshot.
 
 **RELEASED 9 Oct 2026 (evening): live app 245800c246** (`main` merged from `photos`; sheet script unchanged, still v7):
 the whole logo in the app, the "B" watermark sized to each page, no address strip on any PDF, the company contacts at the top
@@ -451,6 +458,9 @@ folder, which is temporary:
 - **Reproduce first:** rebuild the owner's exact data state before fixing a reported total.
 - **Never test a "fix" in a browser that can't run it:** use `tools/chrome-check.js` for anything
   involving the offline copy (and remember the built-in pane now has its own service worker, see §4).
+- **Time limits must grow with what is sent:** a fixed 45-second limit on every request cut off voucher uploads on slow
+  phone connections, silently, forever (reproduced at 64 kbps; `callServer` now adds the body's time at 32 kbps). A file
+  that waits must always say why (`uploadWhy`).
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.
 - **Expect pasted links to be damaged:** the join box replaces its content on paste and finds the
   invite inside any text.
