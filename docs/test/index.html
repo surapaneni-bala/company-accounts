@@ -431,7 +431,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'e18d543b74'; // filled in by tools/build.js
+const APP_VERSION = 'df57e857e3'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1503,18 +1503,27 @@ async function keepFile(meta, data) {
   return id;
 }
 
+// Why files are still only on this phone, in plain words (shown wherever a waiting file is).
+function uploadWhy() {
+  if (!S.link) return 'connect the Google Sheet to upload them.';
+  if ((S.link.v || 2) < 4) return can('settings') ? `they upload once the Google Sheet script is updated to version ${NEWEST_SCRIPT} (see "Show me how" below).` : "they upload once the company's Google Sheet script is updated — tell the owner.";
+  if (mustSignIn()) return 'sign in to upload them.';
+  if (uploading) return 'uploading now…';
+  return uploadErr || 'they upload by themselves when the internet is on.';
+}
+const SLOW_MSG = 'no internet, or it is very slow — they try again by themselves.';
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
 // ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
 async function uploadFiles() {
   if (uploading || !S || !S.link || mustSignIn() || !outbox.length || (S.link.v || 2) < 4) return;
-  uploading = true;
+  uploading = true; paintSync();
   try {
     for (const meta of outbox) {
       const rec = await fileGet(meta.id);
       if (!rec || !rec.pending) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
       let res;
       try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
-      catch (e) { uploadErr = e.offline || e.code === 'LOGIN' ? '' : `A file could not be uploaded: ${e.message}`; break; }
+      catch (e) { uploadErr = e.code === 'LOGIN' ? '' : e.offline ? SLOW_MSG : `a file could not be uploaded: ${e.message}`; break; }
       const { data, pending, ...d } = rec;
       update({ files: [...S.files, { ...d, fileId: res.fileId }] });
       await filePut({ ...rec, fileId: res.fileId, pending: false });
@@ -1574,7 +1583,7 @@ async function showFile(id) {
   openSheet(`${head(title, '', f.name)}
     ${f.mime === 'application/pdf' ? '<p class="filebig">📄</p>' : `<img class="viewimg" src="${URL.createObjectURL(blob)}" alt="${esc(title)}">`}
     <button class="btn in" data-act="shareShown">📤 Send or save</button>
-    ${f.pending ? '<p class="muted center">Kept on this phone. It uploads to the company Drive when the internet is on.</p>' : ''}`);
+    ${f.pending ? `<p class="muted center">Kept on this phone, not uploaded yet: ${esc(uploadWhy())}</p>` : ''}`);
 }
 const shareShown = () => shown && download(shown.blob, shown.name);
 
@@ -2142,7 +2151,7 @@ function readySheet(title, no, blob, name) {
   shown = { blob, name };
   openSheet(`${head(title[0] + title.slice(1).toLowerCase(), 'in', no)}
     <p class="okbig">✓ Ready</p>
-    <p class="hint center">Kept with the entry${S.link ? ' and saved to the company Google Drive' : ''}. Send it on WhatsApp now, or open it later from the entry.</p>
+    <p class="hint center">Kept with the entry${S.link ? ', and it goes to the company Google Drive by itself (the Sheet tab shows any file still waiting)' : ''}. Send it on WhatsApp now, or open it later from the entry.</p>
     <button class="btn in" data-act="shareShown">📤 Send on WhatsApp or save</button>
     <button class="btn ghost" data-act="close" style="margin-top:10px">Done</button>`);
 }
@@ -2212,7 +2221,7 @@ async function setBrand(type, patch) {
 // else's whenever it has internet. The newest copy of each record wins (stamp u).
 const SYNC_DELAY_MS = 2000;
 const SYNC_EVERY_MS = 2 * 60 * 1000;
-const SYNC_TIMEOUT_MS = 45000;
+const SYNC_TIMEOUT_MS = 45000, SLOWEST_BPS = 4000; // a request gets 45 s plus the time its body takes at 32 kbps: a voucher can go up on a weak phone connection
 const APP_URL = 'https://app.b-e-p-l.com/test/';
 // the order is the order records are sent in: an employee before a change request about them, files last
 // (the sheet only takes a file record whose entry it already has)
@@ -2295,11 +2304,11 @@ function inviteHint(f) {
 // Every request says who is asking: this phone's sign-in, or (no sign-in yet) the company code.
 // Signing in and setting up logins send their own details instead.
 async function callServer(link, body) {
-  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), SYNC_TIMEOUT_MS);
   const who = body.op === 'login' || body.op === 'setup' ? {} : signedIn() ? { token: session.token } : { key: link.k };
+  const text = JSON.stringify({ ...body, ...who }), ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), SYNC_TIMEOUT_MS + text.length / SLOWEST_BPS * 1000);
   let res;
   // text/plain body = no CORS preflight, which Apps Script cannot answer
-  try { res = await fetch(link.u, { method: 'POST', body: JSON.stringify({ ...body, ...who }), signal: ctl.signal }); }
+  try { res = await fetch(link.u, { method: 'POST', body: text, signal: ctl.signal }); }
   catch { throw Object.assign(new Error('No internet'), { offline: true }); }
   finally { clearTimeout(timer); }
   const j = await res.json().catch(() => null);
@@ -2439,8 +2448,7 @@ function syncCard() {
     <p class="muted">Connect your company Google Sheet so phones and computers share the same records. The app keeps working offline and syncs when the internet is on.</p>
     <button class="btn in" data-act="connect">Connect to Google Sheet 🔒</button></section>`;
   return `<section class="card pad" id="syncCard"><h3>📊 Company Google Sheet</h3>
-    <p class="muted">${esc(syncText())}${outbox.length ? ` ${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload.` : ''}</p>
-    ${uploadErr ? `<p class="note">⚠️ ${esc(uploadErr)}</p>` : ''}
+    <p class="muted">${esc(syncText())}${outbox.length ? ` ${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload: ${esc(uploadWhy())}` : ''}</p>
     ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>'
       : (S.link.v || 2) < NEWEST_SCRIPT && can('settings') ? `<p class="note">A newer Google Sheet script is ready (version ${NEWEST_SCRIPT}; this sheet runs ${S.link.v || 2}). It is needed for employees, files, vouchers and days not worked. <button class="link" data-act="howUpdate">Show me how</button></p>` : ''}
     ${S.link.sheet ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
