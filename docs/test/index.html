@@ -431,7 +431,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'b8291551a9'; // filled in by tools/build.js
+const APP_VERSION = '46b2c377ab'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1516,7 +1516,7 @@ function uploadWhy() {
 const SLOW_MSG = 'no internet, or it is very slow — they try again by themselves.';
 // A script error comes back as a page the phone cannot read, which looks like "no internet". If the sheet does answer,
 // the failure is the sheet's: almost always a sheet that was never allowed to use Google Drive (allowFiles not run).
-const DRIVE_MSG = 'the Google Sheet answers but cannot save files — it has no permission to use Google Drive yet. In Apps Script choose allowFiles at the top, press Run and allow it, then Deploy → Manage deployments → ✏️ → Version: New version → Deploy.';
+const DRIVE_MSG = "the Google Sheet answers but cannot save files — it has no permission to use Google Drive yet. In Apps Script choose allowFiles at the top and press Run; on Google's permission screen tick every box (Select all) and press Continue.";
 async function uploadFailure(e) {
   if (e.code === 'LOGIN') return '';
   if (!e.offline) return `a file could not be uploaded: ${e.message}`;
@@ -2475,7 +2475,7 @@ function howUpdateSheet() {
       <li>Open the new script: <a href="${SCRIPT_URL}" target="_blank" rel="noopener">new Code.gs</a>. Select all (<b>Ctrl+A</b>, Mac <b>Cmd+A</b>) and copy (<b>Ctrl+C</b> / <b>Cmd+C</b>).</li>
       <li>In Apps Script click inside the code, select all, press <b>Delete</b>, then paste (<b>Ctrl+V</b> / <b>Cmd+V</b>). Click <b>💾 Save</b>.</li>
       <li>Click the blue <b>Deploy</b> button → <b>Manage deployments</b> → the ✏️ <b>pencil</b>.</li>
-      <li><b>Only the first time you update to version 4 or newer:</b> in the list at the top of Apps Script choose <b>allowFiles</b> and click <b>▶ Run</b>. Google asks for permission to use your Drive: <b>Review permissions</b> → the company account → <b>Advanced → Go to … (unsafe)</b> → <b>Allow</b> (it is your own script). This lets the app keep receipts, vouchers and photos in a private Drive folder.</li>
+      <li><b>Only the first time you update to version 4 or newer:</b> in the list at the top of Apps Script choose <b>allowFiles</b> and click <b>▶ Run</b>. Google asks for permission to use your Drive: <b>Review permissions</b> → the company account → <b>Advanced → Go to … (unsafe)</b> → <b>tick every box (Select all)</b> → <b>Continue</b> (it is your own script; without the Drive box, files can't be saved). This lets the app keep receipts, vouchers and photos in a private Drive folder.</li>
       <li>Under <b>Version</b> choose <b>New version</b>. Leave “Execute as: Me” and “Who has access: Anyone”. Click <b>Deploy</b>.<br><em>Not “New deployment” — that makes a different link.</em></li>
       <li>Come back here and tap <b>Sync now</b>.</li>
     </ol>
