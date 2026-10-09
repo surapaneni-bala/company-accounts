@@ -310,9 +310,9 @@ label.btn { display: block; text-align: center; }
 .nudge button { border: 2px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 0; font-size: 18px; font-weight: 800; cursor: pointer; }
 .nudge button:active { background: var(--line); }
 /* framing the payment photo */
-.framer { position: relative; width: 100%; aspect-ratio: 3 / 2; margin-top: 10px; border-radius: var(--r-sm); overflow: hidden; background: #1B2232; touch-action: none; }
+.framer { position: relative; width: 100%; aspect-ratio: 3 / 2; margin-top: 10px; border-radius: var(--r-sm); overflow: hidden; background: #fff; touch-action: none; } /* white like the slip */
 .framer canvas { display: block; width: 100%; height: 100%; cursor: grab; }
-.frame-guide { position: absolute; inset: 0; pointer-events: none; border: 3px solid rgba(255,255,255,.95); border-radius: inherit;
+.frame-guide { position: absolute; inset: 0; pointer-events: none; border: 3px solid #26306B; border-radius: inherit;
   background-image: linear-gradient(to right, transparent calc(33.33% - 1px), rgba(255,255,255,.45) calc(33.33% - 1px) 33.33%, transparent 33.33% calc(66.66% - 1px), rgba(255,255,255,.45) calc(66.66% - 1px) 66.66%, transparent 66.66%),
     linear-gradient(to bottom, transparent calc(33.33% - 1px), rgba(255,255,255,.45) calc(33.33% - 1px) 33.33%, transparent 33.33% calc(66.66% - 1px), rgba(255,255,255,.45) calc(66.66% - 1px) 66.66%, transparent 66.66%); }
 .framer-tools { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 22px; color: var(--muted); }
@@ -429,7 +429,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '0891b1a539'; // filled in by tools/build.js
+const APP_VERSION = '79c40d8eb7'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1595,15 +1595,18 @@ const photoField = who => `<div class="fld photo-fld"><span>Photo of ${esc(who)}
   <label class="btn ghost">📷 Take or choose a photo<input type="file" name="photo" accept="image/*" capture="environment" hidden></label>
   <div class="framer" hidden><canvas></canvas><i class="frame-guide"></i></div>
   <div class="framer-tools" hidden><b aria-hidden="true">−</b><input type="range" name="zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom the photo"><b aria-hidden="true">＋</b></div>
-  <p class="muted framer-hint" hidden>Move the photo with your finger and zoom until it fits the box — it goes on the slip exactly like this.</p></div>`;
+  <p class="muted framer-hint" hidden>Move the photo with your finger and zoom in or out (all the way out shows the whole photo) — it goes on the slip exactly like this.</p></div>`;
 async function startFramer(input) {
   const f = input.form, file = input.files[0];
   if (!file) return;
-  try { f._frame = { file, img: await imgFrom(file), zoom: 1, x: 0, y: 0, fresh: true }; } catch (e) { return alert(e.message); }
+  try {
+    const img = await imgFrom(file), a = img.naturalWidth / img.naturalHeight;
+    f._frame = { file, img, zoom: 1, min: Math.min(a / PHOTO_RATIO, PHOTO_RATIO / a), x: 0, y: 0, fresh: true }; // zoom 1 fills the box, min shows the whole photo
+  } catch (e) { return alert(e.message); }
   const box = input.closest('.photo-fld');
   ['.framer', '.framer-tools', '.framer-hint'].forEach(sel => { $(sel, box).hidden = false; });
   $('label.btn', box).firstChild.textContent = '📷 Take another photo';
-  f.elements.zoom.value = 1;
+  f.elements.zoom.min = f._frame.min; f.elements.zoom.value = 1;
   framerEvents(f); drawFramer(f);
 }
 function drawFramer(f) {
@@ -1614,7 +1617,8 @@ function drawFramer(f) {
   if (fr.cw && cw !== fr.cw) { fr.x *= cw / fr.cw; fr.y *= cw / fr.cw; } // the box changed size (phone turned): keep the framing
   const iw = fr.img.naturalWidth, ih = fr.img.naturalHeight, s = Math.max(cw / iw, ch / ih) * fr.zoom;
   if (fr.fresh) { fr.x = (cw - iw * s) / 2; fr.y = (ch - ih * s) / 2; fr.fresh = false; } // starts centred
-  fr.x = Math.min(0, Math.max(cw - iw * s, fr.x)); fr.y = Math.min(0, Math.max(ch - ih * s, fr.y)); // the photo always fills the box
+  const keep = (v, room) => Math.min(Math.max(0, room), Math.max(Math.min(0, room), v)); // larger than the box: no gaps; smaller: stays inside it
+  fr.x = keep(fr.x, cw - iw * s); fr.y = keep(fr.y, ch - ih * s);
   fr.cw = cw; fr.s = s;
   const g = cv.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch);
@@ -1624,7 +1628,7 @@ function drawFramer(f) {
 function zoomFramer(f, zoom, cx, cy) {
   const fr = f._frame, cv = $('.framer canvas', f);
   if (!fr || !cv) return;
-  const r = cv.getBoundingClientRect(), z = Math.min(4, Math.max(1, zoom)), k = z / fr.zoom;
+  const r = cv.getBoundingClientRect(), z = Math.min(4, Math.max(fr.min, zoom)), k = z / fr.zoom;
   cx = cx ?? r.width / 2; cy = cy ?? r.height / 2;
   fr.x = cx - (cx - fr.x) * k; fr.y = cy - (cy - fr.y) * k; fr.zoom = z;
   if (+f.elements.zoom.value !== z) f.elements.zoom.value = z;
@@ -1647,14 +1651,13 @@ function framerEvents(f) {
   };
   cv.onpointerup = cv.onpointercancel = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
 }
-// the photo exactly as framed, as a 3 : 2 picture for the slip
+// the photo exactly as framed, as a 3 : 2 picture for the slip (zoomed out, the box's empty parts stay see-through)
 function framedPhoto(f) {
   const fr = f._frame;
   if (!fr || !fr.cw) return null;
   const c = document.createElement('canvas'), k = PHOTO_OUT / fr.cw;
   c.width = PHOTO_OUT; c.height = Math.round(PHOTO_OUT / PHOTO_RATIO);
   const g = c.getContext('2d');
-  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
   g.drawImage(fr.img, fr.x * k, fr.y * k, fr.img.naturalWidth * fr.s * k, fr.img.naturalHeight * fr.s * k);
   return c;
 }
@@ -1731,9 +1734,10 @@ async function brandImage(type) {
   if (!f) return null;
   try { return Object.assign(await imgFrom(await fileBlob(f.id)), { place: f.place }); } catch { return null; } // offline and never fetched: left out
 }
-// the company's logo (shipped with the app) for slips made before a letterhead is set
-let logoLoad = null;
-const wideLogo = () => logoLoad || (logoLoad = new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = 'logo-wide.png'; }));
+// pictures shipped with the app: the company's logo (slips made before a letterhead is set) and the watermark
+const shipped = {};
+const shippedImage = src => shipped[src] || (shipped[src] = new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; }));
+const wideLogo = () => shippedImage('logo-wide.png'), watermark = () => shippedImage('watermark.png');
 const logoOrName = (g, logo) => { if (logo) g.drawImage(logo, 90, 52, 110 * logo.naturalWidth / logo.naturalHeight, 110); else { g.fillStyle = SLIP_C.navy; g.font = `700 46px ${SANS}`; g.fillText(S.company || 'Company', 90, 120); } };
 const letterheadImage = () => brandImage('letterhead');
 // keep the letterhead and stamp on the phone, so slips made offline still carry them
@@ -1793,19 +1797,24 @@ function drawStamp(g, img, x, y, size, dateText, place) {
 
 /* s = { title, no, stampDate, party: [label, value], when: [label, value], forLabel, lines: [{ t, v, strong, muted }],
          amount, cur, extra: [[label, value]], signLabel, signName, sig: canvas, photo: image|null, preparedBy, ref } */
-// A slip is as tall as what it holds (A4 width). The letterhead goes on in three parts: its header (top LH_TOP) at the
-// top, its address strip (bottom LH_FOOT) at the foot, and the watermark between them, shrunk so the whole of it fits.
-const LH_TOP = 0.18, LH_FOOT = 0.1;
-function drawLetterhead(p, lh, H) {
-  const iw = lh.naturalWidth, ih = lh.naturalHeight, k = SLIP_W / iw, topH = ih * LH_TOP * k, footH = ih * LH_FOOT * k, mid = ih * (1 - LH_TOP - LH_FOOT);
-  p.drawImage(lh, 0, 0, iw, ih * LH_TOP, 0, 0, SLIP_W, topH);
-  p.drawImage(lh, 0, ih * (1 - LH_FOOT), iw, ih * LH_FOOT, 0, H - footH, SLIP_W, footH);
-  const room = H - topH - footH, s = Math.min(k, room / mid), dw = iw * s, dh = mid * s; // never bigger than on a full A4 page
-  p.drawImage(lh, 0, ih * LH_TOP, iw, mid, SLIP_W - dw, topH + (room - dh) / 2, dw, dh); // kept to the right edge, as printed
+// A slip is as tall as what it holds (A4 width). The letterhead's header (top LH_TOP) goes at the top; its address strip
+// (bottom LH_FOOT) only on full A4 pages (statements) — a shorter slip leaves it off (the owner's choice). The company's
+// "B" (watermark.png, cut from the letterhead by tools/make-icons.py) fills the room below the header: as on the printed
+// letterhead on a full page, shrunk to fit a shorter one. It is drawn with or without a letterhead.
+const LH_TOP = 0.18, LH_FOOT = 0.1, WM = { h: 1065, right: 1229, fill: 0.9 }; // its height and right edge on A4; the part of the room it may take
+function drawLetterhead(p, lh, wm, H, foot) {
+  const k = lh ? SLIP_W / lh.naturalWidth : 0, ih = lh ? lh.naturalHeight : 0, topH = lh ? ih * LH_TOP * k : 180, footH = lh && foot ? ih * LH_FOOT * k : 0;
+  if (lh) p.drawImage(lh, 0, 0, lh.naturalWidth, ih * LH_TOP, 0, 0, SLIP_W, topH);
+  if (footH) p.drawImage(lh, 0, ih * (1 - LH_FOOT), lh.naturalWidth, ih * LH_FOOT, 0, H - footH, SLIP_W, footH);
+  if (!wm) return;
+  const room = H - topH - footH, dh = Math.min(WM.h, room * WM.fill), dw = dh * wm.naturalWidth / wm.naturalHeight;
+  p.save(); p.globalCompositeOperation = 'multiply'; // its white paper doesn't cover anything
+  p.drawImage(wm, WM.right - dw, topH + (room - dh) / 2, dw, dh); // kept to the right edge, as printed
+  p.restore();
 }
 async function renderSlip(s) {
   const C = SLIP_C, L = 90, R = SLIP_W - 90, CX = L + 660;
-  const [lh, stampImg, logo] = await Promise.all([letterheadImage(), brandImage('stamp'), wideLogo()]);
+  const [lh, stampImg, logo, wm] = await Promise.all([letterheadImage(), brandImage('stamp'), wideLogo(), watermark()]);
   const c = document.createElement('canvas'); // the form, on a see-through layer as tall as it needs
   c.width = SLIP_W; c.height = 2600;
   const g = c.getContext('2d');
@@ -1895,13 +1904,13 @@ async function renderSlip(s) {
   });
   g.fillStyle = C.label; g.font = `400 18px ${SANS}`;
   g.fillText(`Ref ${s.ref} · made in the company app on ${fmtAbs(stamp())}`, L, y + 76);
-  // the page: exactly as tall as the slip, on the letterhead (its header and watermark above, its address strip at the foot)
-  const footH = lh ? Math.round(SLIP_H * LH_FOOT) : 0, H = y + 104 + footH;
+  // the page: exactly as tall as the slip, on the letterhead's header with the watermark behind the form
+  const H = y + 104;
   const page = document.createElement('canvas');
   page.width = SLIP_W; page.height = H;
   const p = page.getContext('2d');
   p.fillStyle = '#fff'; p.fillRect(0, 0, SLIP_W, H);
-  if (lh) drawLetterhead(p, lh, H);
+  drawLetterhead(p, lh, wm, H, false);
   p.drawImage(c, 0, 0);
   const jpeg = new Uint8Array(await (await canvasJpeg(page, 0.9)).arrayBuffer());
   return new Blob([jpegToPdf(jpeg, SLIP_W, H)], { type: 'application/pdf' });
@@ -1912,15 +1921,15 @@ async function renderSlip(s) {
           summary: [[label, value, strong]], verdict: { text, good } | null, sign: { label, name, sig, photo } | null, preparedBy, ref } */
 const fitText = (g, t, w) => { t = String(t ?? ''); if (g.measureText(t).width <= w) return t; while (t && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; };
 async function renderStatement(st) {
-  const [lh, stampImg, logo] = await Promise.all([letterheadImage(), st.sign ? brandImage('stamp') : null, wideLogo()]);
+  const [lh, stampImg, logo, wm] = await Promise.all([letterheadImage(), st.sign ? brandImage('stamp') : null, wideLogo(), watermark()]);
   const C = SLIP_C, L = 90, R = SLIP_W - 90, W = R - L, top = lh ? 268 : 200, limit = lh ? 1560 : SLIP_H - 80, pages = [];
   let g, y;
   const page = () => {
     const c = document.createElement('canvas');
     c.width = SLIP_W; c.height = SLIP_H; pages.push(c);
     g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, SLIP_W, SLIP_H);
-    if (lh) drawLetterhead(g, lh, SLIP_H);
-    else logoOrName(g, logo);
+    drawLetterhead(g, lh, wm, SLIP_H, true);
+    if (!lh) logoOrName(g, logo);
     y = top;
     if (pages.length > 1) { g.fillStyle = C.navy; g.font = `700 28px ${SANS}`; spaced(g, `${st.title} — CONTINUED`, L, y + 30, 2); g.fillStyle = C.label; g.font = `600 22px ${SANS}`; g.textAlign = 'right'; g.fillText(st.no, R, y + 30); g.textAlign = 'left'; y += 64; }
   };
