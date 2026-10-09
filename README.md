@@ -109,8 +109,17 @@ Needs the sheet script **version 4** and one extra step after pasting it (see *U
     request appears under **Review**; after approval, **Give it** appears on the employee's page).
   - **🚪 Has left:** the last day of work (the office manager's request waits for an admin), then **💵 Final settlement**.
 - **Office manager deletes:** she taps **🗑 Ask to delete**; it is deleted only when an admin approves.
-- **Quick unlock:** tap your name → **Quick unlock → Set up**: choose a 4–6 number code, and Face ID / fingerprint if
-  the phone has it. After 5 wrong codes your password is needed.
+- **Company stamp:** an admin taps **Sheet → Settings → Company stamp → Change** and picks a clear picture of the stamp.
+  It is printed beside "Approved by" on every slip, with the slip's date written along its dotted "Date:" line. Use
+  ◀ ▶ ▲ ▼ A− A+ until the date sits exactly on the dots, then **Save the position**.
+
+## Opening the app (code, Face ID, hidden balances)
+- After signing in you choose a **4-digit code**. From then on the app asks for it **every time you open it or come
+  back to it** — not your password. Tap your name → **Face ID / Touch ID → Turn on** to use your face or finger instead.
+  After 5 wrong codes your password is needed. Change the code: tap your name → **4-digit code → Change**.
+- The first page shows **Accounts** and **Employees** (store keepers go straight to Accounts). **‹** at the top goes back.
+- On **Accounts**, the balances and totals are hidden (••••••) like a banking app: tap **👁 Show** and give the code or
+  Face ID. They hide again when you leave the app.
 
 ## The Google Sheet
 Tabs: **Summary** (Cash / Bank / Total balances, projects, month by month, who entered what), **Expenses**,

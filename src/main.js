@@ -57,8 +57,14 @@ const ACTIONS = {
   showFile: b => showFile(b.dataset.id),
   shareShown: () => shareShown(),
   letterhead: async () => { if (await unlock('Enter the password to change the letterhead.')) letterheadSheet(); },
-  quick: () => quickSheet(),
-  quickOff: () => quickOff(),
+  stamp: async () => { if (await unlock('Enter the password to change the company stamp.')) stampSheet(); },
+  nudge: b => nudgeStamp(b.dataset.k, b.dataset.d),
+  stampSave: () => saveStampPlace(),
+  changeCode: () => changeCode(),
+  bioOn: () => bioOn(),
+  bioOff: () => bioOff(),
+  reveal: async () => { if (await pinPrompt({ why: 'Enter your code to see the balances' })) { showMoney = true; render(); } },
+  conceal: () => { showMoney = false; render(); },
   addWorker: () => workerForm(),
   openWorker: b => workerDetail(b.dataset.id),
   editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
@@ -66,7 +72,7 @@ const ACTIONS = {
   payWorker: b => payForm(b.dataset.id, b.dataset.pay, b.dataset.approval),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, quick: saveQuick };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -81,10 +87,13 @@ function refreshRate(f) {
   out.textContent = rate === null ? '' : amt === null ? `1 USD = ${plain(rate)} SSP` : `${money(amt, 'SSP')} is about ${money(Math.round(amt / rate * 100) / 100, 'USD')}`;
 }
 document.addEventListener('click', e => {
+  const k = e.target.closest('[data-pin]');
+  if (k) return pinKey(k.dataset.pin);
   const b = e.target.closest('[data-act]');
   if (b && ACTIONS[b.dataset.act]) ACTIONS[b.dataset.act](b);
 });
 document.addEventListener('submit', e => {
+  if (e.target.id === 'lkPwForm') return pinPassword(e);
   const f = e.target.closest('form[data-form]');
   if (!f) return;
   e.preventDefault();
@@ -131,6 +140,29 @@ addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } 
 // sync as soon as the internet comes back, when the app is reopened, and every few minutes
 addEventListener('online', () => scheduleSync(0));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { scheduleSync(0); checkForUpdate(); } });
+
+/* the code pad: typing on a keyboard works too; opening the app can't be skipped */
+document.addEventListener('keydown', e => {
+  if (!pin || pin.mode === 'pass' || !$('#lock').open) return;
+  if (/^\d$/.test(e.key)) { e.preventDefault(); pinKey(e.key); }
+  else if (e.key === 'Backspace') { e.preventDefault(); pinKey('del'); }
+});
+$('#lock').addEventListener('cancel', e => { if (pin && pin.mandatory) e.preventDefault(); else if (pin) { e.preventDefault(); pinKey('cancel'); } });
+$('#lock').addEventListener('close', () => { if (pin && pin.mandatory) $('#lock').showModal(); }); // closed by the browser anyway: open again
+// Leaving the app locks it: coming back asks for the code. Not when the app itself sent you away for a moment
+// (the camera, choosing a file, the share sheet) — that is consumed by the next return.
+// ponytail: a picker that was cancelled without leaving keeps the pass until the next return within 5 minutes
+let leftAt = 0, pickerAt = 0;
+document.addEventListener('click', e => {
+  const t = e.target;
+  if ((t.type === 'file') || t.closest('label')?.querySelector('input[type=file]') || t.closest('[data-act=shareShown], [data-act=shareInvite]')) pickerAt = Date.now();
+}, true);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { leftAt = Date.now(); return; }
+  const mine = pickerAt && Date.now() - pickerAt < 5 * 60e3;
+  pickerAt = 0;
+  if (leftAt && !mine) lockApp();
+});
 setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
 setInterval(renderLock, 10000);
 
@@ -139,6 +171,7 @@ loadOutbox().then(() => { if (outbox.length) uploadFiles(); });
 if (S && location.hash) history.replaceState(null, '', location.pathname);
 if (location.search) history.replaceState(null, '', location.pathname + location.hash); // drop ?v= left by an update
 render();
+lockApp(); // opening the app asks for the code (a phone signed in before codes existed chooses one now)
 checkForUpdate();
 if ($('form[data-form=join]')) inviteHint($('form[data-form=join]'));
 scheduleSync(0);

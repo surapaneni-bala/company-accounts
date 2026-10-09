@@ -79,7 +79,7 @@ function inviteHint(f) {
   const needLogin = !!link && !link.k;
   if (needLogin) $('.loginfields', f).hidden = false;
   box.className = 'invite-hint ' + (!v ? '' : link ? 'good' : 'bad');
-  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Join.' : '✓ Invite link OK — tap Join.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${appUrl()}#join=`;
+  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Sign in.' : '✓ Invite link OK — tap Sign in.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${appUrl()}#join=`;
 }
 
 // Every request says who is asking: this phone's sign-in, or (no sign-in yet) the company code.
@@ -300,7 +300,7 @@ async function doJoin(f) {
   repairImportedMoves();
   history.replaceState(null, '', location.pathname);
   sync = { state: 'ok', at: stampSec(), err: '' };
-  tab = 'home'; render(); toast(`Joined ${S.company} ✓`);
+  tab = 'menu'; render(); toast(`Joined ${S.company} ✓`);
 }
 // a new phone joining a company that has logins: sign in, then load what this person may see
 async function joinSignedIn(f, link, username, password) {
@@ -318,9 +318,10 @@ async function joinSignedIn(f, link, username, password) {
   await signedInAs(res, password);
   navigator.storage?.persist?.();
   history.replaceState(null, '', location.pathname);
-  tab = 'home';
+  tab = 'menu';
   await syncNow();
   render(); toast(`Welcome, ${res.me.name} ✓`);
+  lockApp(); // a new sign-in chooses its 4-digit code first
 }
 async function inviteSheet() {
   if (!await unlock('Enter the password to add a phone. The invite link gives access to the company records.')) return;

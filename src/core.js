@@ -19,7 +19,10 @@ const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const AT_RE = /^\d{4}-\d\d-\d\dT\d\d:\d\d$/;
 
 let S = load();
-let tab = 'home', histKind = 'E', histQuery = '', histMonth = '';
+// 'menu' = the first page after signing in (Accounts, Employees); the bottom bar belongs to Accounts
+let tab = 'menu', histKind = 'E', histQuery = '', histMonth = '';
+const ACC_TABS = ['home', 'hist', 'proj', 'sheet'];
+const WELCOME = 'Welcome to Brookfield';
 let unlockedUntil = 0;
 
 /* ---------- storage ---------- */
@@ -135,51 +138,28 @@ async function hashPw(pw, salt) {
   return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 const isUnlocked = () => Date.now() < unlockedUntil;
-// fresh = ask for the password itself even if unlocked a moment ago (e.g. before setting up quick unlock)
+// fresh = ask for the password itself even if unlocked a moment ago (e.g. before choosing a new code).
+// Signed in with a code: the code pad (or Face ID); otherwise your password, or the company password before logins.
 function unlock(why, fresh) {
   if (isUnlocked() && !fresh) return Promise.resolve(true);
+  const opened = () => { unlockedUntil = Date.now() + UNLOCK_MS; renderLock(); return true; };
+  if (!fresh && quick()) return pinPrompt({ why: why.replace('Enter the password', 'Enter your code') }).then(ok => ok && opened());
   return new Promise(resolve => {
-    const d = $('#pw'), inp = $('#pwIn'), q = fresh ? null : quick();
-    let useCode = !!q;
-    // signed in: your own password (or your quick-unlock code); otherwise the company password, as before logins
-    const paint = () => {
-      $('#pwTitle').textContent = useCode ? 'Code needed' : 'Password needed';
-      inp.placeholder = useCode ? 'Your code' : signedIn() ? 'Your password' : 'Password';
-      inp.inputMode = useCode ? 'numeric' : 'text';
-      inp.autocomplete = useCode ? 'off' : 'current-password';
-      $('#pwBio').hidden = !(useCode && q.cred);
-      $('#pwSwitch').hidden = !q;
-      $('#pwSwitch').textContent = useCode ? 'Use my password instead' : 'Use my code';
-      inp.value = ''; inp.focus();
-    };
-    const ok = () => { unlockedUntil = Date.now() + UNLOCK_MS; d.close('ok'); renderLock(); resolve(true); };
-    const wrong = msg => { $('#pwErr').textContent = msg; inp.select(); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake'); };
+    const d = $('#pw'), pass = signedIn() ? session.check : S.pass;
     $('#pwWhy').textContent = signedIn() ? why.replace('the password', 'your password') : why;
-    $('#pwErr').textContent = '';
+    $('#pwIn').value = ''; $('#pwErr').textContent = ''; $('#pwIn').placeholder = signedIn() ? 'Your password' : 'Password';
     d.returnValue = '';
-    d.showModal(); paint();
+    d.showModal(); $('#pwIn').focus();
     $('#pwCancel').onclick = () => d.close();
-    $('#pwSwitch').onclick = () => { useCode = !useCode; $('#pwErr').textContent = ''; paint(); };
-    $('#pwBio').onclick = async () => { if (await bioCheck()) ok(); else $('#pwErr').textContent = 'Face ID / fingerprint did not work. Type your code.'; };
     $('#pwForm').onsubmit = async e => {
       e.preventDefault();
-      if (useCode) {
-        const now = quick();
-        if (now && await slowHash(inp.value, now.salt) === now.hash) { if (now.tries) saveSession({ ...session, quick: { ...now, tries: 0 } }); return ok(); }
-        const tries = (session.quick.tries || 0) + 1;
-        saveSession({ ...session, quick: { ...session.quick, tries } });
-        if (tries < QUICK_TRIES) return wrong(`Wrong code. ${QUICK_TRIES - tries} ${QUICK_TRIES - tries === 1 ? 'try' : 'tries'} left, then your password is needed.`);
-        useCode = false; paint();
-        return wrong('Too many wrong codes. Type your password.');
+      if (pass && await (signedIn() ? slowHash : hashPw)($('#pwIn').value, pass.salt) === pass.hash) { d.close('ok'); resolve(opened()); }
+      else {
+        $('#pwErr').textContent = 'Wrong password. Try again.';
+        $('#pwIn').select(); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake');
       }
-      const pass = signedIn() ? session.check : S.pass;
-      if (pass && await (signedIn() ? slowHash : hashPw)(inp.value, pass.salt) === pass.hash) {
-        if (session && session.quick && session.quick.tries) saveSession({ ...session, quick: { ...session.quick, tries: 0 } }); // the password opens the code again
-        ok();
-      } else wrong('Wrong password. Try again.');
     };
     d.onclose = () => { if (d.returnValue !== 'ok') resolve(false); };
-    if (useCode && q.cred) $('#pwBio').click(); // straight to Face ID; the code is right there if it fails
   });
 }
 function renderLock() { const p = $('#lockPill'); if (p) p.hidden = !isUnlocked(); }
@@ -265,16 +245,17 @@ function render() {
   $('#hdr').hidden = $('#tabs').hidden = !ready;
   if (!ready) { main.innerHTML = viewSetup(); $('[autofocus]', main)?.focus(); return; }
   if (mustSignIn()) { $('#hdr').hidden = $('#tabs').hidden = true; main.innerHTML = viewSignIn(); $('[autofocus]', main)?.focus(); return; }
-  if ((tab === 'proj' && !can('projects')) || (tab === 'staff' && !can('staff'))) tab = 'home';
+  if ((tab === 'proj' && !can('projects')) || ((tab === 'staff' || tab === 'menu') && !can('staff'))) tab = 'home'; // one section only: no menu
+  $('#tabs').hidden = !ACC_TABS.includes(tab);
+  $('#menuBtn').hidden = tab === 'menu' || !can('staff');
   $('#tabs [data-tab=proj]').hidden = !can('projects');
-  $('#tabs [data-tab=staff]').hidden = !can('staff');
   $('#whoChip').hidden = !signedIn();
   $('#whoChip').textContent = signedIn() ? `👤 ${session.user.name.split(' ')[0]}` : '';
-  $('#coName').textContent = S.company;
+  $('#coName').textContent = tab === 'menu' || !can('staff') ? S.company : tab === 'staff' ? 'Employees' : 'Accounts'; // inside a section: its name
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
   const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were
-  main.innerHTML = { home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet }[tab]();
+  main.innerHTML = { menu: viewMenu, home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet }[tab]();
   if (y) scrollTo(0, y);
   render.tab = tab;
   renderLock(); paintSync();
@@ -283,26 +264,12 @@ function render() {
 let setupMode = ''; // '' = decide when drawn: an invite link in the address opens 'join'
 const isPhone = () => matchMedia('(pointer: coarse)').matches;
 const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-const APP_LOGO = `<div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>`;
+const APP_LOGO = `<img class="logo" src="icon-192.png" alt="" width="64" height="64">`; // the company's mark (tools/make-icons.py)
 function viewSetup() {
-  const mode = setupMode || (inviteFromHash() ? 'join' : 'choose');
+  const mode = setupMode || 'join';
   const logo = APP_LOGO;
   const tip = isPhone() && !isInstalled() ? `<p class="note">📲 <b>First install the app:</b> iPhone — in Safari tap <b>Share → Add to Home Screen</b>. Android — in Chrome tap <b>⋮ → Add to Home screen</b>. Then open <b>Accounts</b> from your home screen.</p>` : '';
-  const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="choose">← Back</button></p>`;
-  if (mode === 'join') return `<section class="setup card pad">${logo}
-    <h1>Join my company</h1>
-    <p>Paste the invite link you were sent. Joining needs internet once — after that the app works offline.</p>${tip}
-    <form data-form="join">
-      <label class="fld"><span>Invite link</span><input name="invite" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" autofocus></label>
-      <p class="invite-hint"></p>
-      <div class="loginfields" hidden>${signInFields(false)}</div>
-      <details class="manual"><summary>Join with the web app link and code instead</summary>
-        <label class="fld"><span>Web app link</span><input name="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
-        <label class="fld"><span>Company code</span><input name="key" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab"></label>
-      </details>
-      <p class="err"></p>
-      <button class="btn in">Join</button>
-    </form>${back}</section>`;
+  const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="join">← Back</button></p>`;
   if (mode === 'new') return `<section class="setup card pad">${logo}
     <h1>New company</h1>
     <p>Set up your company accounts. It takes 30 seconds.</p>
@@ -315,15 +282,39 @@ function viewSetup() {
       <button class="btn primary">Start</button>
     </form>${back}</section>`;
   return `<section class="setup card pad">${logo}
-    <h1>Welcome!</h1>
-    <p>Company accounts in USD and SSP. Works without internet.</p>${tip}
-    <div class="stack">
-      <button class="btn primary" data-act="setupMode" data-mode="new">Start a new company</button>
-      <button class="btn ghost" data-act="setupMode" data-mode="join">Join my company<small class="sub">I have an invite link</small></button>
-    </div>
-    <p class="center"><button class="link" data-act="restore">Have a backup file? Restore it</button></p>
+    <h1>${WELCOME}</h1>
+    <p>Open the invite link you were sent, or paste it below. Then sign in with the username and password your admin gave you.</p>${tip}
+    <form data-form="join">
+      <label class="fld"><span>Invite link</span><input name="invite" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" ${inviteFromHash() ? '' : 'autofocus'}></label>
+      <p class="invite-hint"></p>
+      <div class="loginfields">${signInFields(!!inviteFromHash())}</div>
+      <details class="manual"><summary>Join with the web app link and code instead</summary>
+        <label class="fld"><span>Web app link</span><input name="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
+        <label class="fld"><span>Company code</span><input name="key" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab"></label>
+      </details>
+      <p class="err"></p>
+      <button class="btn primary">Sign in</button>
+    </form>
+    <details class="manual other"><summary>Other options</summary>
+      <div class="stack"><button class="btn ghost" data-act="restore">Restore a backup file</button><button class="btn ghost" data-act="setupMode" data-mode="new">Start a new company</button></div>
+    </details>
     <input type="file" id="restoreFile" accept=".json,application/json" hidden>
   </section>`;
+}
+
+// The first page after signing in: one big button per part of the company app.
+function viewMenu() {
+  const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const who = signedIn() ? session.user.name.split(' ')[0] : '';
+  const staffWaiting = waiting().filter(c => c.kind === 'W').length;
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}
+    <section class="launch">
+      <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
+      <div class="apps">
+        <button class="app-tile acc" data-act="tab" data-tab="home"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><span><b>Accounts</b><small>Cash, bank and projects</small></span></button>
+        <button class="app-tile emp" data-act="tab" data-tab="staff">${staffWaiting ? `<span class="badge">${staffWaiting} waiting</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg></span><span><b>Employees</b><small>Salaries, advances and slips</small></span></button>
+      </div>
+    </section>`;
 }
 
 // Cash and bank balance for each currency. A move between them changes both, never the total.
@@ -341,15 +332,20 @@ function viewHome() {
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
   const seeMoney = can('money');
+  // like a banking app: the figures stay hidden until the code (or Face ID) is given; phones without logins show them
+  const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
+  const fig = n => (hide ? M : plain(n));
+  const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
   return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">Your expenses — only you and the office see them.</p>`}
-  <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
+  <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
+    ${signedIn() ? `<button class="eye" data-act="${hide ? 'reveal' : 'conceal'}">${hide ? '👁 Show' : '🙈 Hide'}</button>` : ''}
     ${CURS.map(c => `<div class="balrow">
-      <div class="balhead"><span class="cur-tag">${c}</span><span class="baltot${bal[c].Total < 0 ? ' neg' : ''}">${plain(bal[c].Total)}</span><small>total</small></div>
-      <div class="balparts">${ACCOUNTS.map(a => `<span>${ACCOUNT_ICON[a]} ${a} <b class="${bal[c][a] < 0 ? 'neg' : ''}">${plain(bal[c][a])}</b></span>`).join('')}</div>
+      <div class="balhead"><span class="cur-tag">${c}</span><span class="baltot${!hide && bal[c].Total < 0 ? ' neg' : ''}">${fig(bal[c].Total)}</span><small>total</small></div>
+      <div class="balparts">${ACCOUNTS.map(a => `<span>${ACCOUNT_ICON[a]} ${a} <b class="${!hide && bal[c][a] < 0 ? 'neg' : ''}">${fig(bal[c][a])}</b></span>`).join('')}</div>
     </div>`).join('')}
-    <div class="split"><div class="i"><small>Money received</small>${curLines(recv)}</div><div class="o"><small>Money spent</small>${curLines(spent)}</div></div>
+    <div class="split"><div class="i"><small>Money received</small>${lines(recv)}</div><div class="o"><small>Money spent</small>${lines(spent)}</div></div>
   </section>
   <div class="actions">
     <button class="tile out" data-act="addExpense"><span class="ic">−</span><span><b>Add expense</b><small>Money paid out</small></span></button>
@@ -358,8 +354,8 @@ function viewHome() {
     <button class="tile bulk move" data-act="addMove" ${seeMoney ? '' : 'hidden'}><span class="ic">⇄</span><span><b>Move money</b><small>Cash into the bank, or bank to cash — not spending</small></span></button>
   </div>
   <div class="minis">
-    <div class="mini"><small>Spent today</small>${curLines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
-    <div class="mini"><small>Spent this month</small>${curLines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
+    <div class="mini"><small>Spent today</small>${lines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
+    <div class="mini"><small>Spent this month</small>${lines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
   </div>
   <div class="sec-head" style="margin-top:22px"><h2 class="sec">Recent</h2><button class="btn small ghost" data-act="tab" data-tab="hist">See all →</button></div>
   ${recent.length ? `<div class="card list">${recent.map(([x, k]) => itemRow(x, k, true)).join('')}</div>` : empty('Nothing here yet', 'Tap <b>Add expense</b> or <b>Money received</b> to start.')}`;
@@ -451,6 +447,7 @@ function viewSheet() {
       <section class="card pad">
         <h3>⚙️ Settings</h3>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : 'Not set'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : 'Not set — slips get a plain heading'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
@@ -883,6 +880,6 @@ async function doRestore(file) {
   const fresh = migrate({ ...data, seq: {}, dev: newDev(), dirty: [] });
   S = { ...fresh, dirty: fresh.link ? allIds(fresh) : [] };
   update({ log: logWith([['Restored', '—', `Data restored from backup file "${file.name}"`]]) });
-  unlockedUntil = 0; tab = 'home';
+  unlockedUntil = 0; tab = 'menu';
   closeAll(); render(); scheduleSync(0); toast('Backup restored ✓ — use the password from the backup');
 }

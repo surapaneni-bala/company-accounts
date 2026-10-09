@@ -1,12 +1,30 @@
-# Draws the app icon (a ledger page with a green +) at the sizes phones need.
+# Draws the app icon at the sizes phones need: the company's "B" mark on white, cut from private/brand/logo.png
+# (that file is the owner's and stays out of the public repo; only the finished icons are published).
+# Without it, a plain ledger icon is drawn instead.
 # Usage: python3 tools/make-icons.py   (needs Pillow)
 from pathlib import Path
 from PIL import Image, ImageDraw
 
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / 'src'
+LOGO = ROOT / 'private' / 'brand' / 'logo.png'
+MARK_RIGHT = 0.293  # the B mark is the left part of the logo, before the words start (fraction of the width)
 INK, PAPER, GREEN = '#1B2232', '#F3EFE7', '#0E7C57'
-OUT = Path(__file__).resolve().parent.parent / 'src'
 
-def icon(size):
+def mark():
+    logo = Image.open(LOGO).convert('RGBA')
+    part = logo.crop((0, 0, int(logo.width * MARK_RIGHT), logo.height))
+    return part.crop(part.getbbox())  # just the ink
+
+def logo_icon(size, m):
+    big = size * 4
+    im = Image.new('RGB', (big, big), 'white')
+    k = big * 0.72 / max(m.width, m.height)  # leave room: phones round off the corners
+    m2 = m.resize((round(m.width * k), round(m.height * k)), Image.LANCZOS)
+    im.paste(m2, ((big - m2.width) // 2, (big - m2.height) // 2), m2)
+    return im.resize((size, size), Image.LANCZOS)
+
+def ledger_icon(size):
     big = size * 4  # draw large, then shrink for smooth edges
     s = big / 512
     im = Image.new('RGB', (big, big), INK)
@@ -21,6 +39,7 @@ def icon(size):
     d.rounded_rectangle([cx - 9 * s, cy - 32 * s, cx + 9 * s, cy + 32 * s], radius=9 * s, fill='white')
     return im.resize((size, size), Image.LANCZOS)
 
+m = mark() if LOGO.exists() else None
 for name, size in [('icon-192.png', 192), ('icon-512.png', 512), ('apple-touch-icon.png', 180)]:
-    icon(size).save(OUT / name)
-    print('wrote', name)
+    (logo_icon(size, m) if m else ledger_icon(size)).save(OUT / name)
+    print('wrote', name, '(company mark)' if m else '(ledger)')

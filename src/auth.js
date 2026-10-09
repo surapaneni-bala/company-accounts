@@ -99,8 +99,8 @@ async function doSignIn(f) {
   catch (e) { return formErr(f, e.offline ? null : 'password', e.offline ? 'No internet. Signing in needs internet.' : e.message); }
   await signedInAs(res, v.password);
   update({ log: logWith([['Signed in', '—', `${res.me.name} signed in on this phone (${S.dev})`]], res.me.name) });
-  closeSheet(); tab = 'home'; render(); toast(`Welcome, ${res.me.name} ✓`);
-  syncNow();
+  closeSheet(); tab = 'menu'; render(); toast(`Welcome, ${res.me.name} ✓`);
+  syncNow(); lockApp();
 }
 
 /* the owner's first login, proven with a one-time setup code that only appears inside the Google Sheet */
@@ -129,7 +129,7 @@ async function doSetupLogins(f) {
   update({ log: logWith([['Logins', '—', `Logins set up. ${res.me.name} (${res.me.username}) is the first admin.`]], res.me.name) });
   render(); toast('Logins are ready ✓ Now give the others theirs.');
   syncNow();
-  usersSheet();
+  usersSheet(); lockApp();
 }
 
 /* admins: give, change and close logins */
@@ -191,10 +191,13 @@ async function requireLogins(on) {
 
 /* my login */
 function accountSheet() {
-  const u = session.user;
+  const u = session.user, q = session.quick;
   openSheet(`${head(u.name, '', `${u.username} · ${ROLES[u.role]}`)}
+    <h3 class="subh" style="margin-top:0">Opening the app</h3>
+    <div class="setrow"><span>4-digit code<br><span class="muted">${q ? 'Asked every time you open the app' : 'Not set yet'}</span></span><button class="btn small ghost" data-act="changeCode">${q ? 'Change' : 'Set'}</button></div>
+    <div class="setrow" id="bioRow"><span>Face ID / Touch ID<br><span class="muted">${q && q.cred ? 'On — opens the app with your face or finger' : 'Checking this phone…'}</span></span><span></span></div>
     <form data-form="password">
-      <h3 class="subh" style="margin-top:0">Change my password</h3>
+      <h3 class="subh">Change my password</h3>
       <label class="fld"><span>Current password</span><input type="password" name="old" required autocomplete="current-password"></label>
       <label class="fld"><span>New password</span><input type="password" name="pw" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
       <label class="fld"><span>New password again</span><input type="password" name="pw2" required minlength="8" autocomplete="new-password"></label>
@@ -202,6 +205,13 @@ function accountSheet() {
       <button class="btn primary">Change password</button>
     </form>
     <button class="btn ghost" data-act="signOut" style="margin-top:14px">Sign out of this phone</button>`);
+  here = accountSheet;
+  bioAvailable().then(ok => {
+    const row = $('#bioRow');
+    if (!row) return;
+    const on = !!(session.quick && session.quick.cred);
+    row.outerHTML = `<div class="setrow" id="bioRow"><span>Face ID / Touch ID<br><span class="muted">${on ? 'On — opens the app with your face or finger' : ok ? 'Off' : 'This phone does not offer it to apps'}</span></span>${ok && session.quick ? `<button class="btn small ${on ? 'ghost' : 'primary'}" data-act="${on ? 'bioOff' : 'bioOn'}">${on ? 'Turn off' : 'Turn on'}</button>` : ''}</div>`;
+  });
 }
 async function doChangePassword(f) {
   const v = Object.fromEntries(new FormData(f));
@@ -219,8 +229,7 @@ function loginsCard() {
   if (signedIn()) {
     return `<section class="card pad"><h3>👤 ${esc(session.user.name)}</h3>
       <p class="muted">Signed in as <b>${esc(session.user.username)}</b> · ${ROLES[session.user.role]}</p>
-      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">My password · Sign out</button></div>
-      <div class="setrow" style="margin-top:12px"><span>Quick unlock<br><span class="muted">${session.quick ? `On: a code${session.quick.cred ? ' and Face ID / fingerprint' : ''}` : 'A short code or Face ID instead of your password'}</span></span><button class="btn small ghost" data-act="quick">${session.quick ? 'Change' : 'Set up'} 🔒</button></div></section>`;
+      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">Code, Face ID, password</button></div></section>`;
   }
   if (S.link.logins) {
     return `<section class="card pad"><h3>👥 Logins</h3><p class="muted">Everyone can have their own username and password. Sign in with yours.</p>
@@ -334,12 +343,13 @@ async function askDelete(k, id) {
   closeSheet(); render(); toast('Sent for approval ✓ It is deleted when an admin approves.');
 }
 
-/* ---------- quick unlock: a short code, and Face ID / fingerprint where the phone has it ---------- */
-// Both live only in this phone's sign-in slot. The code is checked like the password (slow hash); after 5 wrong
-// codes only the password works. Face ID is a key made on this phone for this address; the phone's own check
-// (the "user verified" flag) is what counts. iPhone home-screen apps are known to fumble it, so the code always works.
-const QUICK_TRIES = 5;
-const quick = () => (signedIn() && session.quick && session.quick.tries < QUICK_TRIES ? session.quick : null);
+/* ---------- the 4-digit code: opening the app, showing balances, unlocking edits ---------- */
+// The code and the Face ID key live only in this phone's sign-in slot (never in backups). The code is checked like
+// the password (slow hash); after 5 wrong codes only the password works. Face ID is a key made on this phone for this
+// address; the phone's own check (the "user verified" flag) is what counts. iPhone home-screen apps sometimes fumble
+// Face ID, so the code always works too.
+const PIN_LEN = 4, QUICK_TRIES = 5;
+const quick = () => (signedIn() && session.quick && session.quick.len === PIN_LEN && session.quick.tries < QUICK_TRIES ? session.quick : null);
 const rndBytes = n => crypto.getRandomValues(new Uint8Array(n));
 const bytesB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const b64uBytes = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
@@ -347,49 +357,121 @@ async function bioAvailable() {
   try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch { return false; }
 }
 async function bioCheck() {
-  const q = quick();
+  const q = session && session.quick;
   if (!q || !q.cred) return false;
   try {
     const a = await navigator.credentials.get({ publicKey: { challenge: rndBytes(32), allowCredentials: [{ type: 'public-key', id: b64uBytes(q.cred) }], userVerification: 'required', timeout: 60000 } });
     return !!(new Uint8Array(a.response.authenticatorData)[32] & 4); // the phone checked the face or finger, not just a tap
   } catch { return false; }
 }
-async function quickSheet() {
-  if (!await unlock('Enter your password to set up quick unlock.', true)) return;
-  const bio = await bioAvailable();
-  openSheet(`${head('Quick unlock')}
-    <p class="hint">Unlock with a short code${bio ? ' or Face ID / fingerprint' : ''} instead of typing your password. It works only on this phone.</p>
-    <form data-form="quick">
-      <label class="fld"><span>Choose a code <em>(4 to 6 numbers)</em></span><input name="code" type="password" inputmode="numeric" maxlength="6" required autocomplete="off" autofocus></label>
-      <label class="fld"><span>Type it again</span><input name="code2" type="password" inputmode="numeric" maxlength="6" required autocomplete="off"></label>
-      ${bio ? '<label class="fld check"><input type="checkbox" name="bio" checked> Also use Face ID / fingerprint</label>' : ''}
-      <p class="err"></p>
-      <button class="btn primary">Save</button>
-    </form>
-    ${session.quick ? '<p class="center"><button class="link" data-act="quickOff">Turn quick unlock off</button></p>' : ''}`);
+// Face ID is turned on from a tap (phones only allow it then); some phones never answer, so give up after a minute.
+async function bioOn() {
+  try {
+    const make = navigator.credentials.create({ publicKey: {
+      challenge: rndBytes(32), rp: { name: 'Company Accounts' }, user: { id: rndBytes(16), name: session.user.username, displayName: session.user.name },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
+    const c = await Promise.race([make, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 65000))]);
+    saveSession({ ...session, quick: { ...session.quick, cred: bytesB64u(c.rawId) } });
+    toast('Face ID / Touch ID is on ✓');
+  } catch { alert('Face ID / Touch ID could not be turned on. Your 4-digit code still works.'); }
+  reopenHere();
 }
-async function saveQuick(f) {
-  const v = Object.fromEntries(new FormData(f));
-  if (!/^\d{4,6}$/.test(v.code)) return formErr(f, 'code', 'The code is 4 to 6 numbers.');
-  if (v.code !== v.code2) return formErr(f, 'code2', "The two codes don't match.");
-  let cred = null;
-  if (v.bio) {
-    $('.err', f).textContent = 'Setting up Face ID / fingerprint…';
-    try {
-      const make = navigator.credentials.create({ publicKey: {
-        challenge: rndBytes(32), rp: { name: 'Company Accounts' }, user: { id: rndBytes(16), name: session.user.username, displayName: session.user.name },
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
-      // some phones never answer (iPhone home-screen apps): give up after the time limit instead of waiting forever
-      const c = await Promise.race([make, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 65000))]);
-      cred = bytesB64u(c.rawId);
-    } catch { if (!confirm('Face ID / fingerprint could not be set up on this phone.\n\nSave the code only?')) return; }
+function bioOff() { saveSession({ ...session, quick: { ...session.quick, cred: null } }); toast('Face ID / Touch ID is off'); reopenHere(); }
+
+// The pad. mode: 'check' (type the code), 'new' then 'confirm' (choose a code), 'pass' (the password instead).
+// mandatory = it can't be closed (opening the app). Resolves true once unlocked or a code is chosen.
+let pin = null;
+function pinPrompt({ why, mode = 'check', mandatory = false }) {
+  if (pin) pin.resolve(false); // a newer prompt replaces an older one
+  return new Promise(resolve => {
+    pin = { why, mode: mode === 'check' && !quick() ? 'pass' : mode, mandatory, typed: '', first: '', err: '', busy: false, resolve };
+    const d = $('#lock');
+    pinDraw();
+    if (!d.open) d.showModal();
+    if (pin.mode === 'check' && quick().cred) bioTry(false); // straight to Face ID; the pad is right there if it fails
+  });
+}
+function pinDraw() {
+  const p = pin, q = quick();
+  const title = { check: 'Enter your code', new: 'Choose a 4-digit code', confirm: 'Type the code again', pass: 'Enter your password' }[p.mode];
+  const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" data-pin="${n}">${n}</button>`).join('');
+  $('#lockIn').innerHTML = `${APP_LOGO}<h2>${title}</h2><p class="lk-why">${esc(p.why)}</p>
+    ${p.mode === 'pass' ? `<form id="lkPwForm"><input type="password" id="lkPw" autocomplete="current-password" placeholder="Your password" required><p class="err">${esc(p.err)}</p><button class="btn primary">Unlock</button></form>`
+      : `<div class="dots${p.err ? ' shake' : ''}">${Array.from({ length: PIN_LEN }, (_, i) => `<i class="${i < p.typed.length ? 'on' : ''}"></i>`).join('')}</div>
+      <p class="err">${esc(p.busy ? 'Checking…' : p.err)}</p>
+      <div class="keypad">${keys}${p.mode === 'check' && q && q.cred ? '<button type="button" class="ghostkey" data-pin="bio" aria-label="Use Face ID">🙂</button>' : '<span></span>'}<button type="button" data-pin="0">0</button><button type="button" class="ghostkey" data-pin="del" aria-label="Delete">⌫</button></div>`}
+    <div class="lk-foot">${p.mode === 'check' ? '<button type="button" class="link" data-pin="pass">Use my password</button>' : ''}${p.mode === 'pass' && q ? '<button type="button" class="link" data-pin="code">Use my code</button>' : ''}${p.mandatory ? '' : '<button type="button" class="link" data-pin="cancel">Cancel</button>'}</div>`;
+  if (p.mode === 'pass') $('#lkPw').focus();
+}
+function pinDone(ok) {
+  const p = pin;
+  pin = null;
+  if (ok && session.quick && session.quick.tries) saveSession({ ...session, quick: { ...session.quick, tries: 0 } });
+  $('#lock').close();
+  p.resolve(ok);
+}
+async function bioTry(say) {
+  if (await bioCheck()) { if (pin) pinDone(true); }
+  else if (say && pin) { pin.err = 'Face ID did not work. Type your code.'; pinDraw(); }
+}
+async function pinKey(k) {
+  const p = pin;
+  if (!p || p.busy) return;
+  if (k === 'cancel') return pinDone(false);
+  if (k === 'bio') return bioTry(true);
+  if (k === 'pass' || k === 'code') { p.mode = k === 'pass' ? 'pass' : 'check'; p.err = ''; p.typed = ''; return pinDraw(); }
+  if (k === 'del') { p.typed = p.typed.slice(0, -1); return pinDraw(); }
+  if (p.typed.length >= PIN_LEN) return;
+  p.typed += k; p.err = '';
+  pinDraw();
+  if (p.typed.length < PIN_LEN) return;
+  if (p.mode === 'new') { p.first = p.typed; p.typed = ''; p.mode = 'confirm'; return pinDraw(); }
+  if (p.mode === 'confirm') {
+    if (p.typed !== p.first) { p.mode = 'new'; p.typed = ''; p.err = "The two codes didn't match. Choose again."; return pinDraw(); }
+    p.busy = true; pinDraw();
+    const salt = randHex();
+    saveSession({ ...session, quick: { salt, hash: await slowHash(p.typed, salt), len: PIN_LEN, cred: (session.quick && session.quick.cred) || null, tries: 0 } });
+    return pinDone(true);
   }
-  const salt = randHex();
-  saveSession({ ...session, quick: { salt, hash: await slowHash(v.code, salt), cred, tries: 0 } });
-  closeSheet(); render(); toast(`Quick unlock is on ✓${cred ? ' Code and Face ID / fingerprint' : ''}`);
+  // check: let the dots fill, then the slow check
+  p.busy = true; pinDraw();
+  const q = session.quick, good = await slowHash(p.typed, q.salt) === q.hash;
+  p.busy = false;
+  if (good) return pinDone(true);
+  const tries = (q.tries || 0) + 1;
+  saveSession({ ...session, quick: { ...q, tries } });
+  p.typed = '';
+  if (tries >= QUICK_TRIES) { p.mode = 'pass'; p.err = 'Too many wrong codes. Type your password.'; }
+  else p.err = `Wrong code. ${QUICK_TRIES - tries} ${QUICK_TRIES - tries === 1 ? 'try' : 'tries'} left.`;
+  pinDraw();
 }
-function quickOff() {
-  const { quick: _, ...rest } = session;
-  saveSession(rest); closeSheet(); render(); toast('Quick unlock is off');
+async function pinPassword(e) {
+  e.preventDefault();
+  const p = pin, pw = $('#lkPw').value;
+  if (!p) return;
+  if (await slowHash(pw, session.check.salt) === session.check.hash) return pinDone(true);
+  p.err = 'Wrong password. Try again.'; pinDraw();
+}
+
+// Every time the app is opened or comes back, it asks for the code (or Face ID). A new sign-in chooses the code first.
+let showMoney = false; // the balances on Accounts home, shown after the code was given; hidden again when the app locks
+function lockApp() {
+  if (!signedIn() || mustSignIn() || (pin && pin.mandatory)) return;
+  showMoney = false; unlockedUntil = 0;
+  if (!quick() && !(session.quick && session.quick.len === PIN_LEN)) {
+    return pinPrompt({ mode: 'new', mandatory: true, why: 'You type it (or use Face ID) every time you open the app.' }).then(() => { render(); offerBio(); });
+  }
+  pinPrompt({ mandatory: true, why: `${S.company || 'Company accounts'} · ${session.user.name}` }).then(() => render());
+}
+async function offerBio() {
+  if (!(await bioAvailable()) || session.quick.cred) return;
+  openSheet(`${head('Face ID / Touch ID')}
+    <p class="hint">Open the app with your face or finger instead of typing the code. The code still works.</p>
+    <button class="btn primary" data-act="bioOn">Turn on Face ID / Touch ID</button>
+    <button class="btn ghost" data-act="close" style="margin-top:10px">Not now</button>`);
+}
+async function changeCode() {
+  const ok = quick() ? await pinPrompt({ why: 'First your current code' }) : await unlock('Enter your password to choose a new code.', true);
+  if (ok && await pinPrompt({ mode: 'new', why: 'You type it (or use Face ID) every time you open the app.' })) { toast('New code saved ✓'); reopenHere(); }
 }

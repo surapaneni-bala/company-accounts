@@ -74,6 +74,11 @@ assert.deepStrictEqual(post({ token: owner, since: 0, push: [file('F-OW1-0009', 
 assert.deepStrictEqual(post({ token: s.token, since: 0, push: [file('F-SK1-0009', 34, s.me.id, { for: 'E-SK1-0001', fileId: upM.fileId })] }).refused, ['F-SK1-0009'], "someone else's upload");
 assert.strictEqual(post({ op: 'file', token: m.token, id: 'F-AG1-0009' }).ok, false);
 assert.deepStrictEqual(post({ token: owner, since: 0, push: [file('F-OW1-0001', 33, 'x', { for: 'settings', type: 'letterhead' })] }).refused, []);
+// the company stamp works the same way: admins set it (with where its date goes), everyone's slips carry it
+const upS = post({ op: 'upload', token: s.token, name: 'stamp.png', mime: 'image/png', data: png });
+assert.deepStrictEqual(post({ token: s.token, since: 0, push: [file('F-SK1-0005', 35, s.me.id, { for: 'E-SK1-0001', type: 'stamp', fileId: upS.fileId })] }).refused, ['F-SK1-0005'], 'only admins set the stamp');
+const upO = post({ op: 'upload', token: owner, name: 'stamp.png', mime: 'image/png', data: png });
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [file('F-OW1-0002', 36, 'x', { for: 'settings', type: 'stamp', fileId: upO.fileId, place: { a: 70, r: 0.75, s: 0.12 } })] }).refused, []);
 
 // reading a file back goes through its record: whoever may see the record may download it
 const got = post({ op: 'file', token: s.token, id: 'F-SK1-0001' });
@@ -83,7 +88,7 @@ assert.ok(post({ op: 'file', token: m.token, id: 'F-AG1-0002' }).ok);
 assert.strictEqual(post({ op: 'file', token: m.token, id: 'F-NOPE-1' }).ok, false);
 // the letterhead goes to everyone (store keepers make vouchers too), the ID photo still doesn't
 const sPull = post({ token: s.token, since: 0, push: [] }).pull.filter(p => p.k === 'F').map(p => p.id).sort();
-assert.deepStrictEqual(sPull, ['F-OW1-0001', 'F-SK1-0001'], 'a store keeper receives the letterhead and their own files only');
+assert.deepStrictEqual(sPull, ['F-OW1-0001', 'F-OW1-0002', 'F-SK1-0001'], 'a store keeper receives the letterhead, the stamp and their own files only');
 assert.ok(post({ op: 'file', token: s.token, id: 'F-OW1-0001' }).ok, 'and can download the letterhead');
 
 // a phone with only the company code gets no employees or files once the company has logins

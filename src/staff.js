@@ -227,15 +227,29 @@ function askAdvance(w, amount, cur, by) {
   closeSheet(); render(); toast('Sent to an admin ✓ You can give it once they approve.');
 }
 
-// what a salary slip shows, from the payment and the employee's account
+// What a salary slip shows: how the amount due was reached, from the payment and the employee's account.
 function payslipSpec(r) {
-  const w = workerOf(r.worker) || { name: r.paidTo, wage: 0, cur: r.cur, start: r.at.slice(0, 10) };
-  const after = ledgerOf(w);
-  const m = r.month && after.months.find(x => x.month === r.month);
-  const rows = [['Employee', w.name], ['Job', w.job], ['Employee no.', w.id]];
-  if (r.pay === 'salary') rows.push(['Month', monthName(r.month)], ['Monthly wage', `${money(w.wage, w.cur)} (30-day month)`],
-    ['Days worked', m ? `${m.days - m.daysOff} of ${m.days}${m.daysOff ? ` (${m.daysOff} not worked)` : ''}` : ''], ['Earned that month', m ? money(m.earned, w.cur) : '']);
-  if (r.pay === 'settlement') rows.push(['Last day of work', w.left ? fmtDate(w.left) : '']);
-  rows.push(['Paid from', accountOf(r.mode)], ...rateRow(r), [after.balance >= 0 ? 'Still to pay after this' : 'Paid ahead after this', money(Math.abs(after.balance), after.cur)]);
-  return { title: SLIP_TITLE[r.pay] || SLIP_TITLE.voucher, rows: rows.filter(x => x[1]), signLabel: 'Received by', signName: w.name };
+  const w = workerOf(r.worker) || { id: r.worker || '', name: r.paidTo, wage: 0, cur: r.cur, start: r.at.slice(0, 10) };
+  const M = n => slipMoney(n, w.cur), round2 = n => Math.round(n * 100) / 100, lines = [];
+  const paidNow = inWage(r, w.cur); // this payment in the wage's currency (cents), or null without a rate
+  // the account up to the end of the month paid (salary), the last day (settlement) or today (advance), this payment included
+  const end = r.pay === 'salary' && r.month ? [today(), `${r.month}-31`].sort()[0] : r.pay === 'settlement' && w.left ? w.left : today();
+  const upTo = ledgerOf(w, end), due = paidNow === null ? null : round2(upTo.balance + paidNow / 100);
+  const after = { t: upTo.balance >= 0 ? 'Balance still owed after this payment' : 'Paid ahead of earnings after this payment', v: M(Math.abs(upTo.balance)), muted: true };
+  if (r.pay === 'salary' && r.month) {
+    const m = upTo.months.find(x => x.month === r.month) || { days: 0, daysOff: 0, earned: 0 };
+    lines.push({ t: 'Monthly wage (30-day month)', v: M(w.wage) });
+    if (m.days < 30) lines.push({ t: `Pay for ${m.days} days (wage ÷ 30 × ${m.days})`, v: M(round2(w.wage * m.days / 30)) });
+    if (m.daysOff) lines.push({ t: `Less ${m.daysOff} day${m.daysOff === 1 ? '' : 's'} not worked`, v: `−${M(round2(w.wage * m.days / 30) - m.earned)}` });
+    lines.push({ t: `Earned for ${monthName(r.month)}`, v: M(m.earned), strong: true });
+    const other = due === null ? 0 : round2(due - m.earned);
+    if (other) lines.push({ t: other > 0 ? 'Earlier months still unpaid' : 'Less advances and earlier payments', v: `${other > 0 ? '+' : '−'}${M(Math.abs(other))}` });
+    if (due !== null) lines.push({ t: `Total due up to the end of ${monthName(r.month)}`, v: M(due), strong: true });
+  } else if (r.pay === 'advance') lines.push({ t: 'Advance on salary', v: slipMoney(r.amount, r.cur) });
+  else if (due !== null) lines.push({ t: `Total due up to the last day of work${w.left ? `, ${fmtDate(w.left)}` : ''}`, v: M(due), strong: true });
+  lines.push(after);
+  const salary = r.pay === 'salary';
+  return { title: SLIP_TITLE[r.pay] || SLIP_TITLE.voucher, party: ['Employee', `${w.name}${w.job ? ` · ${w.job}` : ''}`], when: [salary ? 'Pay period' : 'Date', salary ? monthName(r.month) : slipDay(r)],
+    forLabel: salary ? 'Pay details' : 'Being payment for', lines,
+    extra: [...(salary ? [['Paid on', slipDay(r)]] : []), ['Paid from', accountOf(r.mode)], ...rateRow(r), ['Employee no.', w.id]], signLabel: 'Received by', signName: w.name };
 }

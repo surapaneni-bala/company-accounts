@@ -294,7 +294,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 .setup { max-width: 480px; margin: 6vh auto 0; }
 .setup h1 { margin: 10px 0 4px; font-size: 32px; letter-spacing: -.02em; }
 .setup > p { color: var(--muted); margin: 0 0 22px; }
-.logo { width: 64px; height: 64px; border-radius: 20px; background: var(--ink); display: grid; place-items: center; }
+.logo { display: block; width: 64px; height: 64px; border-radius: 18px; background: #fff; box-shadow: var(--shadow); }
 .center { text-align: center; }
 
 /* files, signatures, slips */
@@ -302,6 +302,10 @@ label.btn { display: block; text-align: center; }
 .sig { display: block; width: 100%; height: 200px; touch-action: none; background: #fff; border: 2px dashed #CFC6B4; border-radius: var(--r-sm); }
 .viewimg { display: block; width: 100%; border-radius: var(--r-sm); margin-bottom: 14px; background: var(--paper); }
 .filebig { font-size: 64px; text-align: center; margin: 10px 0; }
+.stampprev { display: block; width: min(300px, 100%); aspect-ratio: 1; margin: 0 auto 6px; border-radius: var(--r-sm); background: #fff; box-shadow: var(--shadow); }
+.nudge { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 8px 0 14px; }
+.nudge button { border: 2px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 0; font-size: 18px; font-weight: 800; cursor: pointer; }
+.nudge button:active { background: var(--line); }
 .okbig { font-size: 30px; font-weight: 800; color: var(--in); text-align: center; margin: 4px 0 6px; }
 
 /* staff */
@@ -320,6 +324,52 @@ label.btn { display: block; text-align: center; }
 details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-weight: 800; color: var(--muted); padding: 8px 4px 12px; }
 .payinfo { line-height: 1.5; }
 
+/* header back to the menu */
+.top-l { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.backbtn { flex: none; width: 44px; height: 44px; border: 0; background: var(--card); box-shadow: var(--shadow); font-size: 30px; line-height: 1; padding: 0 0 4px; border-radius: 50%; cursor: pointer; }
+
+/* the menu after signing in */
+.launch { padding-top: 4px; }
+.launch h1 { font-size: clamp(26px, 7vw, 34px); letter-spacing: -.02em; margin: 0 4px 20px; line-height: 1.15; }
+.apps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.app-tile { position: relative; border: 0; cursor: pointer; text-align: left; border-radius: var(--r-lg); padding: 20px 18px 18px; min-height: 190px; display: flex; flex-direction: column; justify-content: space-between; color: #fff; box-shadow: 0 24px 50px -30px rgba(27,34,50,.9); transition: transform .2s var(--ease); overflow: hidden; }
+.app-tile:active { transform: scale(.97); }
+.app-tile.acc { background: var(--ink); background-image: repeating-linear-gradient(0deg, transparent 0 31px, rgba(255,255,255,.05) 31px 32px); }
+.app-tile.emp { background: var(--in); background-image: radial-gradient(circle at 110% -10%, rgba(255,255,255,.22), transparent 55%); }
+.app-tile .ai { width: 58px; height: 58px; border-radius: 18px; background: rgba(255,255,255,.16); display: grid; place-items: center; }
+.app-tile .ai svg { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.app-tile b { display: block; font-size: 22px; margin-top: 18px; letter-spacing: -.01em; }
+.app-tile small { display: block; opacity: .82; font-size: 14px; margin-top: 2px; }
+.app-tile .badge { position: absolute; top: 16px; right: 16px; background: #fff; color: var(--ink); font-weight: 800; font-size: 13px; padding: 4px 9px; border-radius: 999px; }
+@media (max-width: 360px) { .apps { grid-template-columns: 1fr; } .app-tile { min-height: 150px; } }
+
+/* hidden balances */
+.mask { letter-spacing: .12em; opacity: .85; }
+.eye { position: absolute; top: 18px; right: 18px; z-index: 2; border: 0; cursor: pointer; background: rgba(255,255,255,.14); color: #fff; font-weight: 800; font-size: 14px; padding: 8px 12px; border-radius: 999px; }
+
+/* the code pad */
+dialog.lockbox { border: 0; padding: 0; margin: 0; width: 100%; max-width: 100%; height: 100%; max-height: 100%; background: var(--paper); color: var(--ink); }
+dialog.lockbox::backdrop { background: var(--paper); }
+.lk { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px calc(24px + env(safe-area-inset-bottom)); text-align: center; }
+.lk .logo { margin-bottom: 14px; }
+.lk h2 { margin: 0 0 6px; font-size: 24px; }
+.lk-why { color: var(--muted); margin: 0 0 22px; max-width: 320px; }
+.dots { display: flex; gap: 18px; margin-bottom: 8px; }
+.dots i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--ink); }
+.dots i.on { background: var(--ink); }
+.lk .err { min-height: 1.4em; }
+.keypad { display: grid; grid-template-columns: repeat(3, 76px); gap: 14px 22px; margin: 6px 0 16px; }
+.keypad button { width: 76px; height: 76px; border-radius: 50%; border: 0; background: var(--card); box-shadow: var(--shadow); font-size: 30px; font-weight: 700; cursor: pointer; }
+.keypad button:active { background: var(--line); }
+.keypad .ghostkey { background: transparent; box-shadow: none; font-size: 26px; }
+.lk-foot { display: flex; gap: 18px; justify-content: center; }
+@media (max-height: 700px) {
+  .lk .logo { width: 48px; height: 48px; margin-bottom: 8px; } .lk-why { margin-bottom: 12px; }
+  .keypad { grid-template-columns: repeat(3, 64px); gap: 10px 22px; } .keypad button { width: 64px; height: 64px; font-size: 26px; }
+}
+.lk form { width: min(340px, 100%); }
+.lk #lkPw { width: 100%; font: inherit; font-size: 20px; padding: 14px 16px; border: 2px solid var(--line); border-radius: var(--r-sm); background: var(--field); text-align: center; margin-bottom: 8px; }
+
 .toast { position: fixed; left: 50%; bottom: 100px; transform: translate(-50%, 20px); background: var(--ink); color: #fff; font-weight: 800; padding: 14px 20px; border-radius: 16px; opacity: 0; pointer-events: none; transition: .3s var(--ease); z-index: 10; max-width: calc(100% - 32px); text-align: center; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 </style>
@@ -328,7 +378,7 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 <div style="position:sticky;top:0;z-index:20;background:#7A1FA2;color:#fff;font-weight:800;text-align:center;padding:8px 12px;font-size:14px">🧪 TEST COPY — practice here. Your real records are not touched.</div>
 <div class="app">
   <header class="top" id="hdr" hidden>
-    <div><div class="co" id="coName"></div><div class="today-date" id="todayDate"></div></div>
+    <div class="top-l"><button class="backbtn" id="menuBtn" data-act="tab" data-tab="menu" hidden aria-label="Back to the menu" title="Menu">‹</button><div><div class="co" id="coName"></div><div class="today-date" id="todayDate"></div></div></div>
     <div class="top-r"><button class="chip who" id="whoChip" data-act="account" hidden></button><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
   </header>
   <main id="main"></main>
@@ -339,7 +389,6 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
     <button data-act="tab" data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
     <button data-act="tab" data-tab="hist"><svg viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>History</button>
     <button data-act="tab" data-tab="proj"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/></svg>Projects</button>
-    <button data-act="tab" data-tab="staff" hidden><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg>Staff</button>
     <button data-act="tab" data-tab="sheet"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Sheet</button>
   </div>
 </nav>
@@ -349,21 +398,23 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 <dialog id="pw" class="sheet pwbox">
   <form id="pwForm" class="sin">
     <div class="lockic">🔒</div>
-    <h2 id="pwTitle">Password needed</h2>
+    <h2>Password needed</h2>
     <p id="pwWhy"></p>
     <input type="password" id="pwIn" autocomplete="current-password" placeholder="Password" required>
     <p class="err" id="pwErr"></p>
-    <button type="button" class="btn in" id="pwBio" hidden style="margin-bottom:10px">Use Face ID / fingerprint</button>
     <div class="two"><button type="button" class="btn ghost" id="pwCancel">Cancel</button><button class="btn primary">Unlock</button></div>
-    <p class="muted" style="margin:14px 0 0">Stays unlocked for 5 minutes. <button type="button" class="link" id="pwSwitch" hidden></button></p>
+    <p class="muted" style="margin:14px 0 0">Stays unlocked for 5 minutes.</p>
   </form>
 </dialog>
+
+<!-- the code pad: opening the app, showing balances, unlocking edits -->
+<dialog id="lock" class="lockbox" aria-label="Code"><div class="lk" id="lockIn"></div></dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 'use strict';
-const APP_VERSION = 'd376856f61'; // filled in by tools/build.js
+const APP_VERSION = '7fb3cf5478'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -383,7 +434,10 @@ const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const AT_RE = /^\d{4}-\d\d-\d\dT\d\d:\d\d$/;
 
 let S = load();
-let tab = 'home', histKind = 'E', histQuery = '', histMonth = '';
+// 'menu' = the first page after signing in (Accounts, Employees); the bottom bar belongs to Accounts
+let tab = 'menu', histKind = 'E', histQuery = '', histMonth = '';
+const ACC_TABS = ['home', 'hist', 'proj', 'sheet'];
+const WELCOME = 'Welcome to Brookfield';
 let unlockedUntil = 0;
 
 /* ---------- storage ---------- */
@@ -499,51 +553,28 @@ async function hashPw(pw, salt) {
   return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 const isUnlocked = () => Date.now() < unlockedUntil;
-// fresh = ask for the password itself even if unlocked a moment ago (e.g. before setting up quick unlock)
+// fresh = ask for the password itself even if unlocked a moment ago (e.g. before choosing a new code).
+// Signed in with a code: the code pad (or Face ID); otherwise your password, or the company password before logins.
 function unlock(why, fresh) {
   if (isUnlocked() && !fresh) return Promise.resolve(true);
+  const opened = () => { unlockedUntil = Date.now() + UNLOCK_MS; renderLock(); return true; };
+  if (!fresh && quick()) return pinPrompt({ why: why.replace('Enter the password', 'Enter your code') }).then(ok => ok && opened());
   return new Promise(resolve => {
-    const d = $('#pw'), inp = $('#pwIn'), q = fresh ? null : quick();
-    let useCode = !!q;
-    // signed in: your own password (or your quick-unlock code); otherwise the company password, as before logins
-    const paint = () => {
-      $('#pwTitle').textContent = useCode ? 'Code needed' : 'Password needed';
-      inp.placeholder = useCode ? 'Your code' : signedIn() ? 'Your password' : 'Password';
-      inp.inputMode = useCode ? 'numeric' : 'text';
-      inp.autocomplete = useCode ? 'off' : 'current-password';
-      $('#pwBio').hidden = !(useCode && q.cred);
-      $('#pwSwitch').hidden = !q;
-      $('#pwSwitch').textContent = useCode ? 'Use my password instead' : 'Use my code';
-      inp.value = ''; inp.focus();
-    };
-    const ok = () => { unlockedUntil = Date.now() + UNLOCK_MS; d.close('ok'); renderLock(); resolve(true); };
-    const wrong = msg => { $('#pwErr').textContent = msg; inp.select(); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake'); };
+    const d = $('#pw'), pass = signedIn() ? session.check : S.pass;
     $('#pwWhy').textContent = signedIn() ? why.replace('the password', 'your password') : why;
-    $('#pwErr').textContent = '';
+    $('#pwIn').value = ''; $('#pwErr').textContent = ''; $('#pwIn').placeholder = signedIn() ? 'Your password' : 'Password';
     d.returnValue = '';
-    d.showModal(); paint();
+    d.showModal(); $('#pwIn').focus();
     $('#pwCancel').onclick = () => d.close();
-    $('#pwSwitch').onclick = () => { useCode = !useCode; $('#pwErr').textContent = ''; paint(); };
-    $('#pwBio').onclick = async () => { if (await bioCheck()) ok(); else $('#pwErr').textContent = 'Face ID / fingerprint did not work. Type your code.'; };
     $('#pwForm').onsubmit = async e => {
       e.preventDefault();
-      if (useCode) {
-        const now = quick();
-        if (now && await slowHash(inp.value, now.salt) === now.hash) { if (now.tries) saveSession({ ...session, quick: { ...now, tries: 0 } }); return ok(); }
-        const tries = (session.quick.tries || 0) + 1;
-        saveSession({ ...session, quick: { ...session.quick, tries } });
-        if (tries < QUICK_TRIES) return wrong(`Wrong code. ${QUICK_TRIES - tries} ${QUICK_TRIES - tries === 1 ? 'try' : 'tries'} left, then your password is needed.`);
-        useCode = false; paint();
-        return wrong('Too many wrong codes. Type your password.');
+      if (pass && await (signedIn() ? slowHash : hashPw)($('#pwIn').value, pass.salt) === pass.hash) { d.close('ok'); resolve(opened()); }
+      else {
+        $('#pwErr').textContent = 'Wrong password. Try again.';
+        $('#pwIn').select(); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake');
       }
-      const pass = signedIn() ? session.check : S.pass;
-      if (pass && await (signedIn() ? slowHash : hashPw)(inp.value, pass.salt) === pass.hash) {
-        if (session && session.quick && session.quick.tries) saveSession({ ...session, quick: { ...session.quick, tries: 0 } }); // the password opens the code again
-        ok();
-      } else wrong('Wrong password. Try again.');
     };
     d.onclose = () => { if (d.returnValue !== 'ok') resolve(false); };
-    if (useCode && q.cred) $('#pwBio').click(); // straight to Face ID; the code is right there if it fails
   });
 }
 function renderLock() { const p = $('#lockPill'); if (p) p.hidden = !isUnlocked(); }
@@ -629,16 +660,17 @@ function render() {
   $('#hdr').hidden = $('#tabs').hidden = !ready;
   if (!ready) { main.innerHTML = viewSetup(); $('[autofocus]', main)?.focus(); return; }
   if (mustSignIn()) { $('#hdr').hidden = $('#tabs').hidden = true; main.innerHTML = viewSignIn(); $('[autofocus]', main)?.focus(); return; }
-  if ((tab === 'proj' && !can('projects')) || (tab === 'staff' && !can('staff'))) tab = 'home';
+  if ((tab === 'proj' && !can('projects')) || ((tab === 'staff' || tab === 'menu') && !can('staff'))) tab = 'home'; // one section only: no menu
+  $('#tabs').hidden = !ACC_TABS.includes(tab);
+  $('#menuBtn').hidden = tab === 'menu' || !can('staff');
   $('#tabs [data-tab=proj]').hidden = !can('projects');
-  $('#tabs [data-tab=staff]').hidden = !can('staff');
   $('#whoChip').hidden = !signedIn();
   $('#whoChip').textContent = signedIn() ? `👤 ${session.user.name.split(' ')[0]}` : '';
-  $('#coName').textContent = S.company;
+  $('#coName').textContent = tab === 'menu' || !can('staff') ? S.company : tab === 'staff' ? 'Employees' : 'Accounts'; // inside a section: its name
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
   const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were
-  main.innerHTML = { home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet }[tab]();
+  main.innerHTML = { menu: viewMenu, home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet }[tab]();
   if (y) scrollTo(0, y);
   render.tab = tab;
   renderLock(); paintSync();
@@ -647,26 +679,12 @@ function render() {
 let setupMode = ''; // '' = decide when drawn: an invite link in the address opens 'join'
 const isPhone = () => matchMedia('(pointer: coarse)').matches;
 const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-const APP_LOGO = `<div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>`;
+const APP_LOGO = `<img class="logo" src="icon-192.png" alt="" width="64" height="64">`; // the company's mark (tools/make-icons.py)
 function viewSetup() {
-  const mode = setupMode || (inviteFromHash() ? 'join' : 'choose');
+  const mode = setupMode || 'join';
   const logo = APP_LOGO;
   const tip = isPhone() && !isInstalled() ? `<p class="note">📲 <b>First install the app:</b> iPhone — in Safari tap <b>Share → Add to Home Screen</b>. Android — in Chrome tap <b>⋮ → Add to Home screen</b>. Then open <b>Accounts</b> from your home screen.</p>` : '';
-  const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="choose">← Back</button></p>`;
-  if (mode === 'join') return `<section class="setup card pad">${logo}
-    <h1>Join my company</h1>
-    <p>Paste the invite link you were sent. Joining needs internet once — after that the app works offline.</p>${tip}
-    <form data-form="join">
-      <label class="fld"><span>Invite link</span><input name="invite" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" autofocus></label>
-      <p class="invite-hint"></p>
-      <div class="loginfields" hidden>${signInFields(false)}</div>
-      <details class="manual"><summary>Join with the web app link and code instead</summary>
-        <label class="fld"><span>Web app link</span><input name="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
-        <label class="fld"><span>Company code</span><input name="key" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab"></label>
-      </details>
-      <p class="err"></p>
-      <button class="btn in">Join</button>
-    </form>${back}</section>`;
+  const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="join">← Back</button></p>`;
   if (mode === 'new') return `<section class="setup card pad">${logo}
     <h1>New company</h1>
     <p>Set up your company accounts. It takes 30 seconds.</p>
@@ -679,15 +697,39 @@ function viewSetup() {
       <button class="btn primary">Start</button>
     </form>${back}</section>`;
   return `<section class="setup card pad">${logo}
-    <h1>Welcome!</h1>
-    <p>Company accounts in USD and SSP. Works without internet.</p>${tip}
-    <div class="stack">
-      <button class="btn primary" data-act="setupMode" data-mode="new">Start a new company</button>
-      <button class="btn ghost" data-act="setupMode" data-mode="join">Join my company<small class="sub">I have an invite link</small></button>
-    </div>
-    <p class="center"><button class="link" data-act="restore">Have a backup file? Restore it</button></p>
+    <h1>${WELCOME}</h1>
+    <p>Open the invite link you were sent, or paste it below. Then sign in with the username and password your admin gave you.</p>${tip}
+    <form data-form="join">
+      <label class="fld"><span>Invite link</span><input name="invite" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" ${inviteFromHash() ? '' : 'autofocus'}></label>
+      <p class="invite-hint"></p>
+      <div class="loginfields">${signInFields(!!inviteFromHash())}</div>
+      <details class="manual"><summary>Join with the web app link and code instead</summary>
+        <label class="fld"><span>Web app link</span><input name="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
+        <label class="fld"><span>Company code</span><input name="key" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab"></label>
+      </details>
+      <p class="err"></p>
+      <button class="btn primary">Sign in</button>
+    </form>
+    <details class="manual other"><summary>Other options</summary>
+      <div class="stack"><button class="btn ghost" data-act="restore">Restore a backup file</button><button class="btn ghost" data-act="setupMode" data-mode="new">Start a new company</button></div>
+    </details>
     <input type="file" id="restoreFile" accept=".json,application/json" hidden>
   </section>`;
+}
+
+// The first page after signing in: one big button per part of the company app.
+function viewMenu() {
+  const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const who = signedIn() ? session.user.name.split(' ')[0] : '';
+  const staffWaiting = waiting().filter(c => c.kind === 'W').length;
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}
+    <section class="launch">
+      <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
+      <div class="apps">
+        <button class="app-tile acc" data-act="tab" data-tab="home"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><span><b>Accounts</b><small>Cash, bank and projects</small></span></button>
+        <button class="app-tile emp" data-act="tab" data-tab="staff">${staffWaiting ? `<span class="badge">${staffWaiting} waiting</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg></span><span><b>Employees</b><small>Salaries, advances and slips</small></span></button>
+      </div>
+    </section>`;
 }
 
 // Cash and bank balance for each currency. A move between them changes both, never the total.
@@ -705,15 +747,20 @@ function viewHome() {
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
   const seeMoney = can('money');
+  // like a banking app: the figures stay hidden until the code (or Face ID) is given; phones without logins show them
+  const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
+  const fig = n => (hide ? M : plain(n));
+  const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
   return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">Your expenses — only you and the office see them.</p>`}
-  <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
+  <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
+    ${signedIn() ? `<button class="eye" data-act="${hide ? 'reveal' : 'conceal'}">${hide ? '👁 Show' : '🙈 Hide'}</button>` : ''}
     ${CURS.map(c => `<div class="balrow">
-      <div class="balhead"><span class="cur-tag">${c}</span><span class="baltot${bal[c].Total < 0 ? ' neg' : ''}">${plain(bal[c].Total)}</span><small>total</small></div>
-      <div class="balparts">${ACCOUNTS.map(a => `<span>${ACCOUNT_ICON[a]} ${a} <b class="${bal[c][a] < 0 ? 'neg' : ''}">${plain(bal[c][a])}</b></span>`).join('')}</div>
+      <div class="balhead"><span class="cur-tag">${c}</span><span class="baltot${!hide && bal[c].Total < 0 ? ' neg' : ''}">${fig(bal[c].Total)}</span><small>total</small></div>
+      <div class="balparts">${ACCOUNTS.map(a => `<span>${ACCOUNT_ICON[a]} ${a} <b class="${!hide && bal[c][a] < 0 ? 'neg' : ''}">${fig(bal[c][a])}</b></span>`).join('')}</div>
     </div>`).join('')}
-    <div class="split"><div class="i"><small>Money received</small>${curLines(recv)}</div><div class="o"><small>Money spent</small>${curLines(spent)}</div></div>
+    <div class="split"><div class="i"><small>Money received</small>${lines(recv)}</div><div class="o"><small>Money spent</small>${lines(spent)}</div></div>
   </section>
   <div class="actions">
     <button class="tile out" data-act="addExpense"><span class="ic">−</span><span><b>Add expense</b><small>Money paid out</small></span></button>
@@ -722,8 +769,8 @@ function viewHome() {
     <button class="tile bulk move" data-act="addMove" ${seeMoney ? '' : 'hidden'}><span class="ic">⇄</span><span><b>Move money</b><small>Cash into the bank, or bank to cash — not spending</small></span></button>
   </div>
   <div class="minis">
-    <div class="mini"><small>Spent today</small>${curLines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
-    <div class="mini"><small>Spent this month</small>${curLines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
+    <div class="mini"><small>Spent today</small>${lines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
+    <div class="mini"><small>Spent this month</small>${lines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
   </div>
   <div class="sec-head" style="margin-top:22px"><h2 class="sec">Recent</h2><button class="btn small ghost" data-act="tab" data-tab="hist">See all →</button></div>
   ${recent.length ? `<div class="card list">${recent.map(([x, k]) => itemRow(x, k, true)).join('')}</div>` : empty('Nothing here yet', 'Tap <b>Add expense</b> or <b>Money received</b> to start.')}`;
@@ -815,6 +862,7 @@ function viewSheet() {
       <section class="card pad">
         <h3>⚙️ Settings</h3>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : 'Not set'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : 'Not set — slips get a plain heading'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
@@ -1247,7 +1295,7 @@ async function doRestore(file) {
   const fresh = migrate({ ...data, link: null, seq: {}, dev: newDev(), dirty: [] });
   S = { ...fresh, dirty: fresh.link ? allIds(fresh) : [] };
   update({ log: logWith([['Restored', '—', `Data restored from backup file "${file.name}"`]]) });
-  unlockedUntil = 0; tab = 'home';
+  unlockedUntil = 0; tab = 'menu';
   closeAll(); render(); scheduleSync(0); toast('Backup restored ✓ — use the password from the backup');
 }
 
@@ -1354,8 +1402,8 @@ function jpegToPdf(jpeg, w, h) {
 const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
 const MAX_FILE = 8 * 1024 * 1024; // the sheet script refuses bigger files
 const PHOTO_SIDE = 1600; // photos are shrunk on the phone: quicker to upload, still sharp on a slip
-const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄' };
-const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead' };
+const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵' };
+const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp' };
 let outbox = [];          // files waiting to upload (their details; the bytes stay in IndexedDB)
 let uploading = false, uploadErr = '';
 let shown = null;         // the file on screen, kept in memory so "Send" opens the share sheet straight from the tap
@@ -1471,7 +1519,8 @@ async function attachPicked(input) {
   input.value = '';
   if (!file) return;
   try {
-    const p = type === 'letterhead' ? await prepareFile(file, SLIP_H, 0.92) : await prepareFile(file);
+    const p = type === 'letterhead' || type === 'stamp' ? await prepareFile(file, SLIP_H, 0.92) : await prepareFile(file);
+    if (type === 'stamp') stampPrev = null;
     await keepFile({ for: forId, type, name: p.name, mime: p.mime }, p.data);
   } catch (e) { return alert(e.message); }
   toast(`${FILE_NAME[type] || 'File'} added ✓`);
@@ -1509,9 +1558,15 @@ const sigField = who => `<div class="fld"><span>Signature of ${esc(who)} <em>(si
 const photoField = who => `<label class="fld"><span>Photo of ${esc(who)} with the money <em>(optional)</em></span><input type="file" name="photo" accept="image/*" capture="environment"></label>`;
 
 /* ---------- slips: an A4 page drawn on a canvas, saved as a one-page PDF ---------- */
+// Laid out like the company's paper voucher (paid to | date, being payment for | amount, amount in words,
+// received by, prepared / checked / approved), printed on the letterhead, with the company stamp and its date.
 const SLIP_W = 1240, SLIP_H = 1754; // A4 at 150 dots per inch
-const SLIP_FONT = 'Helvetica, Arial, sans-serif';
+const SANS = '"Avenir Next", "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif';
+const SERIF = 'Georgia, "Times New Roman", "Noto Serif", serif';
+const SLIP_C = { navy: '#26306B', accent: '#C8501E', ink: '#1B2232', label: '#6B7190', rule: '#C9CDDD', tint: '#F4F5FA', stampInk: '#1D3FC4' };
 const SLIP_TITLE = { voucher: 'PAYMENT VOUCHER', receipt: 'RECEIPT', salary: 'SALARY SLIP', advance: 'ADVANCE VOUCHER', settlement: 'FINAL SETTLEMENT' };
+const STAMP_PLACE = { a: 72, r: 0.76, s: 0.12 }; // the date on the stamp: angle of the dotted line's middle (0 = right, 90 = down), its distance and letter size as parts of the stamp's radius
+const slipMoney = (n, cur) => `${cur} ${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 function wrapText(g, text, width) {
   const lines = [];
   let line = '';
@@ -1528,80 +1583,186 @@ function fitInto(g, img, x, y, w, h, cover) {
   g.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
   g.restore();
 }
-const boxPath = (g, x, y, w, h) => { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, 18); else g.rect(x, y, w, h); };
-async function letterheadImage() {
-  const f = latestFile('settings', 'letterhead');
-  if (!f) return null;
-  try { return await imgFrom(await fileBlob(f.id)); } catch { return null; } // offline and never fetched: a plain page
+const boxPath = (g, x, y, w, h, r = 14) => { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); };
+// letter-spaced text, drawn one letter at a time (works on every phone); align 'left' | 'right' | 'center'
+function spaced(g, text, x, y, gap, align = 'left') {
+  const ws = [...text].map(ch => g.measureText(ch).width), total = ws.reduce((a, b) => a + b, 0) + gap * (ws.length - 1);
+  let at = align === 'right' ? x - total : align === 'center' ? x - total / 2 : x;
+  const was = g.textAlign;
+  g.textAlign = 'left';
+  [...text].forEach((ch, i) => { g.fillText(ch, at, y); at += ws[i] + gap; });
+  g.textAlign = was;
 }
-// keep the letterhead on the phone, so slips made offline still carry it
-function warmLetterhead() { const f = latestFile('settings', 'letterhead'); if (f && !f.pending) fileBlob(f.id).catch(() => {}); }
+const slipLabel = (g, text, x, y) => { g.fillStyle = SLIP_C.label; g.font = `600 18px ${SANS}`; spaced(g, text.toUpperCase(), x, y, 1.6); };
+async function brandImage(type) {
+  const f = latestFile('settings', type);
+  if (!f) return null;
+  try { return Object.assign(await imgFrom(await fileBlob(f.id)), { place: f.place }); } catch { return null; } // offline and never fetched: left out
+}
+const letterheadImage = () => brandImage('letterhead');
+// keep the letterhead and stamp on the phone, so slips made offline still carry them
+function warmLetterhead() { ['letterhead', 'stamp'].forEach(t => { const f = latestFile('settings', t); if (f && !f.pending) fileBlob(f.id).catch(() => {}); }); }
 
-// s = { title, no, date, rows: [[label, value]], amount, cur, signLabel, signName, sig: canvas, photo: image|null, by }
+// The stamp's ring: the box around its ink (anything not near-white), so any photo or scan of it lines up.
+function inkCircle(img) {
+  const n = 240, k = n / Math.max(img.naturalWidth, img.naturalHeight), w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+  const px = g.getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = 0, y1 = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    if (px[i + 3] > 60 && px[i] + px[i + 1] + px[i + 2] < 600) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  }
+  if (x1 <= x0) return { cx: img.naturalWidth / 2, cy: img.naturalHeight / 2, R: Math.min(img.naturalWidth, img.naturalHeight) / 2 };
+  return { cx: (x0 + x1 + 1) / 2 / k, cy: (y0 + y1 + 1) / 2 / k, R: Math.max(x1 - x0 + 1, y1 - y0 + 1) / 2 / k };
+}
+// The stamp, its ring `size` across and centred on (x, y), with the date written along its dotted line.
+function drawStamp(g, img, x, y, size, dateText, place) {
+  const c = img.circle || (img.circle = inkCircle(img)), k = size / (2 * c.R), p = { ...STAMP_PLACE, ...(place || {}) };
+  g.save();
+  g.globalCompositeOperation = 'multiply'; // the paper of the scan disappears, the ink stays
+  g.drawImage(img, x - c.cx * k, y - c.cy * k, img.naturalWidth * k, img.naturalHeight * k);
+  g.globalCompositeOperation = 'source-over';
+  const R = size / 2, r = p.r * R, fs = Math.max(8, p.s * R);
+  g.font = `700 ${fs}px ${SANS}`; g.fillStyle = SLIP_C.stampInk; g.textAlign = 'center';
+  const chars = [...dateText], ws = chars.map(ch => g.measureText(ch).width), gap = fs * 0.06;
+  let ang = p.a * Math.PI / 180 + (ws.reduce((a, b) => a + b, 0) + gap * (chars.length - 1)) / 2 / r; // from the left end, going round
+  chars.forEach((ch, i) => {
+    ang -= ws[i] / 2 / r;
+    g.save(); g.translate(x + r * Math.cos(ang), y + r * Math.sin(ang)); g.rotate(ang - Math.PI / 2); g.fillText(ch, 0, 0); g.restore();
+    ang -= (ws[i] / 2 + gap) / r;
+  });
+  g.restore();
+}
+
+/* s = { title, no, date, stampDate, party: [label, value], when: [label, value], forLabel, lines: [{ t, v, strong, muted }],
+         amount, cur, extra: [[label, value]], signLabel, signName, sig: canvas, photo: image|null, preparedBy, ref } */
 async function renderSlip(s) {
   const c = document.createElement('canvas');
   c.width = SLIP_W; c.height = SLIP_H;
-  const g = c.getContext('2d'), INK = '#1B2232', MUTED = '#6A6458', L = 100, R = SLIP_W - 100;
+  const g = c.getContext('2d'), C = SLIP_C, L = 90, R = SLIP_W - 90, CX = L + 660;
   g.fillStyle = '#fff'; g.fillRect(0, 0, SLIP_W, SLIP_H);
-  const lh = await letterheadImage();
-  let top, bottom;
-  if (lh) { g.drawImage(lh, 0, 0, SLIP_W, SLIP_H); top = 270; bottom = 1570; } // the letterhead's own header and footer stay clear
+  const [lh, stampImg] = await Promise.all([letterheadImage(), brandImage('stamp')]);
+  let y;
+  if (lh) { g.drawImage(lh, 0, 0, SLIP_W, SLIP_H); y = 268; } // the letterhead's own header and footer stay clear
   else {
-    g.fillStyle = INK; g.font = `800 44px ${SLIP_FONT}`; g.fillText(S.company || 'Company', L, 120);
-    g.fillRect(L, 145, R - L, 3); top = 180; bottom = SLIP_H - 90;
+    g.fillStyle = C.navy; g.font = `700 46px ${SERIF}`; g.fillText(S.company || 'Company', L, 120);
+    g.fillStyle = C.accent; g.fillRect(L, 142, 90, 5); y = 200;
   }
-  g.textAlign = 'center'; g.fillStyle = INK; g.font = `800 52px ${SLIP_FONT}`;
-  g.fillText(s.title, SLIP_W / 2, top + 50);
-  g.textAlign = 'left'; g.font = `700 28px ${SLIP_FONT}`;
-  g.fillText(`No. ${s.no}`, L, top + 110);
-  g.textAlign = 'right'; g.fillText(`Date: ${s.date}`, R, top + 110);
-  g.textAlign = 'left';
-  let y = top + 180;
-  for (const [label, value] of s.rows) {
-    g.fillStyle = MUTED; g.font = `600 26px ${SLIP_FONT}`; g.fillText(label, L, y);
-    g.fillStyle = INK; g.font = `600 30px ${SLIP_FONT}`;
-    const lines = wrapText(g, value, R - 400);
-    lines.forEach((t, i) => g.fillText(t, 400, y + i * 40));
-    y += lines.length * 40 + 16;
-  }
-  // the amount, in figures and in words, so it can't be quietly changed
-  g.font = `italic 26px ${SLIP_FONT}`;
-  const words = wrapText(g, amountInWords(s.amount, s.cur), R - L - 60);
-  const boxH = 140 + words.length * 36;
-  y += 10;
-  boxPath(g, L, y, R - L, boxH); g.fillStyle = '#F3EFE7'; g.fill();
-  g.fillStyle = MUTED; g.font = `600 26px ${SLIP_FONT}`; g.fillText('Amount', L + 30, y + 44);
-  g.fillStyle = INK; g.font = `800 60px ${SLIP_FONT}`; g.fillText(money(s.amount, s.cur), L + 30, y + 108);
-  g.font = `italic 26px ${SLIP_FONT}`; words.forEach((t, i) => g.fillText(t, L + 30, y + 150 + i * 36));
-  y += boxH + 30;
-  // signature box (and the photo beside it)
-  const boxY = Math.max(y, bottom - 330), signW = s.photo ? 620 : R - L;
-  boxPath(g, L, boxY, signW, 260); g.strokeStyle = '#B8B0A0'; g.lineWidth = 2; g.stroke();
-  g.fillStyle = MUTED; g.font = `600 24px ${SLIP_FONT}`; g.fillText(s.signLabel, L + 20, boxY + 36);
-  if (s.sig) fitInto(g, s.sig, L + 20, boxY + 50, signW - 40, 150, false);
-  g.fillStyle = INK; g.font = `700 26px ${SLIP_FONT}`; g.fillText(s.signName || '', L + 20, boxY + 238);
-  if (s.photo) {
-    const px = L + signW + 30, pw = R - px;
-    fitInto(g, s.photo, px, boxY, pw, 260, true);
-    boxPath(g, px, boxY, pw, 260); g.stroke();
-  }
-  g.fillStyle = MUTED; g.font = `500 22px ${SLIP_FONT}`;
-  g.fillText(`Paid / entered by ${s.by || '—'} · made in the company app ${fmtAbs(stamp())}`, L, boxY + 300);
-  const jpeg = new Uint8Array(await (await canvasJpeg(c, 0.88)).arrayBuffer());
+  // title and number
+  g.fillStyle = C.navy; g.font = `700 46px ${SERIF}`; spaced(g, s.title, L, y + 46, 4);
+  g.fillStyle = C.accent; g.fillRect(L, y + 66, 90, 5);
+  g.font = `600 18px ${SANS}`; g.fillStyle = SLIP_C.label; spaced(g, 'NO.', R, y + 16, 1.6, 'right');
+  g.fillStyle = C.accent; g.font = `700 36px ${SANS}`; g.textAlign = 'right'; g.fillText(s.no, R, y + 52); g.textAlign = 'left';
+  y += 110;
+  // measure first: a long slip (many pay lines) is set tighter, so it always ends above the letterhead's footer
+  const measure = tight => {
+    const m = { tight, lineH: tight ? 40 : 46, lineFont: tight ? 26 : 28, h4: tight ? 210 : 270, gap: tight ? 170 : 200 };
+    g.font = `700 32px ${SANS}`; m.party = wrapText(g, s.party[1] || '—', CX - L - 50); m.h1 = 76 + m.party.length * 40;
+    g.font = `500 ${m.lineFont}px ${SANS}`; m.lines = s.lines.flatMap(l => wrapText(g, l.t, CX - L - 220).map((t, i) => ({ ...l, t, v: i ? '' : l.v })));
+    m.h2 = Math.max(tight ? 220 : 250, 70 + m.lines.length * m.lineH + 20);
+    g.font = `italic 28px ${SERIF}`; m.words = wrapText(g, amountInWords(s.amount, s.cur), CX - L - 50);
+    m.h3 = Math.max(76 + m.words.length * 38, 70 + s.extra.length * (tight ? 56 : 64));
+    m.end = y + m.h1 + m.h2 + m.h3 + m.h4 + m.gap + 90;
+    return m;
+  };
+  const limit = lh ? 1570 : SLIP_H - 60, normal = measure(false), M = normal.end <= limit ? normal : measure(true);
+  // the form: a ruled box like the paper voucher; white under it so the letterhead's watermark stays faint
+  const top = y, cells = [];
+  const row = (h, draw) => { cells.push([y, h]); draw(y, h); y += h; };
+  const box = (h) => { g.fillStyle = 'rgba(255,255,255,.9)'; g.fillRect(L, y, R - L, h); };
+  // row 1: paid to | date
+  const { party, h1, lines, lineH, h2, words, h3, h4 } = M;
+  box(h1);
+  row(h1, (t) => {
+    slipLabel(g, s.party[0], L + 24, t + 34);
+    g.fillStyle = C.ink; g.font = `700 32px ${SANS}`; party.forEach((p, i) => g.fillText(p, L + 24, t + 78 + i * 40));
+    slipLabel(g, s.when[0], CX + 24, t + 34);
+    g.fillStyle = C.ink; g.font = `700 30px ${SANS}`; wrapText(g, s.when[1], R - CX - 48).forEach((p, i) => g.fillText(p, CX + 24, t + 78 + i * 36));
+  });
+  // row 2: being payment for | amount in
+  box(h2);
+  row(h2, (t) => {
+    slipLabel(g, s.forLabel || 'Being payment for', L + 24, t + 34);
+    lines.forEach((l, i) => {
+      const ly = t + 82 + i * lineH;
+      g.fillStyle = l.muted ? C.label : C.ink; g.font = `${l.strong ? 700 : 500} ${l.muted ? M.lineFont - 4 : M.lineFont}px ${SANS}`;
+      g.fillText(l.t, L + 24, ly);
+      if (l.v) { g.textAlign = 'right'; g.fillText(l.v, CX - 24, ly); g.textAlign = 'left'; }
+      if (l.strong) { g.fillStyle = C.rule; g.fillRect(L + 24, ly - 36, CX - L - 48, 1); }
+    });
+    slipLabel(g, 'Amount in', CX + 24, t + 34);
+    ['SSP', 'USD'].forEach((cur, i) => {
+      const bx = CX + 24 + i * 130, by = t + 52;
+      g.strokeStyle = C.navy; g.lineWidth = 2; g.strokeRect(bx, by, 28, 28);
+      if (cur === s.cur) { g.beginPath(); g.moveTo(bx + 6, by + 15); g.lineTo(bx + 12, by + 22); g.lineTo(bx + 23, by + 6); g.lineWidth = 4; g.stroke(); }
+      g.fillStyle = C.ink; g.font = `700 24px ${SANS}`; g.fillText(cur, bx + 38, by + 24);
+    });
+    const ax = CX + 24, aw = R - CX - 48, ay = t + 104, ah = Math.min(140, Math.max(96, h2 - 130));
+    boxPath(g, ax, ay, aw, ah); g.fillStyle = C.tint; g.fill(); g.strokeStyle = C.navy; g.lineWidth = 2.5; g.stroke();
+    const text = slipMoney(s.amount, s.cur);
+    let fs = 44; g.font = `800 ${fs}px ${SANS}`;
+    while (g.measureText(text).width > aw - 36 && fs > 22) { fs -= 2; g.font = `800 ${fs}px ${SANS}`; }
+    g.fillStyle = C.ink; g.textAlign = 'right'; g.fillText(text, ax + aw - 18, ay + ah / 2 + fs * 0.36); g.textAlign = 'left';
+  });
+  // row 3: amount in words | paid from (and the day's rate)
+  box(h3);
+  row(h3, (t) => {
+    slipLabel(g, 'Amount in words', L + 24, t + 34);
+    g.fillStyle = C.ink; g.font = `italic 28px ${SERIF}`; words.forEach((w, i) => g.fillText(w, L + 24, t + 76 + i * 38));
+    const step = M.tight ? 56 : 64;
+    s.extra.forEach(([lab, val], i) => {
+      slipLabel(g, lab, CX + 24, t + 34 + i * step);
+      g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; g.fillText(val, CX + 24, t + 64 + i * step);
+    });
+  });
+  // row 4: received by (name, signature) | photo
+  const split = s.photo ? CX : R;
+  box(h4);
+  row(h4, (t) => {
+    slipLabel(g, s.signLabel, L + 24, t + 34);
+    g.fillStyle = C.ink; g.font = `700 28px ${SANS}`; g.fillText(s.signName || '', L + 24, t + 74);
+    if (s.sig) fitInto(g, s.sig, L + 24, t + 86, split - L - 48, h4 - 140, false);
+    g.fillStyle = C.rule; g.fillRect(L + 24, t + h4 - 44, Math.min(460, split - L - 48), 1.5);
+    g.fillStyle = C.label; g.font = `500 18px ${SANS}`; g.fillText('Signature', L + 24, t + h4 - 20);
+    if (s.photo) { fitInto(g, s.photo, CX + 14, t + 14, R - CX - 28, h4 - 28, true); slipLabel(g, 'Photo', CX + 24, t + h4 - 22); }
+  });
+  // the ruling: outer box, the column line and the lines between rows
+  g.strokeStyle = C.navy; g.lineWidth = 2.5; g.strokeRect(L, top, R - L, y - top);
+  g.fillStyle = C.navy;
+  cells.slice(1).forEach(([cy]) => g.fillRect(L, cy - 0.75, R - L, 1.5));
+  cells.forEach(([cy, ch], i) => { if (i < 3 || s.photo) g.fillRect(CX - 0.75, cy, 1.5, ch); });
+  // prepared / checked / approved; the company stamp goes over "approved", the way it is stamped on paper
+  y += M.gap;
+  const colW = (R - L) / 3;
+  if (stampImg) drawStamp(g, stampImg, R - 112, y - Math.min(82, M.gap - 115), 216, s.stampDate, stampImg.place); // at the right edge, clear of the words and the box
+  [['Prepared by', s.preparedBy || ''], ['Checked by', ''], ['Approved by', '']].forEach(([lab, name], i) => {
+    const x = L + i * colW;
+    g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
+    g.fillStyle = C.ink; g.fillRect(x, y, colW - 40, 1.5);
+    slipLabel(g, lab, x, y + 30); // drawn after the stamp, so the words stay readable
+  });
+  g.fillStyle = C.label; g.font = `500 18px ${SANS}`;
+  g.fillText(`Ref ${s.ref} · made in the company app on ${fmtAbs(stamp())}`, L, Math.min(y + 80, limit));
+  const jpeg = new Uint8Array(await (await canvasJpeg(c, 0.9)).arrayBuffer());
   return new Blob([jpegToPdf(jpeg, SLIP_W, SLIP_H)], { type: 'application/pdf' });
 }
 
-// rate line for an SSP entry: what it was worth in dollars that day
+// the day's rate for an SSP entry, and what it was worth in dollars
 const usdOf = r => (r.cur === 'SSP' && r.rate > 0 ? Math.round(r.amount / r.rate * 100) / 100 : null);
-const rateRow = r => (usdOf(r) === null ? [] : [['Rate', `1 USD = ${plain(r.rate)} SSP · about ${money(usdOf(r), 'USD')}`]]);
-const slipDate = r => `${fmtDate(r.at.slice(0, 10))}, ${fmtTime(r.at)}`;
+const rateRow = r => (usdOf(r) === null ? [] : [['Rate', `1 USD = ${plain(r.rate)} SSP · ≈ ${money(usdOf(r), 'USD')}`]]);
+const slipDay = r => { const [y, m, d] = r.at.slice(0, 10).split('-').map(Number); return `${DAYS[new Date(y, m - 1, d).getDay()]}, ${fmtDate(r.at.slice(0, 10))}`; };
+const stampDate = r => r.at.slice(0, 10).split('-').reverse().join('-'); // 09-10-2026, as written on the paper vouchers
 function voucherSpec(r) {
-  return { title: SLIP_TITLE.voucher, rows: [['Paid to', r.paidTo], ['For', r.reason], ['Project', r.project ? projName(r.project) : ''], ['Location', r.location], ['Paid from', accountOf(r.mode)], ...rateRow(r)].filter(x => x[1]),
-    signLabel: 'Received by', signName: r.paidTo };
+  return { title: SLIP_TITLE.voucher, party: ['Paid to', r.paidTo], when: ['Date', slipDay(r)], forLabel: 'Being payment for',
+    lines: [{ t: r.reason, v: slipMoney(r.amount, r.cur) }, r.project && { t: `Project: ${projName(r.project)}`, muted: true }, r.location && { t: `Location: ${r.location}`, muted: true }].filter(Boolean),
+    extra: [['Paid from', accountOf(r.mode)], ...rateRow(r)], signLabel: 'Received by', signName: r.paidTo };
 }
 function receiptSpec(r, party) {
-  return { title: SLIP_TITLE.receipt, rows: [['Received from', party], ['For', projName(r.project)], ['Note', r.note], ['Received into', accountOf(r.mode)], ...rateRow(r)].filter(x => x[1]),
-    signLabel: 'Received by (for the company)', signName: myName() || r.by };
+  return { title: SLIP_TITLE.receipt, party: ['Received from', party || '—'], when: ['Date', slipDay(r)], forLabel: 'Being payment for',
+    lines: [{ t: projName(r.project), v: slipMoney(r.amount, r.cur) }, r.note && { t: r.note, muted: true }].filter(Boolean),
+    extra: [['Received into', accountOf(r.mode)], ...rateRow(r)], signLabel: 'Received by (for the company)', signName: myName() || r.by };
 }
 
 // Make a voucher (expense), receipt (money received) or salary slip (a payment to an employee) for an entry.
@@ -1633,7 +1794,7 @@ async function saveSlip(f) {
     const spec = k === 'R' ? receiptSpec(r, clean(f.elements.party.value)) : r.pay ? payslipSpec(r) : voucherSpec(r);
     const [[no], seq] = nextIds(k === 'R' ? 'RC' : 'PV', 1, S.seq);
     update({ seq });
-    const blob = await renderSlip({ ...spec, no, date: slipDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, by: r.by });
+    const blob = await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, preparedBy: r.by, ref: r.id });
     const name = `${no} ${fileSafe(spec.signName || '')}.pdf`;
     await keepFile({ for: r.id, type, no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
     readySheet(spec.title, no, blob, name);
@@ -1656,6 +1817,40 @@ function letterheadSheet() {
     ${f ? `<p class="muted">Now: <b>${esc(f.name)}</b>${f.pending ? ' (not uploaded yet)' : ''}</p><button class="btn ghost" data-act="showFile" data-id="${esc(f.id)}" style="margin-bottom:10px">See the letterhead</button>` : '<p class="muted">No letterhead yet — slips get a plain heading with the company name.</p>'}
     ${attachButton('settings', f ? 'Choose a new letterhead' : 'Choose the letterhead', 'letterhead', 'image/png,image/jpeg')}`);
   here = letterheadSheet;
+}
+
+/* ---------- the company stamp (admins, Settings): its picture, and where the date goes on it ---------- */
+let stampEdit = null, stampPrev = null; // the position being adjusted, and the stamp picture shown while adjusting
+function stampSheet() {
+  const f = latestFile('settings', 'stamp');
+  openSheet(`${head('Company stamp')}
+    <p class="hint">Printed on every voucher, receipt and salary slip, with the slip's date written on its dotted line. Use a clear picture of the stamp on white paper (PNG or JPG).</p>
+    ${f ? `<canvas id="stampPrev" class="stampprev" width="600" height="600"></canvas>
+      <p class="muted center">Move the date until it sits on the dotted line</p>
+      <div class="nudge"><button type="button" data-act="nudge" data-k="a" data-d="3" aria-label="Move left">◀</button><button type="button" data-act="nudge" data-k="a" data-d="-3" aria-label="Move right">▶</button><button type="button" data-act="nudge" data-k="r" data-d="-0.012" aria-label="Move up">▲</button><button type="button" data-act="nudge" data-k="r" data-d="0.012" aria-label="Move down">▼</button><button type="button" data-act="nudge" data-k="s" data-d="-0.008" aria-label="Smaller">A−</button><button type="button" data-act="nudge" data-k="s" data-d="0.008" aria-label="Bigger">A+</button></div>
+      <button class="btn primary" data-act="stampSave" style="margin-bottom:10px">Save the position</button>` : '<p class="muted">No stamp yet — slips have empty "Approved by" lines.</p>'}
+    ${attachButton('settings', f ? 'Choose a new stamp picture' : 'Choose the stamp picture', 'stamp', 'image/png,image/jpeg')}`);
+  here = stampSheet;
+  if (f) { stampEdit = { ...STAMP_PLACE, ...(f.place || {}) }; drawStampPreview(); }
+}
+async function drawStampPreview() {
+  const cv = $('#stampPrev');
+  if (!cv) return;
+  stampPrev = stampPrev || await brandImage('stamp');
+  const g = cv.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+  if (stampPrev) drawStamp(g, stampPrev, 300, 300, 560, stampDate({ at: stamp() }), stampEdit);
+  else { g.fillStyle = SLIP_C.label; g.font = `600 26px ${SANS}`; g.textAlign = 'center'; g.fillText('Connect to the internet to see it', 300, 300); }
+}
+function nudgeStamp(k, d) { stampEdit = { ...stampEdit, [k]: Math.round((stampEdit[k] + Number(d)) * 1000) / 1000 }; drawStampPreview(); }
+async function saveStampPlace() {
+  const f = latestFile('settings', 'stamp'), place = stampEdit;
+  if (f.pending) { // not uploaded yet: the position goes up with it
+    const rec = await fileGet(f.id);
+    if (rec) await filePut({ ...rec, place });
+    outbox = outbox.map(x => (x.id === f.id ? { ...x, place } : x));
+  } else update({ files: S.files.map(x => (x.id === f.id ? { ...x, place } : x)) });
+  toast('Stamp position saved ✓');
 }
 
 /* ---------- google sheet sync ---------- */
@@ -1739,7 +1934,7 @@ function inviteHint(f) {
   const needLogin = !!link && !link.k;
   if (needLogin) $('.loginfields', f).hidden = false;
   box.className = 'invite-hint ' + (!v ? '' : link ? 'good' : 'bad');
-  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Join.' : '✓ Invite link OK — tap Join.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${appUrl()}#join=`;
+  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Sign in.' : '✓ Invite link OK — tap Sign in.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${appUrl()}#join=`;
 }
 
 // Every request says who is asking: this phone's sign-in, or (no sign-in yet) the company code.
@@ -1960,7 +2155,7 @@ async function doJoin(f) {
   repairImportedMoves();
   history.replaceState(null, '', location.pathname);
   sync = { state: 'ok', at: stampSec(), err: '' };
-  tab = 'home'; render(); toast(`Joined ${S.company} ✓`);
+  tab = 'menu'; render(); toast(`Joined ${S.company} ✓`);
 }
 // a new phone joining a company that has logins: sign in, then load what this person may see
 async function joinSignedIn(f, link, username, password) {
@@ -1978,9 +2173,10 @@ async function joinSignedIn(f, link, username, password) {
   await signedInAs(res, password);
   navigator.storage?.persist?.();
   history.replaceState(null, '', location.pathname);
-  tab = 'home';
+  tab = 'menu';
   await syncNow();
   render(); toast(`Welcome, ${res.me.name} ✓`);
+  lockApp(); // a new sign-in chooses its 4-digit code first
 }
 async function inviteSheet() {
   if (!await unlock('Enter the password to add a phone. The invite link gives access to the company records.')) return;
@@ -2111,8 +2307,8 @@ async function doSignIn(f) {
   catch (e) { return formErr(f, e.offline ? null : 'password', e.offline ? 'No internet. Signing in needs internet.' : e.message); }
   await signedInAs(res, v.password);
   update({ log: logWith([['Signed in', '—', `${res.me.name} signed in on this phone (${S.dev})`]], res.me.name) });
-  closeSheet(); tab = 'home'; render(); toast(`Welcome, ${res.me.name} ✓`);
-  syncNow();
+  closeSheet(); tab = 'menu'; render(); toast(`Welcome, ${res.me.name} ✓`);
+  syncNow(); lockApp();
 }
 
 /* the owner's first login, proven with a one-time setup code that only appears inside the Google Sheet */
@@ -2141,7 +2337,7 @@ async function doSetupLogins(f) {
   update({ log: logWith([['Logins', '—', `Logins set up. ${res.me.name} (${res.me.username}) is the first admin.`]], res.me.name) });
   render(); toast('Logins are ready ✓ Now give the others theirs.');
   syncNow();
-  usersSheet();
+  usersSheet(); lockApp();
 }
 
 /* admins: give, change and close logins */
@@ -2203,10 +2399,13 @@ async function requireLogins(on) {
 
 /* my login */
 function accountSheet() {
-  const u = session.user;
+  const u = session.user, q = session.quick;
   openSheet(`${head(u.name, '', `${u.username} · ${ROLES[u.role]}`)}
+    <h3 class="subh" style="margin-top:0">Opening the app</h3>
+    <div class="setrow"><span>4-digit code<br><span class="muted">${q ? 'Asked every time you open the app' : 'Not set yet'}</span></span><button class="btn small ghost" data-act="changeCode">${q ? 'Change' : 'Set'}</button></div>
+    <div class="setrow" id="bioRow"><span>Face ID / Touch ID<br><span class="muted">${q && q.cred ? 'On — opens the app with your face or finger' : 'Checking this phone…'}</span></span><span></span></div>
     <form data-form="password">
-      <h3 class="subh" style="margin-top:0">Change my password</h3>
+      <h3 class="subh">Change my password</h3>
       <label class="fld"><span>Current password</span><input type="password" name="old" required autocomplete="current-password"></label>
       <label class="fld"><span>New password</span><input type="password" name="pw" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
       <label class="fld"><span>New password again</span><input type="password" name="pw2" required minlength="8" autocomplete="new-password"></label>
@@ -2214,6 +2413,13 @@ function accountSheet() {
       <button class="btn primary">Change password</button>
     </form>
     <button class="btn ghost" data-act="signOut" style="margin-top:14px">Sign out of this phone</button>`);
+  here = accountSheet;
+  bioAvailable().then(ok => {
+    const row = $('#bioRow');
+    if (!row) return;
+    const on = !!(session.quick && session.quick.cred);
+    row.outerHTML = `<div class="setrow" id="bioRow"><span>Face ID / Touch ID<br><span class="muted">${on ? 'On — opens the app with your face or finger' : ok ? 'Off' : 'This phone does not offer it to apps'}</span></span>${ok && session.quick ? `<button class="btn small ${on ? 'ghost' : 'primary'}" data-act="${on ? 'bioOff' : 'bioOn'}">${on ? 'Turn off' : 'Turn on'}</button>` : ''}</div>`;
+  });
 }
 async function doChangePassword(f) {
   const v = Object.fromEntries(new FormData(f));
@@ -2231,8 +2437,7 @@ function loginsCard() {
   if (signedIn()) {
     return `<section class="card pad"><h3>👤 ${esc(session.user.name)}</h3>
       <p class="muted">Signed in as <b>${esc(session.user.username)}</b> · ${ROLES[session.user.role]}</p>
-      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">My password · Sign out</button></div>
-      <div class="setrow" style="margin-top:12px"><span>Quick unlock<br><span class="muted">${session.quick ? `On: a code${session.quick.cred ? ' and Face ID / fingerprint' : ''}` : 'A short code or Face ID instead of your password'}</span></span><button class="btn small ghost" data-act="quick">${session.quick ? 'Change' : 'Set up'} 🔒</button></div></section>`;
+      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">Code, Face ID, password</button></div></section>`;
   }
   if (S.link.logins) {
     return `<section class="card pad"><h3>👥 Logins</h3><p class="muted">Everyone can have their own username and password. Sign in with yours.</p>
@@ -2346,12 +2551,13 @@ async function askDelete(k, id) {
   closeSheet(); render(); toast('Sent for approval ✓ It is deleted when an admin approves.');
 }
 
-/* ---------- quick unlock: a short code, and Face ID / fingerprint where the phone has it ---------- */
-// Both live only in this phone's sign-in slot. The code is checked like the password (slow hash); after 5 wrong
-// codes only the password works. Face ID is a key made on this phone for this address; the phone's own check
-// (the "user verified" flag) is what counts. iPhone home-screen apps are known to fumble it, so the code always works.
-const QUICK_TRIES = 5;
-const quick = () => (signedIn() && session.quick && session.quick.tries < QUICK_TRIES ? session.quick : null);
+/* ---------- the 4-digit code: opening the app, showing balances, unlocking edits ---------- */
+// The code and the Face ID key live only in this phone's sign-in slot (never in backups). The code is checked like
+// the password (slow hash); after 5 wrong codes only the password works. Face ID is a key made on this phone for this
+// address; the phone's own check (the "user verified" flag) is what counts. iPhone home-screen apps sometimes fumble
+// Face ID, so the code always works too.
+const PIN_LEN = 4, QUICK_TRIES = 5;
+const quick = () => (signedIn() && session.quick && session.quick.len === PIN_LEN && session.quick.tries < QUICK_TRIES ? session.quick : null);
 const rndBytes = n => crypto.getRandomValues(new Uint8Array(n));
 const bytesB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const b64uBytes = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
@@ -2359,51 +2565,123 @@ async function bioAvailable() {
   try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch { return false; }
 }
 async function bioCheck() {
-  const q = quick();
+  const q = session && session.quick;
   if (!q || !q.cred) return false;
   try {
     const a = await navigator.credentials.get({ publicKey: { challenge: rndBytes(32), allowCredentials: [{ type: 'public-key', id: b64uBytes(q.cred) }], userVerification: 'required', timeout: 60000 } });
     return !!(new Uint8Array(a.response.authenticatorData)[32] & 4); // the phone checked the face or finger, not just a tap
   } catch { return false; }
 }
-async function quickSheet() {
-  if (!await unlock('Enter your password to set up quick unlock.', true)) return;
-  const bio = await bioAvailable();
-  openSheet(`${head('Quick unlock')}
-    <p class="hint">Unlock with a short code${bio ? ' or Face ID / fingerprint' : ''} instead of typing your password. It works only on this phone.</p>
-    <form data-form="quick">
-      <label class="fld"><span>Choose a code <em>(4 to 6 numbers)</em></span><input name="code" type="password" inputmode="numeric" maxlength="6" required autocomplete="off" autofocus></label>
-      <label class="fld"><span>Type it again</span><input name="code2" type="password" inputmode="numeric" maxlength="6" required autocomplete="off"></label>
-      ${bio ? '<label class="fld check"><input type="checkbox" name="bio" checked> Also use Face ID / fingerprint</label>' : ''}
-      <p class="err"></p>
-      <button class="btn primary">Save</button>
-    </form>
-    ${session.quick ? '<p class="center"><button class="link" data-act="quickOff">Turn quick unlock off</button></p>' : ''}`);
+// Face ID is turned on from a tap (phones only allow it then); some phones never answer, so give up after a minute.
+async function bioOn() {
+  try {
+    const make = navigator.credentials.create({ publicKey: {
+      challenge: rndBytes(32), rp: { name: 'Company Accounts' }, user: { id: rndBytes(16), name: session.user.username, displayName: session.user.name },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
+    const c = await Promise.race([make, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 65000))]);
+    saveSession({ ...session, quick: { ...session.quick, cred: bytesB64u(c.rawId) } });
+    toast('Face ID / Touch ID is on ✓');
+  } catch { alert('Face ID / Touch ID could not be turned on. Your 4-digit code still works.'); }
+  reopenHere();
 }
-async function saveQuick(f) {
-  const v = Object.fromEntries(new FormData(f));
-  if (!/^\d{4,6}$/.test(v.code)) return formErr(f, 'code', 'The code is 4 to 6 numbers.');
-  if (v.code !== v.code2) return formErr(f, 'code2', "The two codes don't match.");
-  let cred = null;
-  if (v.bio) {
-    $('.err', f).textContent = 'Setting up Face ID / fingerprint…';
-    try {
-      const make = navigator.credentials.create({ publicKey: {
-        challenge: rndBytes(32), rp: { name: 'Company Accounts' }, user: { id: rndBytes(16), name: session.user.username, displayName: session.user.name },
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
-      // some phones never answer (iPhone home-screen apps): give up after the time limit instead of waiting forever
-      const c = await Promise.race([make, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 65000))]);
-      cred = bytesB64u(c.rawId);
-    } catch { if (!confirm('Face ID / fingerprint could not be set up on this phone.\n\nSave the code only?')) return; }
+function bioOff() { saveSession({ ...session, quick: { ...session.quick, cred: null } }); toast('Face ID / Touch ID is off'); reopenHere(); }
+
+// The pad. mode: 'check' (type the code), 'new' then 'confirm' (choose a code), 'pass' (the password instead).
+// mandatory = it can't be closed (opening the app). Resolves true once unlocked or a code is chosen.
+let pin = null;
+function pinPrompt({ why, mode = 'check', mandatory = false }) {
+  if (pin) pin.resolve(false); // a newer prompt replaces an older one
+  return new Promise(resolve => {
+    pin = { why, mode: mode === 'check' && !quick() ? 'pass' : mode, mandatory, typed: '', first: '', err: '', busy: false, resolve };
+    const d = $('#lock');
+    pinDraw();
+    if (!d.open) d.showModal();
+    if (pin.mode === 'check' && quick().cred) bioTry(false); // straight to Face ID; the pad is right there if it fails
+  });
+}
+function pinDraw() {
+  const p = pin, q = quick();
+  const title = { check: 'Enter your code', new: 'Choose a 4-digit code', confirm: 'Type the code again', pass: 'Enter your password' }[p.mode];
+  const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" data-pin="${n}">${n}</button>`).join('');
+  $('#lockIn').innerHTML = `${APP_LOGO}<h2>${title}</h2><p class="lk-why">${esc(p.why)}</p>
+    ${p.mode === 'pass' ? `<form id="lkPwForm"><input type="password" id="lkPw" autocomplete="current-password" placeholder="Your password" required><p class="err">${esc(p.err)}</p><button class="btn primary">Unlock</button></form>`
+      : `<div class="dots${p.err ? ' shake' : ''}">${Array.from({ length: PIN_LEN }, (_, i) => `<i class="${i < p.typed.length ? 'on' : ''}"></i>`).join('')}</div>
+      <p class="err">${esc(p.busy ? 'Checking…' : p.err)}</p>
+      <div class="keypad">${keys}${p.mode === 'check' && q && q.cred ? '<button type="button" class="ghostkey" data-pin="bio" aria-label="Use Face ID">🙂</button>' : '<span></span>'}<button type="button" data-pin="0">0</button><button type="button" class="ghostkey" data-pin="del" aria-label="Delete">⌫</button></div>`}
+    <div class="lk-foot">${p.mode === 'check' ? '<button type="button" class="link" data-pin="pass">Use my password</button>' : ''}${p.mode === 'pass' && q ? '<button type="button" class="link" data-pin="code">Use my code</button>' : ''}${p.mandatory ? '' : '<button type="button" class="link" data-pin="cancel">Cancel</button>'}</div>`;
+  if (p.mode === 'pass') $('#lkPw').focus();
+}
+function pinDone(ok) {
+  const p = pin;
+  pin = null;
+  if (ok && session.quick && session.quick.tries) saveSession({ ...session, quick: { ...session.quick, tries: 0 } });
+  $('#lock').close();
+  p.resolve(ok);
+}
+async function bioTry(say) {
+  if (await bioCheck()) { if (pin) pinDone(true); }
+  else if (say && pin) { pin.err = 'Face ID did not work. Type your code.'; pinDraw(); }
+}
+async function pinKey(k) {
+  const p = pin;
+  if (!p || p.busy) return;
+  if (k === 'cancel') return pinDone(false);
+  if (k === 'bio') return bioTry(true);
+  if (k === 'pass' || k === 'code') { p.mode = k === 'pass' ? 'pass' : 'check'; p.err = ''; p.typed = ''; return pinDraw(); }
+  if (k === 'del') { p.typed = p.typed.slice(0, -1); return pinDraw(); }
+  if (p.typed.length >= PIN_LEN) return;
+  p.typed += k; p.err = '';
+  pinDraw();
+  if (p.typed.length < PIN_LEN) return;
+  if (p.mode === 'new') { p.first = p.typed; p.typed = ''; p.mode = 'confirm'; return pinDraw(); }
+  if (p.mode === 'confirm') {
+    if (p.typed !== p.first) { p.mode = 'new'; p.typed = ''; p.err = "The two codes didn't match. Choose again."; return pinDraw(); }
+    p.busy = true; pinDraw();
+    const salt = randHex();
+    saveSession({ ...session, quick: { salt, hash: await slowHash(p.typed, salt), len: PIN_LEN, cred: (session.quick && session.quick.cred) || null, tries: 0 } });
+    return pinDone(true);
   }
-  const salt = randHex();
-  saveSession({ ...session, quick: { salt, hash: await slowHash(v.code, salt), cred, tries: 0 } });
-  closeSheet(); render(); toast(`Quick unlock is on ✓${cred ? ' Code and Face ID / fingerprint' : ''}`);
+  // check: let the dots fill, then the slow check
+  p.busy = true; pinDraw();
+  const q = session.quick, good = await slowHash(p.typed, q.salt) === q.hash;
+  p.busy = false;
+  if (good) return pinDone(true);
+  const tries = (q.tries || 0) + 1;
+  saveSession({ ...session, quick: { ...q, tries } });
+  p.typed = '';
+  if (tries >= QUICK_TRIES) { p.mode = 'pass'; p.err = 'Too many wrong codes. Type your password.'; }
+  else p.err = `Wrong code. ${QUICK_TRIES - tries} ${QUICK_TRIES - tries === 1 ? 'try' : 'tries'} left.`;
+  pinDraw();
 }
-function quickOff() {
-  const { quick: _, ...rest } = session;
-  saveSession(rest); closeSheet(); render(); toast('Quick unlock is off');
+async function pinPassword(e) {
+  e.preventDefault();
+  const p = pin, pw = $('#lkPw').value;
+  if (!p) return;
+  if (await slowHash(pw, session.check.salt) === session.check.hash) return pinDone(true);
+  p.err = 'Wrong password. Try again.'; pinDraw();
+}
+
+// Every time the app is opened or comes back, it asks for the code (or Face ID). A new sign-in chooses the code first.
+let showMoney = false; // the balances on Accounts home, shown after the code was given; hidden again when the app locks
+function lockApp() {
+  if (!signedIn() || mustSignIn() || (pin && pin.mandatory)) return;
+  showMoney = false; unlockedUntil = 0;
+  if (!quick() && !(session.quick && session.quick.len === PIN_LEN)) {
+    return pinPrompt({ mode: 'new', mandatory: true, why: 'You type it (or use Face ID) every time you open the app.' }).then(() => { render(); offerBio(); });
+  }
+  pinPrompt({ mandatory: true, why: `${S.company || 'Company accounts'} · ${session.user.name}` }).then(() => render());
+}
+async function offerBio() {
+  if (!(await bioAvailable()) || session.quick.cred) return;
+  openSheet(`${head('Face ID / Touch ID')}
+    <p class="hint">Open the app with your face or finger instead of typing the code. The code still works.</p>
+    <button class="btn primary" data-act="bioOn">Turn on Face ID / Touch ID</button>
+    <button class="btn ghost" data-act="close" style="margin-top:10px">Not now</button>`);
+}
+async function changeCode() {
+  const ok = quick() ? await pinPrompt({ why: 'First your current code' }) : await unlock('Enter your password to choose a new code.', true);
+  if (ok && await pinPrompt({ mode: 'new', why: 'You type it (or use Face ID) every time you open the app.' })) { toast('New code saved ✓'); reopenHere(); }
 }
 
 /* ---------- staff: employees, salaries, advances, leaving ---------- */
@@ -2635,17 +2913,31 @@ function askAdvance(w, amount, cur, by) {
   closeSheet(); render(); toast('Sent to an admin ✓ You can give it once they approve.');
 }
 
-// what a salary slip shows, from the payment and the employee's account
+// What a salary slip shows: how the amount due was reached, from the payment and the employee's account.
 function payslipSpec(r) {
-  const w = workerOf(r.worker) || { name: r.paidTo, wage: 0, cur: r.cur, start: r.at.slice(0, 10) };
-  const after = ledgerOf(w);
-  const m = r.month && after.months.find(x => x.month === r.month);
-  const rows = [['Employee', w.name], ['Job', w.job], ['Employee no.', w.id]];
-  if (r.pay === 'salary') rows.push(['Month', monthName(r.month)], ['Monthly wage', `${money(w.wage, w.cur)} (30-day month)`],
-    ['Days worked', m ? `${m.days - m.daysOff} of ${m.days}${m.daysOff ? ` (${m.daysOff} not worked)` : ''}` : ''], ['Earned that month', m ? money(m.earned, w.cur) : '']);
-  if (r.pay === 'settlement') rows.push(['Last day of work', w.left ? fmtDate(w.left) : '']);
-  rows.push(['Paid from', accountOf(r.mode)], ...rateRow(r), [after.balance >= 0 ? 'Still to pay after this' : 'Paid ahead after this', money(Math.abs(after.balance), after.cur)]);
-  return { title: SLIP_TITLE[r.pay] || SLIP_TITLE.voucher, rows: rows.filter(x => x[1]), signLabel: 'Received by', signName: w.name };
+  const w = workerOf(r.worker) || { id: r.worker || '', name: r.paidTo, wage: 0, cur: r.cur, start: r.at.slice(0, 10) };
+  const M = n => slipMoney(n, w.cur), round2 = n => Math.round(n * 100) / 100, lines = [];
+  const paidNow = inWage(r, w.cur); // this payment in the wage's currency (cents), or null without a rate
+  // the account up to the end of the month paid (salary), the last day (settlement) or today (advance), this payment included
+  const end = r.pay === 'salary' && r.month ? [today(), `${r.month}-31`].sort()[0] : r.pay === 'settlement' && w.left ? w.left : today();
+  const upTo = ledgerOf(w, end), due = paidNow === null ? null : round2(upTo.balance + paidNow / 100);
+  const after = { t: upTo.balance >= 0 ? 'Balance still owed after this payment' : 'Paid ahead of earnings after this payment', v: M(Math.abs(upTo.balance)), muted: true };
+  if (r.pay === 'salary' && r.month) {
+    const m = upTo.months.find(x => x.month === r.month) || { days: 0, daysOff: 0, earned: 0 };
+    lines.push({ t: 'Monthly wage (30-day month)', v: M(w.wage) });
+    if (m.days < 30) lines.push({ t: `Pay for ${m.days} days (wage ÷ 30 × ${m.days})`, v: M(round2(w.wage * m.days / 30)) });
+    if (m.daysOff) lines.push({ t: `Less ${m.daysOff} day${m.daysOff === 1 ? '' : 's'} not worked`, v: `−${M(round2(w.wage * m.days / 30) - m.earned)}` });
+    lines.push({ t: `Earned for ${monthName(r.month)}`, v: M(m.earned), strong: true });
+    const other = due === null ? 0 : round2(due - m.earned);
+    if (other) lines.push({ t: other > 0 ? 'Earlier months still unpaid' : 'Less advances and earlier payments', v: `${other > 0 ? '+' : '−'}${M(Math.abs(other))}` });
+    if (due !== null) lines.push({ t: `Total due up to the end of ${monthName(r.month)}`, v: M(due), strong: true });
+  } else if (r.pay === 'advance') lines.push({ t: 'Advance on salary', v: slipMoney(r.amount, r.cur) });
+  else if (due !== null) lines.push({ t: `Total due up to the last day of work${w.left ? `, ${fmtDate(w.left)}` : ''}`, v: M(due), strong: true });
+  lines.push(after);
+  const salary = r.pay === 'salary';
+  return { title: SLIP_TITLE[r.pay] || SLIP_TITLE.voucher, party: ['Employee', `${w.name}${w.job ? ` · ${w.job}` : ''}`], when: [salary ? 'Pay period' : 'Date', salary ? monthName(r.month) : slipDay(r)],
+    forLabel: salary ? 'Pay details' : 'Being payment for', lines,
+    extra: [...(salary ? [['Paid on', slipDay(r)]] : []), ['Paid from', accountOf(r.mode)], ...rateRow(r), ['Employee no.', w.id]], signLabel: 'Received by', signName: w.name };
 }
 
 /* ---------- import old entries (paste rows from a list or sheet) ---------- */
@@ -2903,8 +3195,14 @@ const ACTIONS = {
   showFile: b => showFile(b.dataset.id),
   shareShown: () => shareShown(),
   letterhead: async () => { if (await unlock('Enter the password to change the letterhead.')) letterheadSheet(); },
-  quick: () => quickSheet(),
-  quickOff: () => quickOff(),
+  stamp: async () => { if (await unlock('Enter the password to change the company stamp.')) stampSheet(); },
+  nudge: b => nudgeStamp(b.dataset.k, b.dataset.d),
+  stampSave: () => saveStampPlace(),
+  changeCode: () => changeCode(),
+  bioOn: () => bioOn(),
+  bioOff: () => bioOff(),
+  reveal: async () => { if (await pinPrompt({ why: 'Enter your code to see the balances' })) { showMoney = true; render(); } },
+  conceal: () => { showMoney = false; render(); },
   addWorker: () => workerForm(),
   openWorker: b => workerDetail(b.dataset.id),
   editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
@@ -2912,7 +3210,7 @@ const ACTIONS = {
   payWorker: b => payForm(b.dataset.id, b.dataset.pay, b.dataset.approval),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, quick: saveQuick };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -2927,10 +3225,13 @@ function refreshRate(f) {
   out.textContent = rate === null ? '' : amt === null ? `1 USD = ${plain(rate)} SSP` : `${money(amt, 'SSP')} is about ${money(Math.round(amt / rate * 100) / 100, 'USD')}`;
 }
 document.addEventListener('click', e => {
+  const k = e.target.closest('[data-pin]');
+  if (k) return pinKey(k.dataset.pin);
   const b = e.target.closest('[data-act]');
   if (b && ACTIONS[b.dataset.act]) ACTIONS[b.dataset.act](b);
 });
 document.addEventListener('submit', e => {
+  if (e.target.id === 'lkPwForm') return pinPassword(e);
   const f = e.target.closest('form[data-form]');
   if (!f) return;
   e.preventDefault();
@@ -2977,6 +3278,29 @@ addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } 
 // sync as soon as the internet comes back, when the app is reopened, and every few minutes
 addEventListener('online', () => scheduleSync(0));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { scheduleSync(0); checkForUpdate(); } });
+
+/* the code pad: typing on a keyboard works too; opening the app can't be skipped */
+document.addEventListener('keydown', e => {
+  if (!pin || pin.mode === 'pass' || !$('#lock').open) return;
+  if (/^\d$/.test(e.key)) { e.preventDefault(); pinKey(e.key); }
+  else if (e.key === 'Backspace') { e.preventDefault(); pinKey('del'); }
+});
+$('#lock').addEventListener('cancel', e => { if (pin && pin.mandatory) e.preventDefault(); else if (pin) { e.preventDefault(); pinKey('cancel'); } });
+$('#lock').addEventListener('close', () => { if (pin && pin.mandatory) $('#lock').showModal(); }); // closed by the browser anyway: open again
+// Leaving the app locks it: coming back asks for the code. Not when the app itself sent you away for a moment
+// (the camera, choosing a file, the share sheet) — that is consumed by the next return.
+// ponytail: a picker that was cancelled without leaving keeps the pass until the next return within 5 minutes
+let leftAt = 0, pickerAt = 0;
+document.addEventListener('click', e => {
+  const t = e.target;
+  if ((t.type === 'file') || t.closest('label')?.querySelector('input[type=file]') || t.closest('[data-act=shareShown], [data-act=shareInvite]')) pickerAt = Date.now();
+}, true);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { leftAt = Date.now(); return; }
+  const mine = pickerAt && Date.now() - pickerAt < 5 * 60e3;
+  pickerAt = 0;
+  if (leftAt && !mine) lockApp();
+});
 setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
 setInterval(renderLock, 10000);
 
@@ -2985,6 +3309,7 @@ loadOutbox().then(() => { if (outbox.length) uploadFiles(); });
 if (S && location.hash) history.replaceState(null, '', location.pathname);
 if (location.search) history.replaceState(null, '', location.pathname + location.hash); // drop ?v= left by an update
 render();
+lockApp(); // opening the app asks for the code (a phone signed in before codes existed chooses one now)
 checkForUpdate();
 if ($('form[data-form=join]')) inviteHint($('form[data-form=join]'));
 scheduleSync(0);

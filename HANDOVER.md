@@ -182,9 +182,27 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
   after = {amount, cur}; approving changes nothing — whoever pays then records the advance with `approval: <C id>`).
 - Rights: `staff` (Staff tab) for admin and manager. The letterhead F goes to everyone (store keepers make vouchers);
   employees (W) and their files never go to store keepers.
-- **Quick unlock** (`session.quick = {salt, hash, cred, tries}` in the sign-in slot only): a 4–6 digit code checked
-  with `slowHash`, 5 wrong → password only; optional WebAuthn platform credential (`cred`), accepted when the
-  assertion's UV flag is set. The code always works, because iPhone home-screen apps fumble WebAuthn.
+- **App lock and the 4-digit code** (auth.js `pinPrompt`, `lockApp`; the `#lock` dialog is a full-screen code pad):
+  `session.quick = {salt, hash, len: 4, cred, tries}` lives only in the sign-in slot. `lockApp()` runs at start-up, after
+  every sign-in (a new session chooses its code first, then `offerBio()`), and when the page becomes visible again —
+  except right after the app itself opened the camera / file picker / share sheet (`pickerAt`, consumed on return).
+  The lock can't be closed (Escape and forced closes reopen it). 5 wrong codes → password (`session.check`, offline).
+  `unlock()` (edits, deletes, settings) uses the pad when a code exists, else the password box. Face ID = WebAuthn
+  platform credential made from a tap (`bioOn`), accepted when the assertion's UV flag is set; the code always works.
+  `showMoney` (Accounts home balances and totals) is false until the code is given, and again after every lock.
+- **Sections:** `tab = 'menu'` is the first page (Accounts / Employees tiles); `ACC_TABS` (home, hist, proj, sheet) show
+  the bottom bar; `staff` is Employees. Without the `staff` right (store keeper) there is no menu. The header shows the
+  section name and a round ‹ back button. `WELCOME` (core.js) is the title of the first screen.
+- **Slips** (files.js `renderSlip`) follow the company's paper voucher: ruled box with paid to | date, being payment
+  for | amount in (SSP/USD boxes + amount), amount in words | paid from / rate, received by (signature) | photo, then
+  prepared / checked / approved. It measures first and sets a long slip tighter so it ends above the letterhead
+  footer (y ≤ 1570). The **company stamp** (F type `stamp`, for `settings`, admins only, sent to everyone like the
+  letterhead) is drawn at the right of "approved"; `inkCircle()` finds its ring from the ink, and the date is written
+  letter by letter along the arc at `place = {a, r, s}` (angle, radius and size as parts of the ring's radius;
+  defaults `STAMP_PLACE` measured on the owner's stamp), adjustable in Settings → Company stamp and saved on the F record.
+- **App icon / logo:** `python3 tools/make-icons.py` cuts the "B" mark from `private/brand/logo.png` (never committed)
+  into `src/icon-*.png`; the in-app logo (`APP_LOGO`) is `icon-192.png`. Installed iPhones keep their old home-screen
+  icon until the app is removed and added again — only do that when nothing is waiting to sync.
 - `KINDS_SEEN` (sync.js) goes up whenever the app learns a new record kind (now 3: W and F); `migrate()` then sets `since` to 0
   once, because an older version skipped the unknown records but moved past them.
 - Sync replies also carry `me` (the signed-in person) and `logins` (whether the company has logins).
@@ -274,7 +292,8 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
-**Version 4 — staff, files, vouchers, quick unlock: BUILT AND TESTED, NOT RELEASED.** The source is on branch
+**Version 4/5 — staff, files, vouchers, app lock, stamp: BUILT AND TESTED, NOT RELEASED.** (Script v5 = v4 + the
+company stamp file type; the app needs ≥ 4 for files.) The source is on branch
 **`staff`** (pushed); `main` got only `docs/test/` (commit e71d330, 9 Oct 2026), so https://app.b-e-p-l.com/test/ runs
 d376856f61 with `/test/sheet-script.txt` v4, while the live app stays 186414e5b5 with `sheet-script.txt` v3. Keep it so
 until release: the live app's "Show me how" must not hand the owner v4 before the Drive permission step. To update
