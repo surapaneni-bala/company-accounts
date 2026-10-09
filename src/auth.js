@@ -7,11 +7,11 @@ const SESSION_KEY = KEY + '-login';
 const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper' };
 const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Sees everything · adds entries · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
 const RIGHTS = {
-  admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones'],
-  manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup'], // suggest = edits wait for an admin's approval
+  admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones', 'staff'],
+  manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval
   store: ['add'],
 };
-const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [] };
+const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], files: [] };
 
 // { token, user: { id, name, username, role }, check: { salt, hash } } — or { out: true, why } once signed out
 let session = loadSession();
@@ -45,6 +45,7 @@ async function signedInAs(res, password) {
   // reload the company settings as this person may see them (only admins get the company password);
   // a store keeper sees only their own entries: drop everything else this phone held (it's all on the sheet)
   const clear = { settingsU: 0, ...(res.me.role === 'admin' ? {} : { pass: null }), ...(res.me.role === 'store' ? onlyUnsent() : {}) };
+  if (res.me.role === 'store') dropFileCopies();
   S = { ...S, ...clear, link: { ...S.link, k: '', since: 0, logins: true }, lastBy: res.me.name };
   save();
 }
@@ -52,16 +53,17 @@ async function signedInAs(res, password) {
 function signedOutByServer(why) {
   saveSession({ out: true, why });
   // nothing stays on a phone that lost access — except changes it hasn't sent yet
-  S = { ...S, ...(S.dirty.length ? {} : NOTHING_SEEN), link: { ...S.link, since: 0 } };
-  save(); closeSheet(); render();
+  S = { ...S, ...onlyUnsent(), pass: null, link: { ...S.link, since: 0 } }; // signing in again brings back what this login may see
+  dropFileCopies();
+  save(); closeAll(); render();
 }
 async function signOut() {
-  const n = S.dirty.length;
-  if (n) return alert(`This phone has ${n} change${n === 1 ? '' : 's'} not sent to the Google Sheet yet.\n\nConnect to the internet and wait until it says "Up to date", then sign out.`);
+  const n = S.dirty.length + outbox.length;
+  if (n) return alert(`This phone has ${n} change${n === 1 ? '' : 's'} or file${n === 1 ? '' : 's'} not sent to the Google Sheet yet.\n\nConnect to the internet and wait until it says "Up to date", then sign out.`);
   if (!confirm('Sign out of this phone?\n\nThe company records leave this phone. They come back when someone signs in.')) return;
   const token = session.token;
   saveSession({ out: true }); // the sign-in screen shows at once, so nothing new can be added meanwhile
-  closeSheet(); render();
+  closeAll(); render(); dropFileCopies();
   try { await callServer(S.link, { op: 'logout', token }); } catch { /* already signed out on the sheet: fine */ }
   if (!S.dirty.length) { S = { ...S, ...NOTHING_SEEN, link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
   render();
@@ -217,7 +219,8 @@ function loginsCard() {
   if (signedIn()) {
     return `<section class="card pad"><h3>👤 ${esc(session.user.name)}</h3>
       <p class="muted">Signed in as <b>${esc(session.user.username)}</b> · ${ROLES[session.user.role]}</p>
-      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">My password · Sign out</button></div></section>`;
+      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">My password · Sign out</button></div>
+      <div class="setrow" style="margin-top:12px"><span>Quick unlock<br><span class="muted">${session.quick ? `On: a code${session.quick.cred ? ' and Face ID / fingerprint' : ''}` : 'A short code or Face ID instead of your password'}</span></span><button class="btn small ghost" data-act="quick">${session.quick ? 'Change' : 'Set up'} 🔒</button></div></section>`;
   }
   if (S.link.logins) {
     return `<section class="card pad"><h3>👥 Logins</h3><p class="muted">Everyone can have their own username and password. Sign in with yours.</p>
@@ -239,19 +242,23 @@ const saveLabel = () => (can('edit') ? 'Save changes' : 'Send for approval');
 const approvalNote = old => (old && !can('edit') ? '<p class="note">An admin approves this change first. Until then the entry and the totals stay as they are.</p>' : '');
 const waiting = () => (S.changes || []).filter(c => c.status === 'waiting');
 const waitingFor = id => waiting().filter(c => c.target === id);
-const recordsOf = kind => S[kind === 'P' ? 'projects' : COLL[kind]] || [];
+const recordsOf = kind => S[KIND_KEY[kind]] || [];
 const targetOf = c => recordsOf(c.kind).find(x => x.id === c.target);
 // the fields an edit may change, per kind (the Google Sheet checks the same list)
 const EDITABLE = {
-  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate'],
-  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate'],
+  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate', 'rate'],
+  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate', 'rate'],
   T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
   P: ['name', 'value', 'valueCur'],
+  W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote'],
 };
-const editPart = c => Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f)));
+const editPart = c => (c.action ? {} : Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f))));
+const whatIs = (kind, r) => (kind === 'P' ? `Project "${r.name}"` : kind === 'W' ? `Employee ${r.name}` : describe(kind, r));
 // what approving would really change, worked out from the entry itself — never from the text sent with the request
 function changeLines(c, r) {
   if (!r) return [];
+  if (c.action === 'delete') return [`Delete it: ${whatIs(c.kind, r)}`];
+  if (c.action === 'advance') return [`Give an advance of ${money(+c.after.amount, c.after.cur)} — more than the $${ADVANCE_LIMIT_USD} a month limit`];
   const next = { ...r, ...editPart(c) };
   if (c.kind !== 'P') return diff(r, next);
   const vc = x => x.valueCur || 'USD';
@@ -287,7 +294,7 @@ function changeCard(c) {
   // the entry was changed by someone else after this request: show it so the admin looks first
   const moved = r && Object.keys(c.before || {}).some(f => String(r[f] ?? '') !== String(c.before[f] ?? ''));
   return `<section class="card pad" style="margin-bottom:12px">
-    <p style="margin:0 0 6px"><b>${esc(r ? (c.kind === 'P' ? `Project "${r.name}"` : describe(c.kind, r)) : c.target)}</b></p>
+    <p style="margin:0 0 6px"><b>${esc(r ? whatIs(c.kind, r) : c.target)}</b></p>
     <ul style="margin:0 0 8px;padding-left:20px">${(lines.length ? lines : ['No real change — reject it']).map(t => `<li>${esc(t)}</li>`).join('')}</ul>
     <p class="muted" style="margin:0 0 10px">Asked by ${esc(c.by)} · ${esc(fmtAbs(c.at))}</p>
     ${gone ? '<p class="note">This entry was deleted — the change can only be rejected.</p>' : moved ? '<p class="note">⚠️ This entry was changed after the request. Check it before approving.</p>' : ''}
@@ -298,15 +305,91 @@ async function decide(id, ok) {
   if (!await unlock('Enter the password to approve or reject changes.')) return;
   const c = S.changes.find(x => x.id === id);
   if (!c || c.status !== 'waiting') return approvalsSheet();
-  const me = myName() || S.lastBy || 'Admin', key = c.kind === 'P' ? 'projects' : COLL[c.kind];
+  const me = myName() || S.lastBy || 'Admin', key = KIND_KEY[c.kind];
   const r = targetOf(c), next = r && { ...r, ...editPart(c) };
   if (ok && (!r || r.deleted || !VALID[c.kind](next))) return alert("This change can't be applied: the entry is gone or the new values aren't valid. Reject it instead.");
+  if (ok && c.action === 'delete' && c.kind === 'P' && [...live(S.expenses), ...live(S.credits)].some(x => x.project === c.target)) return alert('This project still has entries. Move or delete them first, or reject this.');
   const what = changeLines(c, r).join(' ; ') || 'no real change';
   const patch = {
     changes: S.changes.map(x => (x.id === id ? { ...x, status: ok ? 'approved' : 'rejected', decidedBy: me, decidedAt: stampSec() } : x)),
     log: logWith([[ok ? 'Approved' : 'Rejected', c.target, `${what} — asked by ${c.by}`]], me),
   };
-  if (ok) patch[key] = S[key].map(x => (x.id === c.target ? { ...next, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
+  // an approved advance changes nothing yet: whoever hands over the money then records it against this approval
+  if (ok && c.action === 'delete') patch[key] = S[key].map(x => (x.id === c.target ? { ...x, deleted: stampSec(), deletedBy: `${c.by} (approved by ${me})` } : x));
+  if (ok && !c.action) patch[key] = S[key].map(x => (x.id === c.target ? { ...next, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
   update(patch);
-  render(); approvalsSheet(); toast(ok ? 'Approved ✓ The entry is changed' : 'Rejected — the entry stays as it was');
+  render(); approvalsSheet(); toast(!ok ? 'Rejected — the entry stays as it was' : c.action === 'delete' ? 'Approved ✓ The entry is deleted' : c.action === 'advance' ? 'Approved ✓ The advance can be given now' : 'Approved ✓ The entry is changed');
+}
+// An office manager's delete waits for an admin, like her edits.
+async function askDelete(k, id) {
+  if (!await unlock('Enter the password to ask for this entry to be deleted.')) return;
+  const r = S[COLL[k]].find(x => x.id === id);
+  if (!confirm(`Ask an admin to delete ${id} — ${money(r.amount, r.cur)}?\n\nIt stays in the totals until an admin approves.`)) return;
+  const by = myName() || S.lastBy || '';
+  const [[cid], seq] = nextIds('C', 1, S.seq), text = `Delete: ${describe(k, r)}`;
+  update({
+    changes: [...S.changes, { id: cid, kind: k, target: id, action: 'delete', before: {}, after: {}, text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
+    log: logWith([['Delete asked', id, `${text} — waiting for an admin`]], by),
+  });
+  closeSheet(); render(); toast('Sent for approval ✓ It is deleted when an admin approves.');
+}
+
+/* ---------- quick unlock: a short code, and Face ID / fingerprint where the phone has it ---------- */
+// Both live only in this phone's sign-in slot. The code is checked like the password (slow hash); after 5 wrong
+// codes only the password works. Face ID is a key made on this phone for this address; the phone's own check
+// (the "user verified" flag) is what counts. iPhone home-screen apps are known to fumble it, so the code always works.
+const QUICK_TRIES = 5;
+const quick = () => (signedIn() && session.quick && session.quick.tries < QUICK_TRIES ? session.quick : null);
+const rndBytes = n => crypto.getRandomValues(new Uint8Array(n));
+const bytesB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64uBytes = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function bioAvailable() {
+  try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch { return false; }
+}
+async function bioCheck() {
+  const q = quick();
+  if (!q || !q.cred) return false;
+  try {
+    const a = await navigator.credentials.get({ publicKey: { challenge: rndBytes(32), allowCredentials: [{ type: 'public-key', id: b64uBytes(q.cred) }], userVerification: 'required', timeout: 60000 } });
+    return !!(new Uint8Array(a.response.authenticatorData)[32] & 4); // the phone checked the face or finger, not just a tap
+  } catch { return false; }
+}
+async function quickSheet() {
+  if (!await unlock('Enter your password to set up quick unlock.', true)) return;
+  const bio = await bioAvailable();
+  openSheet(`${head('Quick unlock')}
+    <p class="hint">Unlock with a short code${bio ? ' or Face ID / fingerprint' : ''} instead of typing your password. It works only on this phone.</p>
+    <form data-form="quick">
+      <label class="fld"><span>Choose a code <em>(4 to 6 numbers)</em></span><input name="code" type="password" inputmode="numeric" maxlength="6" required autocomplete="off" autofocus></label>
+      <label class="fld"><span>Type it again</span><input name="code2" type="password" inputmode="numeric" maxlength="6" required autocomplete="off"></label>
+      ${bio ? '<label class="fld check"><input type="checkbox" name="bio" checked> Also use Face ID / fingerprint</label>' : ''}
+      <p class="err"></p>
+      <button class="btn primary">Save</button>
+    </form>
+    ${session.quick ? '<p class="center"><button class="link" data-act="quickOff">Turn quick unlock off</button></p>' : ''}`);
+}
+async function saveQuick(f) {
+  const v = Object.fromEntries(new FormData(f));
+  if (!/^\d{4,6}$/.test(v.code)) return formErr(f, 'code', 'The code is 4 to 6 numbers.');
+  if (v.code !== v.code2) return formErr(f, 'code2', "The two codes don't match.");
+  let cred = null;
+  if (v.bio) {
+    $('.err', f).textContent = 'Setting up Face ID / fingerprint…';
+    try {
+      const make = navigator.credentials.create({ publicKey: {
+        challenge: rndBytes(32), rp: { name: 'Company Accounts' }, user: { id: rndBytes(16), name: session.user.username, displayName: session.user.name },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
+      // some phones never answer (iPhone home-screen apps): give up after the time limit instead of waiting forever
+      const c = await Promise.race([make, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 65000))]);
+      cred = bytesB64u(c.rawId);
+    } catch { if (!confirm('Face ID / fingerprint could not be set up on this phone.\n\nSave the code only?')) return; }
+  }
+  const salt = randHex();
+  saveSession({ ...session, quick: { salt, hash: await slowHash(v.code, salt), cred, tries: 0 } });
+  closeSheet(); render(); toast(`Quick unlock is on ✓${cred ? ' Code and Face ID / fingerprint' : ''}`);
+}
+function quickOff() {
+  const { quick: _, ...rest } = session;
+  saveSession(rest); closeSheet(); render(); toast('Quick unlock is off');
 }

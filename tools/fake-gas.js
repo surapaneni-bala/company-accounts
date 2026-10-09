@@ -74,8 +74,35 @@ function makeSpreadsheet(state) {
   return chainable(ss);
 }
 
+// Drive: folders and files kept in memory (state.drive), enough for upload/download of photos and PDFs.
+function makeDrive(drive) {
+  const folder = id => ({
+    getId: () => id,
+    createFolder: name => { const nid = 'fold' + crypto.randomUUID().replace(/-/g, ''); drive.folders[nid] = { name, parent: id }; return folder(nid); },
+    getFoldersByName: name => {
+      const hits = Object.keys(drive.folders).filter(k => drive.folders[k].parent === id && drive.folders[k].name === name);
+      return { hasNext: () => hits.length > 0, next: () => folder(hits.shift()) };
+    },
+    createFile: blob => { const fid = 'file' + crypto.randomUUID().replace(/-/g, ''); drive.files[fid] = { folder: id, name: blob.getName(), mime: blob.getContentType(), b64: Buffer.from(blob.getBytes()).toString('base64') }; return { getId: () => fid }; },
+  });
+  drive.folders = drive.folders || { root: { name: 'My Drive', parent: null } };
+  drive.files = drive.files || {};
+  return {
+    getRootFolder: () => folder('root'),
+    createFolder: name => folder('root').createFolder(name),
+    getFolderById: id => { if (!drive.folders[id]) throw new Error('No item with the given ID could be found'); return folder(id); },
+    getFileById: id => {
+      const f = drive.files[id];
+      if (!f) throw new Error('No item with the given ID could be found');
+      return { getBlob: () => newBlob([...Buffer.from(f.b64, 'base64')], f.mime, f.name), getName: () => f.name };
+    },
+  };
+}
+const newBlob = (bytes, mime, name) => ({ getBytes: () => bytes.slice(), getContentType: () => mime, getName: () => name });
+
 function loadGas(code, state = {}) {
   const props = { ...(state.props || {}) };
+  const drive = state.drive || {};
   const ss = makeSpreadsheet(state);
   const sandbox = {
     SpreadsheetApp: { getActive: () => ss, BorderStyle: { SOLID: 'SOLID', SOLID_MEDIUM: 'SOLID_MEDIUM' } },
@@ -89,13 +116,17 @@ function loadGas(code, state = {}) {
       Charset: { UTF_8: 'utf8' },
       // like Apps Script: an array of signed bytes (-128…127)
       computeDigest: (alg, s, cs) => [...new Int8Array(crypto.createHash(alg).update(String(s), cs).digest())],
+      base64Decode: s => [...new Int8Array(Buffer.from(String(s), 'base64'))],
+      base64Encode: bytes => Buffer.from(Uint8Array.from(bytes, b => b & 255)).toString('base64'),
+      newBlob,
     },
+    DriveApp: makeDrive(drive),
     Session: { getScriptTimeZone: () => 'UTC' },
     Logger: { log: () => {} },
   };
   vm.createContext(sandbox);
   const api = vm.runInContext(`${code}\n;({ setup, doGet, doPost })`, sandbox);
-  const dump = () => ({ props, sheets: ss.getSheets().map(s => ({ name: s.getName(), grid: s.grid, hidden: s.hidden })) });
+  const dump = () => ({ props, drive, sheets: ss.getSheets().map(s => ({ name: s.getName(), grid: s.grid, hidden: s.hidden })) });
   return { ...api, ss, props, dump };
 }
 

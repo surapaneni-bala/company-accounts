@@ -40,7 +40,7 @@ function read(f) {
   return text;
 }
 
-const js = ['core.js', 'sync.js', 'auth.js', 'import.js', 'update.js', 'main.js'].map(read).join('\n');
+const js = ['core.js', 'calc.js', 'files.js', 'sync.js', 'auth.js', 'staff.js', 'import.js', 'update.js', 'main.js'].map(read).join('\n');
 const page = read('shell.html').replace('<!--APP-->', () => `<script>\n${js}</script>`);
 const version = crypto.createHash('sha256').update(page).digest('hex').slice(0, 10);
 const html = page.replace('__VERSION__', version);

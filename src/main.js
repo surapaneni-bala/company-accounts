@@ -51,13 +51,34 @@ const ACTIONS = {
   approvals: () => approvalsSheet(),
   moveApp: () => moveApp(),
   decide: b => decide(b.dataset.id, !!b.dataset.ok),
+  askDelete: b => askDelete(b.dataset.kind, b.dataset.id),
+  slip: b => slipSheet(b.dataset.kind, b.dataset.id),
+  sigClear: b => sigPad($('canvas.sig', b.closest('.fld'))),
+  showFile: b => showFile(b.dataset.id),
+  shareShown: () => shareShown(),
+  letterhead: async () => { if (await unlock('Enter the password to change the letterhead.')) letterheadSheet(); },
+  quick: () => quickSheet(),
+  quickOff: () => quickOff(),
+  addWorker: () => workerForm(),
+  openWorker: b => workerDetail(b.dataset.id),
+  editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
+  markLeft: async b => { if (await unlock('Enter the password to record that this employee has left.')) leftForm(b.dataset.id); },
+  payWorker: b => payForm(b.dataset.id, b.dataset.pay, b.dataset.approval),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, quick: saveQuick };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
   input.closest('.fld').querySelector('.amt-preview').textContent = n === null ? '' : money(n, formCur(input.form));
+  refreshRate(input.form);
+}
+// "≈ $55.56" under the SSP rate, so a mistyped rate shows at once
+function refreshRate(f) {
+  const out = f && $('.rate-usd', f);
+  if (!out) return;
+  const rate = parseAmount(f.elements.rate.value), amt = f.elements.amount ? parseAmount(f.elements.amount.value) : null;
+  out.textContent = rate === null ? '' : amt === null ? `1 USD = ${plain(rate)} SSP` : `${money(amt, 'SSP')} is about ${money(Math.round(amt / rate * 100) / 100, 'USD')}`;
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
@@ -74,6 +95,8 @@ document.addEventListener('input', e => {
   t.classList.remove('bad');
   if (t.closest('.brows')) updateBulk(t.form);
   if (t.closest('.amt-in')) refreshAmount(t);
+  if (t.name === 'rate' && t.form) refreshRate(t.form);
+  if (t.form && t.form.dataset.form === 'pay') { if (t.name === 'amount') t.form.dataset.typed = '1'; refreshPay(t.form, t); }
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
   if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
@@ -84,7 +107,11 @@ document.addEventListener('change', e => {
     $$('.cur-sym', t.form).forEach(s => (s.textContent = SYM[t.value].trim()));
     $$('.amt-in input', t.form).forEach(refreshAmount);
     if ($('.brows', t.form)) updateBulk(t.form);
+    $$('.ratef', t.form).forEach(l => { l.hidden = t.value !== 'SSP'; $('input', l).required = !l.hidden; });
+    refreshRate(t.form);
   }
+  if (t.dataset.attach !== undefined) attachPicked(t);
+  if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }
@@ -108,6 +135,7 @@ setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
 setInterval(renderLock, 10000);
 
 if (S) { S = migrate(S); save(); repairImportedMoves(); }
+loadOutbox().then(() => { if (outbox.length) uploadFiles(); });
 if (S && location.hash) history.replaceState(null, '', location.pathname);
 if (location.search) history.replaceState(null, '', location.pathname + location.hash); // drop ?v= left by an update
 render();

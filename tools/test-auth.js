@@ -25,7 +25,7 @@ let res = post({ key, since: 0, push: [settings, old, income] });
 assert.ok(res.ok, res.error);
 
 /* ---------- before logins: everything works exactly as before ---------- */
-assert.deepStrictEqual([get().version, get().logins, get().required], [3, false, false]);
+assert.deepStrictEqual([get().version, get().logins, get().required], [4, false, false]);
 res = post({ key, since: 0, push: [] });
 assert.strictEqual(res.pull.length, 3, 'company code still gives everything');
 assert.deepStrictEqual([res.logins, res.me, res.refused], [false, null, []]);
