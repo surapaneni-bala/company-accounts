@@ -91,6 +91,8 @@ offsets.forEach((o, i) => assert.ok(text.startsWith(`${i + 1} 0 obj`, o), `objec
 assert.strictEqual(Number(text.slice(text.indexOf('startxref') + 10).trim().split('\n')[0]), xrefAt);
 assert.ok(pdf.includes(Buffer.from(jpeg)), 'the photo bytes are inside, untouched');
 assert.ok(text.includes('/Width 1240 /Height 1754'));
+assert.ok(text.includes('/MediaBox [0 0 595.28 842.03]'), 'an A4 picture makes an A4 page (1240 × 1754 dots)');
+assert.ok(Buffer.from(jpegToPdf(jpeg, 1240, 1240)).toString('latin1').includes('/MediaBox [0 0 595.28 595.28]'), 'a shorter slip makes a page as tall as it is');
 
 /* ---------- several pages (a long statement) ---------- */
 const two = Buffer.from(pdfPages([{ data: jpeg, w: 1240, h: 1754 }, { data: jpeg, w: 1240, h: 1754 }])).toString('latin1');

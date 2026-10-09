@@ -82,13 +82,12 @@ function pdfPages(pages) {
   let size = 0;
   const add = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); size += b.length; };
   const obj = (n, body) => { offsets[n] = size; add(`${n} 0 obj\n${body}\nendobj\n`); };
-  const W = 595.28, H = 841.89; // A4 in points
-  const draw = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+  const W = 595.28; // A4 width in points; each page is as tall as its picture (an A4 page, or a slip as tall as it needs)
   add('%PDF-1.4\n');
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   obj(2, `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + 3 * i} 0 R`).join(' ')}] /Count ${pages.length} >>`);
   pages.forEach((p, i) => {
-    const n = 3 + 3 * i;
+    const n = 3 + 3 * i, H = Math.round(W * p.h / p.w * 100) / 100, draw = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
     obj(n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${n + 2} 0 R >> >> /Contents ${n + 1} 0 R >>`);
     obj(n + 1, `<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`);
     offsets[n + 2] = size;

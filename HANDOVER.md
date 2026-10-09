@@ -193,6 +193,13 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
 - **Sections:** `tab = 'menu'` is the first page (Accounts / Employees tiles); `ACC_TABS` (home, hist, proj, sheet) show
   the bottom bar; `staff` is Employees. Without the `staff` right (store keeper) there is no menu. The header shows the
   section name and a round ‹ back button. `WELCOME` (core.js) is the title of the first screen.
+- **Slip pages are as tall as the slip** (A4 width): the form is drawn on a see-through layer, then put on a page with the
+  letterhead's top part and its bottom tenth (`LH_FOOT`, the address strip) at the foot; `pdfPages` sizes each page
+  from its picture. Nothing is painted white over the letterhead, so its watermark shows (tints are see-through).
+  One plain type family (`SANS`: Helvetica Neue / Arial / Roboto), no 800 weights; the app uses the phone's system font.
+  The signature is cut to its ink (`inkOnly`) and set on its line with the name under it, never enlarged past a pen
+  line (`placeSignature`). Stamps are kept as PNG; `cleanStamp` removes whatever background a stamp picture has
+  (white paper, a black square from an old JPEG, or none) before it is drawn.
 - **Slips** (files.js `renderSlip`) follow the company's paper voucher: ruled box with paid to | date, being payment
   for | amount in (SSP/USD boxes + amount), amount in words | paid from / rate, received by (signature) | photo, then
   prepared / checked / approved. It measures first and sets a long slip tighter so it ends above the letterhead

@@ -417,7 +417,7 @@ function payslipSpec(r) {
   // the account up to the end of the month paid (salary), the last day (settlement) or today (advance), this payment included
   const end = r.pay === 'salary' && r.month ? [today(), `${r.month}-31`].sort()[0] : r.pay === 'settlement' && w.left ? w.left : today();
   const upTo = ledgerOf(w, end), due = paidNow === null ? null : round2(upTo.balance + paidNow / 100);
-  const after = { t: upTo.balance >= 0 ? 'Balance still owed after this payment' : 'Paid ahead of earnings after this payment', v: M(Math.abs(upTo.balance)), muted: true };
+  const after = { t: upTo.balance >= 0 ? 'Balance after this payment' : 'Paid ahead after this payment', v: M(Math.abs(upTo.balance)), muted: true };
   if (r.pay === 'salary' && r.month) {
     const m = upTo.months.find(x => x.month === r.month) || { days: 0, daysOff: 0, earned: 0 };
     lines.push({ t: 'Monthly wage (30-day month)', v: M(w.wage) });
@@ -427,7 +427,7 @@ function payslipSpec(r) {
     lines.push({ t: `Earned for ${monthName(r.month)}`, v: M(m.earned), strong: true });
     const other = due === null ? 0 : round2(due - m.earned);
     if (other) lines.push({ t: other > 0 ? 'Earlier months still unpaid' : 'Less advances and earlier payments', v: `${other > 0 ? '+' : '−'}${M(Math.abs(other))}` });
-    if (due !== null) lines.push({ t: `Total due up to the end of ${monthName(r.month)}`, v: M(due), strong: true });
+    if (due !== null) lines.push({ t: `Total due to end of ${MON[+r.month.slice(5, 7) - 1]} ${r.month.slice(0, 4)}`, v: M(due), strong: true });
   } else if (r.pay === 'advance') lines.push({ t: 'Advance on salary', v: slipMoney(r.amount, r.cur) });
   else if (due !== null) lines.push({ t: `Total due up to the last day of work${w.left ? `, ${fmtDate(w.left)}` : ''}`, v: M(due), strong: true });
   lines.push(after);
