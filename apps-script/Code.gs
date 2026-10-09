@@ -167,13 +167,10 @@ function sync_(req) {
     // the records are saved; a problem drawing the readable tabs must never stop syncing
     try { rebuild_(ss, result.rows.map(toRec_)); } catch (err) { warning = 'The readable tabs could not be refreshed: ' + err.message; Logger.log(warning); }
   }
-  const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('FILES_TIDY') !== String(VERSION)) { // once: what was deleted or cancelled before this version
-    props.setProperty('FILES_TIDY', String(VERSION));
-    result.moves = result.moves.concat(result.rows.map(toRec_).filter(r => r.d.deleted || (r.k === 'F' && r.d.cancelled))
-      .map(r => ({ id: r.id, k: r.k, cancelled: !r.d.deleted })));
-  }
-  fileMoves_(result.rows, result.moves);
+  try { // filing in Drive never stops a sync
+    if (PropertiesService.getScriptProperties().getProperty('FILES_LAYOUT') !== LAYOUT) organizeAll_(result.rows);
+    else organize_(result.rows, result.touched, result.trash);
+  } catch (err) { console.error('Filing in Drive: ' + err.message); }
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role === 'store' ? '' : ss.getUrl(), kinds: KINDS,
@@ -222,7 +219,7 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
   out.forEach((r, i) => { index[r[0]] = i; });
   let seq = out.reduce((m, r) => Math.max(m, Number(r[3]) || 0), 0);
   let changed = false;
-  const refused = [], moves = [];
+  const refused = [], touched = [], trash = [];
   const limited = !!user && user.role !== 'admin', now = Date.now();
   (Array.isArray(push) ? push : []).forEach((p, n) => {
     if (!p || typeof p.id !== 'string' || !p.id || KINDS.indexOf(p.k) < 0 || typeof p.u !== 'number' || !isObj_(p.d)) return;
@@ -253,11 +250,11 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     changed = true;
     const row = [p.id, p.k, u, seq, JSON.stringify(d)];
     if (i === undefined) { index[p.id] = out.length; out.push(row); } else { out[i] = row; }
-    if (d.deleted && !(before && before.deleted)) moves.push({ id: p.id, k: p.k });
-    else if (p.k === 'F' && d.cancelled && !(before && before.cancelled)) moves.push({ id: p.id, k: 'F', cancelled: true });
+    touched.push(p.id);
+    if (p.k === 'F' && before && before.fileId !== d.fileId && d.stamped) trash.push(before.fileId); // the unstamped original of a cancelled paper
   });
   const pull = out.filter(r => Number(r[3]) > since).map(toRec_);
-  return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused, moves: moves };
+  return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused, touched: touched, trash: trash };
 }
 
 /* ---------- logins ---------- */
@@ -323,43 +320,104 @@ function uploads_() {
   rowsOf_(FILES_TAB, FILE_COLS).forEach(r => { map[String(r.fileId)] = String(r.uid); });
   return map;
 }
+/* ---------- Drive: one company folder, every file in its place ----------
+   <Company> Super App/                   (the first word of the company name, e.g. "Brookfield Super App")
+     <the Google Sheet>
+     Payments & receipts/YYYY-MM/         vouchers, receipts, payment photos and attachments, by the entry's month
+     Payments & receipts/Cancelled/       vouchers and receipts cancelled because their entry changed after signing
+     Employees/<Name> (W-…)/              everything about one employee: profile, ID, slips, advances, statements, photos
+       Changes/                           their replaced profile or ID photos, cancelled or deleted slips
+     Deleted employees/<Name> (W-…)/      an employee an admin deleted, with all their files
+     Deleted entries/                     files of deleted payments and receipts
+     Company/ (+ Changes/)                letterhead and stamp (the older ones in Changes)
+   Where a file goes follows from its record, so a later change (cancelled, deleted, renamed, replaced) refiles it.
+   Nothing is thrown away, except the unstamped original of a cancelled paper once its stamped copy is in. */
+const LAYOUT = '1'; // bump when the layout changes: every sheet then refiles everything once
+const FOLDER = { pay: 'Payments & receipts', cancelled: 'Cancelled', staff: 'Employees', staffGone: 'Deleted employees', gone: 'Deleted entries', company: 'Company', changes: 'Changes' };
+function topName_(rows) {
+  const s = rows.filter(r => r[1] === 'S').map(r => JSON.parse(r[4]))[0] || {};
+  return (String(s.company || '').trim().split(/\s+/)[0] || 'Company') + ' Super App';
+}
 function filesRoot_() {
   const props = PropertiesService.getScriptProperties();
   let root = null;
   try { root = props.getProperty('FILES_FOLDER') ? DriveApp.getFolderById(props.getProperty('FILES_FOLDER')) : null; } catch (err) { root = null; }
-  if (!root) { root = DriveApp.createFolder('Company app files (do not share)'); props.setProperty('FILES_FOLDER', root.getId()); }
+  if (!root) { root = DriveApp.createFolder(props.getProperty('TOP_NAME') || 'Company Super App'); props.setProperty('FILES_FOLDER', root.getId()); }
   return root;
 }
+const child_ = (parent, name) => { const it = parent.getFoldersByName(name); return it.hasNext() ? it.next() : parent.createFolder(name); };
+const inside_ = (item, folder) => { const it = item.getParents(); return it.hasNext() && it.next().getId() === folder.getId(); };
+function folderAt_(path, cache) {
+  const key = '/' + path.join('/');
+  if (!cache[key]) cache[key] = path.length ? child_(folderAt_(path.slice(0, -1), cache), path[path.length - 1]) : filesRoot_();
+  return cache[key];
+}
+// a new upload waits in this month's folder until its record arrives and files it
 function monthFolder_() {
+  return folderAt_([FOLDER.pay, Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM')], {});
+}
+// an employee's own folder, found by their number (a name can change), kept in Employees or Deleted employees
+function staffFolder_(w, cache) {
+  if (cache[w.id]) return cache[w.id];
+  const home = folderAt_([w.d.deleted ? FOLDER.staffGone : FOLDER.staff], cache), name = `${String(w.d.name).replace(/[\\/]/g, '-')} (${w.id})`;
+  let found = null;
+  [FOLDER.staff, FOLDER.staffGone].some(p => {
+    for (const it = folderAt_([p], cache).getFolders(); it.hasNext();) { const f = it.next(); if (f.getName().slice(-(w.id.length + 2)) === `(${w.id})`) { found = f; return true; } }
+    return false;
+  });
+  if (!found) found = home.createFolder(name);
+  if (found.getName() !== name) found.setName(name);
+  if (!inside_(found, home)) found.moveTo(home);
+  return (cache[w.id] = found);
+}
+// where a file belongs, worked out from its record and the record it is for
+function fileHome_(f, byId, files, cache) {
+  const owner = byId[f.for], o = owner ? owner.d : {};
+  const w = owner && owner.k === 'W' ? owner : o.worker && byId[o.worker] && byId[o.worker].k === 'W' ? byId[o.worker] : null;
+  const older = (f.for === 'settings' || f.type === 'profile' || f.type === 'idphoto') && files.some(g => g.id !== f.id && g.for === f.for && g.type === f.type && String(g.createdAt) > String(f.createdAt));
+  if (f.for === 'settings') return folderAt_(older ? [FOLDER.company, FOLDER.changes] : [FOLDER.company], cache);
+  if (w) { const home = staffFolder_(w, cache); return f.cancelled || older || (o.deleted && owner.k !== 'W') ? child_(home, FOLDER.changes) : home; }
+  if (o.deleted) return folderAt_([FOLDER.gone], cache);
+  if (f.cancelled) return folderAt_([FOLDER.pay, FOLDER.cancelled], cache);
+  return folderAt_([FOLDER.pay, /^\d{4}-\d{2}/.test(o.at) ? o.at.slice(0, 7) : String(f.createdAt).slice(0, 7)], cache);
+}
+function placeFile_(f, folder) {
+  const file = DriveApp.getFileById(f.fileId);
+  if (f.cancelled && !/^CANCELLED /.test(file.getName())) file.setName('CANCELLED ' + file.getName());
+  if (!inside_(file, folder)) file.moveTo(folder);
+}
+// File what this sync changed (touched = record ids; null = everything): those records' files, a changed file's
+// neighbours (a new profile photo sends the older one to Changes), an employee's folder and their payments' files.
+function organize_(rows, touched, trash) {
+  if (touched && !touched.length && !trash.length) return;
+  const recs = rows.map(toRec_), byId = Object.create(null), cache = {};
+  recs.forEach(r => { byId[r.id] = r; });
+  const files = recs.filter(r => r.k === 'F' && !r.d.deleted).map(r => r.d), want = touched && new Set(touched);
+  if (want) touched.forEach(id => { const r = byId[id]; if (r && r.k === 'F') want.add(r.d.for); });
+  trash.forEach(id => { try { DriveApp.getFileById(id).setTrashed(true); } catch (err) { console.error('Could not bin ' + id + ': ' + err.message); } });
+  recs.filter(r => r.k === 'W' && (!want || want.has(r.id))).forEach(w => { try { staffFolder_(w, cache); } catch (err) { console.error('Employee folder ' + w.id + ': ' + err.message); } });
+  files.filter(f => { if (!want || want.has(f.id) || want.has(f.for)) return true; const o = byId[f.for]; return !!(o && o.d.worker && want.has(o.d.worker)); })
+    .forEach(f => { try { placeFile_(f, fileHome_(f, byId, files, cache)); } catch (err) { console.error('Could not file ' + f.id + ': ' + err.message); } });
+}
+// Once per layout: name the company folder, move the Google Sheet into it, file everything, remove emptied old folders.
+function organizeAll_(rows) {
+  const props = PropertiesService.getScriptProperties(), name = topName_(rows);
+  props.setProperty('TOP_NAME', name);
   const root = filesRoot_();
-  const month = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
-  const found = root.getFoldersByName(month);
-  return found.hasNext() ? found.next() : root.createFolder(month);
+  if (root.getName() !== name) root.setName(name);
+  try { const sheet = DriveApp.getFileById(SpreadsheetApp.getActive().getId()); if (!inside_(sheet, root)) sheet.moveTo(root); } catch (err) { console.error('Could not move the Google Sheet: ' + err.message); }
+  organize_(rows, null, []);
+  const keep = Object.keys(FOLDER).map(k => FOLDER[k]);
+  for (const it = root.getFolders(); it.hasNext();) { const f = it.next(); if (keep.indexOf(f.getName()) < 0 && !f.getFiles().hasNext() && !f.getFolders().hasNext()) f.setTrashed(true); }
+  props.setProperty('FILES_LAYOUT', LAYOUT);
 }
-// Nothing is thrown away. A deleted record's files go to the "Deleted" folder; a cancelled voucher, receipt or slip
-// (its entry changed after it was signed) is renamed "CANCELLED …" and goes to "Cancelled". A Drive problem never stops a sync.
-function fileMoves_(rows, moves) {
-  if (!moves.length) return;
-  const files = rows.filter(r => r[1] === 'F').map(r => JSON.parse(r[4]));
-  moves.forEach(m => (m.k === 'F' ? files.filter(f => f.id === m.id) : files.filter(f => f.for === m.id)).forEach(f => {
-    try {
-      const file = DriveApp.getFileById(f.fileId);
-      if (m.cancelled && !/^CANCELLED /.test(file.getName())) file.setName('CANCELLED ' + file.getName());
-      file.moveTo(subFolder_(m.cancelled ? 'Cancelled' : 'Deleted'));
-    } catch (err) { console.error('Could not put away ' + f.id + ': ' + err.message); }
-  }));
-}
-function subFolder_(name) {
-  const root = filesRoot_(), found = root.getFoldersByName(name);
-  return found.hasNext() ? found.next() : root.createFolder(name);
-}
-// Run this once in the Apps Script editor after pasting the script: Google then asks permission to use Drive.
-// Google's permission screen has a box for each permission; one left unticked is never asked for again by itself,
-// so this asks for every missing one, then makes the files folder: if Drive is still not allowed, it fails here.
+// Run this once in the Apps Script editor after pasting the script. Google asks permission to use Drive: its screen has a
+// box for each permission, and one left unticked is never asked for again by itself, so this asks for every missing one.
+// Then it files everything into the company folder (the Google Sheet too): if Drive is still not allowed, it fails here.
 function allowFiles() {
   ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
-  const folder = monthFolder_();
-  Logger.log(`Drive access is allowed: files go to "Company app files (do not share)/${folder.getName()}". Now: Deploy → Manage deployments → ✏️ → New version → Deploy.`);
+  organizeAll_(readAll_(syncTab_(SpreadsheetApp.getActive())));
+  Logger.log(`Drive access is allowed, and everything is filed in the folder "${filesRoot_().getName()}" (the Google Sheet too). Now: Deploy → Manage deployments → ✏️ → New version → Deploy.`);
 }
 
 // The very first login is the owner's. It needs the company code AND a one-time setup code that is written only
