@@ -75,7 +75,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 7; // shown when the web app link is opened in a browser
+const VERSION = 8; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -137,9 +137,18 @@ function doPost(e) {
   if (!lock.tryLock(LOCK_WAIT_MS)) return json_({ ok: false, error: 'The Google Sheet is busy. It will retry by itself.' });
   try {
     return json_(req.op ? account_(req) : sync_(req));
+  } catch (err) { // left alone, Google answers with an error page the phone cannot read, which looks like "no internet"
+    console.error(err && err.stack || err);
+    return json_({ ok: false, error: sheetError_(err) });
   } finally {
     lock.releaseLock();
   }
+}
+function sheetError_(err) {
+  const msg = String(err && err.message || err).slice(0, 300);
+  return /permission|authori[sz]/i.test(msg)
+    ? `The Google Sheet may not use Google Drive yet. In Apps Script choose allowFiles and press Run; on Google's permission screen tick every box (Select all) and press Continue. (${msg})`
+    : `The Google Sheet hit an error: ${msg}`;
 }
 
 function sync_(req) {
@@ -313,10 +322,13 @@ function monthFolder_() {
   const found = root.getFoldersByName(month);
   return found.hasNext() ? found.next() : root.createFolder(month);
 }
-// Run this once in the Apps Script editor after pasting version 4: Google then asks permission to use Drive.
+// Run this once in the Apps Script editor after pasting the script: Google then asks permission to use Drive.
+// Google's permission screen has a box for each permission; one left unticked is never asked for again by itself,
+// so this asks for every missing one, then makes the files folder: if Drive is still not allowed, it fails here.
 function allowFiles() {
-  DriveApp.getRootFolder();
-  Logger.log('Drive access is allowed. Now: Deploy → Manage deployments → ✏️ → New version → Deploy.');
+  ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  const folder = monthFolder_();
+  Logger.log(`Drive access is allowed: files go to "Company app files (do not share)/${folder.getName()}". Now: Deploy → Manage deployments → ✏️ → New version → Deploy.`);
 }
 
 // The very first login is the owner's. It needs the company code AND a one-time setup code that is written only

@@ -1,7 +1,7 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **bd0ecba9f4** (employees, files, vouchers, app lock, statements, days not
-worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections) · script in this repo: **version 7** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
+Last updated **9 Oct 2026** · live app version **e342bf1236** (employees, files, vouchers, app lock, statements, days not
+worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections) · script in this repo: **version 8** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
 
@@ -277,6 +277,8 @@ python3 -m http.server 8764 --bind 127.0.0.1 --directory docs
 node tools/mock-server.js           # prints a company code; web app link = http://127.0.0.1:8770/exec
 #   CODE=/path/to/other/Code.gs  → run another script version (e.g. an old one: git show <rev>:apps-script/Code.gs)
 #   BLOCK=1                      → behave like a sheet whose access is not "Anyone"
+#   NODRIVE=1                    → a sheet never allowed to use Google Drive (allowFiles not run): sync works, uploads fail
+#                                   with an error page the browser cannot read, exactly like Google
 ```
 
 - Open `http://127.0.0.1:8764/` and `http://localhost:8764/`. They are two different origins, so they
@@ -324,6 +326,13 @@ git commit -m "fix: …" && git push
 - Commits use the `type: description` style. No attribution lines (the owner's setting).
 
 ## 6. Where things stand (open items)
+
+**RELEASED 9 Oct 2026 (late night): live app e342bf1236 + sheet script v8** (`main` merged from `drive-msg`). The owner's real
+sheet already runs this exact v8 (pasted from /test/sheet-script.txt; same bytes as the live sheet-script.txt) with Drive allowed:
+uploads work. v8: `doPost` answers its errors in words; `allowFiles` asks for every unticked permission
+(`ScriptApp.requireAllScopes`) and makes the files folder. App: a failed upload names the Drive step when the sheet answers;
+files of deleted records are never sent. Cause of the owner's stuck uploads: the Drive box left unticked on Google's
+granular consent screen; then the browser served a cached copy of sheet-script.txt (open it with `?v=N`).
 
 **RELEASED 9 Oct 2026 (night): live app bd0ecba9f4** (`main` merged from `uploads`; script still v7): uploads no longer cut off
 on slow connections (request time limit grows with the body; a 300 KB upload at 64 kbps fails at 45.0 s on 245800c246 and
@@ -461,6 +470,14 @@ folder, which is temporary:
 - **Time limits must grow with what is sent:** a fixed 45-second limit on every request cut off voucher uploads on slow
   phone connections, silently, forever (reproduced at 64 kbps; `callServer` now adds the body's time at 32 kbps). A file
   that waits must always say why (`uploadWhy`).
+- **A script error looks like "no internet"** to the phone: Google answers an uncaught error with a page that has no CORS
+  headers, so `fetch` rejects. The owner's first live vouchers (9 Oct) never uploaded while sync worked — most likely the real
+  sheet had never been allowed to use Drive (`allowFiles` not run); reproduced with the mock's NODRIVE=1. `uploadFailure` now asks the sheet (`answers`) and,
+  if it answers, names the Drive permission step instead of blaming the internet.
+  Script v8 goes to the root: `doPost` catches any error and answers `{ ok: false, error }` (`sheetError_`), so the phone
+  shows the sheet's own message (any app version does) and Executions logs it with `console.error`.
+- **Deleting is for good, so a deleted record's waiting files are never sent** (`forDeleted` in `uploadFiles`, which also
+  removes them from the phone). Before 9 Oct test entries deleted before their upload still went to Drive.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.
 - **Expect pasted links to be damaged:** the join box replaces its content on paste and finds the
   invite inside any text.

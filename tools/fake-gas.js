@@ -78,6 +78,7 @@ function makeSpreadsheet(state) {
 function makeDrive(drive) {
   const folder = id => ({
     getId: () => id,
+    getName: () => drive.folders[id].name,
     createFolder: name => { const nid = 'fold' + crypto.randomUUID().replace(/-/g, ''); drive.folders[nid] = { name, parent: id }; return folder(nid); },
     getFoldersByName: name => {
       const hits = Object.keys(drive.folders).filter(k => drive.folders[k].parent === id && drive.folders[k].name === name);
@@ -100,7 +101,9 @@ function makeDrive(drive) {
 }
 const newBlob = (bytes, mime, name) => ({ getBytes: () => bytes.slice(), getContentType: () => mime, getName: () => name });
 
-function loadGas(code, state = {}) {
+// opts.noDrive: like a sheet whose owner never allowed Google Drive (allowFiles not run): every Drive call fails
+const NO_DRIVE = new Proxy({}, { get: (_, k) => () => { throw new Error(`You do not have permission to call DriveApp.${String(k)}. Required permissions: https://www.googleapis.com/auth/drive`); } });
+function loadGas(code, state = {}, opts = {}) {
   const props = { ...(state.props || {}) };
   const drive = state.drive || {};
   const ss = makeSpreadsheet(state);
@@ -120,12 +123,14 @@ function loadGas(code, state = {}) {
       base64Encode: bytes => Buffer.from(Uint8Array.from(bytes, b => b & 255)).toString('base64'),
       newBlob,
     },
-    DriveApp: makeDrive(drive),
+    DriveApp: opts.noDrive ? NO_DRIVE : makeDrive(drive),
     Session: { getScriptTimeZone: () => 'UTC' },
     Logger: { log: () => {} },
+    console: { log: () => {}, error: () => {} },
+    ScriptApp: { AuthMode: { FULL: 'FULL' }, requireAllScopes: () => {} },
   };
   vm.createContext(sandbox);
-  const api = vm.runInContext(`${code}\n;({ setup, doGet, doPost })`, sandbox);
+  const api = vm.runInContext(`${code}\n;({ setup, doGet, doPost, allowFiles: typeof allowFiles === 'function' ? allowFiles : null })`, sandbox);
   const dump = () => ({ props, drive, sheets: ss.getSheets().map(s => ({ name: s.getName(), grid: s.grid, hidden: s.hidden })) });
   return { ...api, ss, props, dump };
 }

@@ -30,7 +30,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 7; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 8; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 const notAllowedMsg = n => `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
 const SCRIPT_URL = 'https://app.b-e-p-l.com/sheet-script.txt'; // the sheet script, published next to the app
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error
@@ -92,7 +92,7 @@ async function callServer(link, body) {
   let res;
   // text/plain body = no CORS preflight, which Apps Script cannot answer
   try { res = await fetch(link.u, { method: 'POST', body: text, signal: ctl.signal }); }
-  catch { throw Object.assign(new Error('No internet'), { offline: true }); }
+  catch (e) { throw Object.assign(new Error('No internet'), { offline: true, timedOut: e.name === 'AbortError' }); }
   finally { clearTimeout(timer); }
   const j = await res.json().catch(() => null);
   if (!j) throw new SyncError('The Google Sheet did not answer. Check the web app link, and that "Who has access" is set to "Anyone".');
@@ -247,7 +247,7 @@ function howUpdateSheet() {
       <li>Open the new script: <a href="${SCRIPT_URL}" target="_blank" rel="noopener">new Code.gs</a>. Select all (<b>Ctrl+A</b>, Mac <b>Cmd+A</b>) and copy (<b>Ctrl+C</b> / <b>Cmd+C</b>).</li>
       <li>In Apps Script click inside the code, select all, press <b>Delete</b>, then paste (<b>Ctrl+V</b> / <b>Cmd+V</b>). Click <b>💾 Save</b>.</li>
       <li>Click the blue <b>Deploy</b> button → <b>Manage deployments</b> → the ✏️ <b>pencil</b>.</li>
-      <li><b>Only the first time you update to version 4 or newer:</b> in the list at the top of Apps Script choose <b>allowFiles</b> and click <b>▶ Run</b>. Google asks for permission to use your Drive: <b>Review permissions</b> → the company account → <b>Advanced → Go to … (unsafe)</b> → <b>Allow</b> (it is your own script). This lets the app keep receipts, vouchers and photos in a private Drive folder.</li>
+      <li><b>Only the first time you update to version 4 or newer:</b> in the list at the top of Apps Script choose <b>allowFiles</b> and click <b>▶ Run</b>. Google asks for permission to use your Drive: <b>Review permissions</b> → the company account → <b>Advanced → Go to … (unsafe)</b> → <b>tick every box (Select all)</b> → <b>Continue</b> (it is your own script; without the Drive box, files can't be saved). This lets the app keep receipts, vouchers and photos in a private Drive folder.</li>
       <li>Under <b>Version</b> choose <b>New version</b>. Leave “Execute as: Me” and “Who has access: Anyone”. Click <b>Deploy</b>.<br><em>Not “New deployment” — that makes a different link.</em></li>
       <li>Come back here and tap <b>Sync now</b>.</li>
     </ol>

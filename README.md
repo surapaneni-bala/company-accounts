@@ -152,7 +152,8 @@ deployments** → ✏️ → **Version: New version** → **Deploy**. The web ap
 
 **Version 4 only (once):** after pasting and saving, choose **allowFiles** in the function list at the top of Apps
 Script and click **▶ Run**. Google asks for permission to use your Drive: **Review permissions** → pick the company
-account → **Advanced → Go to … (unsafe)** → **Allow** (it is your own script). Then do the *New version* step.
+account → **Advanced → Go to … (unsafe)** → **tick every box (Select all)** → **Continue** (it is your own script; Google
+lets you untick permissions, and without Drive no file can be saved). Then do the *New version* step.
 
 ---
 
