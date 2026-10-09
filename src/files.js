@@ -28,6 +28,7 @@ function idb(mode, fn) {
 }
 const fileGet = id => idb('readonly', s => s.get(id));
 const filePut = rec => idb('readwrite', s => s.put(rec));
+const fileDel = id => idb('readwrite', s => s.delete(id));
 const fileAll = () => idb('readonly', s => s.getAll());
 async function loadOutbox() {
   try { outbox = (await fileAll()).filter(f => f.pending).map(({ data, ...meta }) => meta); }
@@ -93,6 +94,8 @@ async function uploadFailure(e) {
   if (e.timedOut || !await answers(S.link.u)) return SLOW_MSG;
   return can('settings') ? DRIVE_MSG : 'the Google Sheet cannot save files yet — tell the owner (it needs permission to use Google Drive).';
 }
+// Deleting is for good (nothing brings a record back), so files still waiting for a deleted record are never sent.
+const forDeleted = id => Object.keys(SYNC_KEYS).some(k => (S[k] || []).some(r => r.id === id && r.deleted));
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
 // ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
 async function uploadFiles() {
@@ -101,7 +104,8 @@ async function uploadFiles() {
   try {
     for (const meta of outbox) {
       const rec = await fileGet(meta.id);
-      if (!rec || !rec.pending) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
+      if (rec && rec.pending && forDeleted(rec.for)) await fileDel(meta.id); // its entry was deleted before it went up
+      if (!rec || !rec.pending || forDeleted(rec.for)) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
       let res;
       try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
       catch (e) { uploadErr = await uploadFailure(e); break; }
