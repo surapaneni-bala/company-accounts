@@ -23,7 +23,8 @@ const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves',
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
 // File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …)
 const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F'];
-const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead'];
+const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp'];
+const BRAND_FILES = ['letterhead', 'stamp']; // the company's own: only admins set them, every login's slips carry them
 const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
 const MAX_FILE = 8 * 1024 * 1024; // bytes
 const ACCOUNTS = ['Cash', 'Bank'];
@@ -70,7 +71,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 4; // shown when the web app link is opened in a browser
+const VERSION = 5; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -179,7 +180,7 @@ function view_(user, rec) {
   if (!user || user.role === 'admin') return rec;
   if (rec.k === 'S') return { id: rec.id, k: rec.k, u: rec.u, d: { company: rec.d.company } };
   if (user.role === 'manager') return rec;
-  if (rec.k === 'F' && rec.d.type === 'letterhead') return rec; // everyone's vouchers carry the company letterhead
+  if (rec.k === 'F' && BRAND_FILES.indexOf(rec.d.type) >= 0) return rec; // everyone's vouchers carry the letterhead and stamp
   return (rec.k === 'E' || rec.k === 'L' || rec.k === 'F') && rec.d.uid === user.id ? rec : null;
 }
 // What each login may change. before = the stored copy (null for a new record).
@@ -187,7 +188,7 @@ function allowed_(user, p, before) {
   if (!user || user.role === 'admin') return true;
   if (before) return false; // only admins change what is already there (an office manager's edit is a change request)
   if (p.d.uid !== user.id || p.d.deleted) return false; // a new record carries its sender's login and isn't born deleted
-  if (p.k === 'F' && p.d.type === 'letterhead') return false; // the company letterhead: admins only
+  if (p.k === 'F' && BRAND_FILES.indexOf(p.d.type) >= 0) return false; // the company letterhead and stamp: admins only
   if (user.role === 'manager') return ['E', 'R', 'T', 'P', 'L', 'C', 'W', 'F'].indexOf(p.k) >= 0 && (p.k !== 'C' || p.d.status === 'waiting');
   return p.k === 'E' || p.k === 'L' || p.k === 'F'; // store keeper: own expenses, notes and their receipts
 }
