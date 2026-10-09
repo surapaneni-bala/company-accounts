@@ -161,7 +161,86 @@ function sigPad(cv) {
   cv.onpointerup = cv.onpointercancel = () => { last = null; };
 }
 const sigField = who => `<div class="fld"><span>Signature of ${esc(who)} <em>(sign with a finger)</em></span><canvas class="sig"></canvas><button type="button" class="link" data-act="sigClear">Clear and sign again</button></div>`;
-const photoField = who => `<label class="fld"><span>Photo of ${esc(who)} with the money <em>(optional)</em></span><input type="file" name="photo" accept="image/*" capture="environment"></label>`;
+/* ---------- the payment photo: framed by hand in a 3 : 2 box (drag, pinch or slide to zoom); exactly that goes on the slip ---------- */
+const PHOTO_RATIO = 1.5, PHOTO_OUT = 900;
+const photoField = who => `<div class="fld photo-fld"><span>Photo of ${esc(who)} with the money <em>(optional)</em></span>
+  <label class="btn ghost">📷 Take or choose a photo<input type="file" name="photo" accept="image/*" capture="environment" hidden></label>
+  <div class="framer" hidden><canvas></canvas><i class="frame-guide"></i></div>
+  <div class="framer-tools" hidden><b aria-hidden="true">−</b><input type="range" name="zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom the photo"><b aria-hidden="true">＋</b></div>
+  <p class="muted framer-hint" hidden>Move the photo with your finger and zoom until it fits the box — it goes on the slip exactly like this.</p></div>`;
+async function startFramer(input) {
+  const f = input.form, file = input.files[0];
+  if (!file) return;
+  try { f._frame = { file, img: await imgFrom(file), zoom: 1, x: 0, y: 0, fresh: true }; } catch (e) { return alert(e.message); }
+  const box = input.closest('.photo-fld');
+  ['.framer', '.framer-tools', '.framer-hint'].forEach(sel => { $(sel, box).hidden = false; });
+  $('label.btn', box).firstChild.textContent = '📷 Take another photo';
+  f.elements.zoom.value = 1;
+  framerEvents(f); drawFramer(f);
+}
+function drawFramer(f) {
+  const fr = f._frame, cv = $('.framer canvas', f);
+  if (!fr || !cv) return;
+  const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1, cw = r.width, ch = r.height;
+  if (cv.width !== Math.round(cw * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
+  if (fr.cw && cw !== fr.cw) { fr.x *= cw / fr.cw; fr.y *= cw / fr.cw; } // the box changed size (phone turned): keep the framing
+  const iw = fr.img.naturalWidth, ih = fr.img.naturalHeight, s = Math.max(cw / iw, ch / ih) * fr.zoom;
+  if (fr.fresh) { fr.x = (cw - iw * s) / 2; fr.y = (ch - ih * s) / 2; fr.fresh = false; } // starts centred
+  fr.x = Math.min(0, Math.max(cw - iw * s, fr.x)); fr.y = Math.min(0, Math.max(ch - ih * s, fr.y)); // the photo always fills the box
+  fr.cw = cw; fr.s = s;
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, cw, ch);
+  g.drawImage(fr.img, fr.x, fr.y, iw * s, ih * s);
+}
+// zoom around a point of the box (its centre for the slider, between the fingers for a pinch)
+function zoomFramer(f, zoom, cx, cy) {
+  const fr = f._frame, cv = $('.framer canvas', f);
+  if (!fr || !cv) return;
+  const r = cv.getBoundingClientRect(), z = Math.min(4, Math.max(1, zoom)), k = z / fr.zoom;
+  cx = cx ?? r.width / 2; cy = cy ?? r.height / 2;
+  fr.x = cx - (cx - fr.x) * k; fr.y = cy - (cy - fr.y) * k; fr.zoom = z;
+  if (+f.elements.zoom.value !== z) f.elements.zoom.value = z;
+  drawFramer(f);
+}
+function framerEvents(f) {
+  const cv = $('.framer canvas', f), pts = new Map();
+  let pinch = null;
+  cv.onpointerdown = e => {
+    try { cv.setPointerCapture(e.pointerId); } catch { /* a finger that already left */ }
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, z: f._frame.zoom }; }
+  };
+  cv.onpointermove = e => {
+    if (!pts.has(e.pointerId)) return;
+    const was = pts.get(e.pointerId);
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 1) { f._frame.x += e.clientX - was[0]; f._frame.y += e.clientY - was[1]; drawFramer(f); }
+    else if (pinch) { const [a, b] = [...pts.values()], r = cv.getBoundingClientRect(); zoomFramer(f, pinch.z * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d, (a[0] + b[0]) / 2 - r.left, (a[1] + b[1]) / 2 - r.top); }
+  };
+  cv.onpointerup = cv.onpointercancel = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+}
+// the photo exactly as framed, as a 3 : 2 picture for the slip
+function framedPhoto(f) {
+  const fr = f._frame;
+  if (!fr || !fr.cw) return null;
+  const c = document.createElement('canvas'), k = PHOTO_OUT / fr.cw;
+  c.width = PHOTO_OUT; c.height = Math.round(PHOTO_OUT / PHOTO_RATIO);
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(fr.img, fr.x * k, fr.y * k, fr.img.naturalWidth * fr.s * k, fr.img.naturalHeight * fr.s * k);
+  return c;
+}
+// the photo as taken (whole, not framed) is kept with the entry too, to open or send later
+async function keepTakenPhoto(f, forId, no) {
+  if (!f._frame) return;
+  const p = await prepareFile(f._frame.file);
+  await keepFile({ for: forId, type: 'photo', name: `${no} photo.jpg`, mime: p.mime }, p.data);
+}
+// a photo box on a slip or statement: exactly 3 : 2, centred in its cell, so the framing is kept as it was
+function photoInto(g, photo, x, y, w, h) {
+  const ph = Math.min(h, w / PHOTO_RATIO), pw = ph * PHOTO_RATIO;
+  fitInto(g, photo, x + (w - pw) / 2, y + (h - ph) / 2, pw, ph, true);
+}
 
 /* ---------- slips: an A4 page drawn on a canvas, saved as a one-page PDF ---------- */
 // Laid out like the company's paper voucher (paid to | date, being payment for | amount, amount in words,
@@ -224,6 +303,10 @@ async function brandImage(type) {
   if (!f) return null;
   try { return Object.assign(await imgFrom(await fileBlob(f.id)), { place: f.place }); } catch { return null; } // offline and never fetched: left out
 }
+// the company's logo (shipped with the app) for slips made before a letterhead is set
+let logoLoad = null;
+const wideLogo = () => logoLoad || (logoLoad = new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = 'logo-wide.png'; }));
+const logoOrName = (g, logo) => { if (logo) g.drawImage(logo, 90, 52, 110 * logo.naturalWidth / logo.naturalHeight, 110); else { g.fillStyle = SLIP_C.navy; g.font = `700 46px ${SANS}`; g.fillText(S.company || 'Company', 90, 120); } };
 const letterheadImage = () => brandImage('letterhead');
 // keep the letterhead and stamp on the phone, so slips made offline still carry them
 function warmLetterhead() { ['letterhead', 'stamp'].forEach(t => { const f = latestFile('settings', t); if (f && !f.pending) fileBlob(f.id).catch(() => {}); }); }
@@ -282,17 +365,24 @@ function drawStamp(g, img, x, y, size, dateText, place) {
 
 /* s = { title, no, stampDate, party: [label, value], when: [label, value], forLabel, lines: [{ t, v, strong, muted }],
          amount, cur, extra: [[label, value]], signLabel, signName, sig: canvas, photo: image|null, preparedBy, ref } */
-// A slip is as tall as what it holds (A4 width): the letterhead's header at the top, the form, then the letterhead's
-// address strip (its bottom tenth) at the foot — no empty half page.
-const LH_FOOT = 0.1;
+// A slip is as tall as what it holds (A4 width). The letterhead goes on in three parts: its header (top LH_TOP) at the
+// top, its address strip (bottom LH_FOOT) at the foot, and the watermark between them, shrunk so the whole of it fits.
+const LH_TOP = 0.18, LH_FOOT = 0.1;
+function drawLetterhead(p, lh, H) {
+  const iw = lh.naturalWidth, ih = lh.naturalHeight, k = SLIP_W / iw, topH = ih * LH_TOP * k, footH = ih * LH_FOOT * k, mid = ih * (1 - LH_TOP - LH_FOOT);
+  p.drawImage(lh, 0, 0, iw, ih * LH_TOP, 0, 0, SLIP_W, topH);
+  p.drawImage(lh, 0, ih * (1 - LH_FOOT), iw, ih * LH_FOOT, 0, H - footH, SLIP_W, footH);
+  const room = H - topH - footH, s = Math.min(k, room / mid), dw = iw * s, dh = mid * s; // never bigger than on a full A4 page
+  p.drawImage(lh, 0, ih * LH_TOP, iw, mid, SLIP_W - dw, topH + (room - dh) / 2, dw, dh); // kept to the right edge, as printed
+}
 async function renderSlip(s) {
   const C = SLIP_C, L = 90, R = SLIP_W - 90, CX = L + 660;
-  const [lh, stampImg] = await Promise.all([letterheadImage(), brandImage('stamp')]);
+  const [lh, stampImg, logo] = await Promise.all([letterheadImage(), brandImage('stamp'), wideLogo()]);
   const c = document.createElement('canvas'); // the form, on a see-through layer as tall as it needs
   c.width = SLIP_W; c.height = 2600;
   const g = c.getContext('2d');
   let y = lh ? 268 : 200;
-  if (!lh) { g.fillStyle = C.navy; g.font = `700 46px ${SANS}`; g.fillText(S.company || 'Company', L, 120); g.fillStyle = C.accent; g.fillRect(L, 142, 90, 5); }
+  if (!lh) { logoOrName(g, logo); y = 220; }
   // title and number
   g.fillStyle = C.navy; g.font = `700 46px ${SANS}`; spaced(g, s.title, L, y + 46, 4);
   g.fillStyle = C.accent; g.fillRect(L, y + 66, 90, 5);
@@ -358,7 +448,7 @@ async function renderSlip(s) {
     g.fillStyle = C.ink; g.fillRect(L + 24, lineY, lineW, 1.5);
     g.font = `600 24px ${SANS}`; g.fillText(s.signName || '', L + 24, lineY + 30);
     g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText('Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
-    if (s.photo) fitInto(g, s.photo, CX + 14, t + 14, R - CX - 28, h4 - 28, true);
+    if (s.photo) photoInto(g, s.photo, CX + 14, t + 14, R - CX - 28, h4 - 28);
   });
   // the ruling: outer box, the column line and the lines between rows (see-through: the watermark shows behind)
   g.strokeStyle = C.navy; g.lineWidth = 2.5; g.strokeRect(L, top, R - L, y - top);
@@ -383,11 +473,7 @@ async function renderSlip(s) {
   page.width = SLIP_W; page.height = H;
   const p = page.getContext('2d');
   p.fillStyle = '#fff'; p.fillRect(0, 0, SLIP_W, H);
-  if (lh) {
-    const iw = lh.naturalWidth, ih = lh.naturalHeight, k = SLIP_W / iw, body = Math.min(H - footH, ih * k - footH);
-    p.drawImage(lh, 0, 0, iw, body / k, 0, 0, SLIP_W, body);
-    p.drawImage(lh, 0, ih - footH / k, iw, footH / k, 0, H - footH, SLIP_W, footH);
-  }
+  if (lh) drawLetterhead(p, lh, H);
   p.drawImage(c, 0, 0);
   const jpeg = new Uint8Array(await (await canvasJpeg(page, 0.9)).arrayBuffer());
   return new Blob([jpegToPdf(jpeg, SLIP_W, H)], { type: 'application/pdf' });
@@ -398,15 +484,15 @@ async function renderSlip(s) {
           summary: [[label, value, strong]], verdict: { text, good } | null, sign: { label, name, sig, photo } | null, preparedBy, ref } */
 const fitText = (g, t, w) => { t = String(t ?? ''); if (g.measureText(t).width <= w) return t; while (t && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; };
 async function renderStatement(st) {
-  const [lh, stampImg] = await Promise.all([letterheadImage(), st.sign ? brandImage('stamp') : null]);
+  const [lh, stampImg, logo] = await Promise.all([letterheadImage(), st.sign ? brandImage('stamp') : null, wideLogo()]);
   const C = SLIP_C, L = 90, R = SLIP_W - 90, W = R - L, top = lh ? 268 : 200, limit = lh ? 1560 : SLIP_H - 80, pages = [];
   let g, y;
   const page = () => {
     const c = document.createElement('canvas');
     c.width = SLIP_W; c.height = SLIP_H; pages.push(c);
     g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, SLIP_W, SLIP_H);
-    if (lh) g.drawImage(lh, 0, 0, SLIP_W, SLIP_H);
-    else { g.fillStyle = C.navy; g.font = `700 46px ${SANS}`; g.fillText(S.company || 'Company', L, 120); g.fillStyle = C.accent; g.fillRect(L, 142, 90, 5); }
+    if (lh) drawLetterhead(g, lh, SLIP_H);
+    else logoOrName(g, logo);
     y = top;
     if (pages.length > 1) { g.fillStyle = C.navy; g.font = `700 28px ${SANS}`; spaced(g, `${st.title} — CONTINUED`, L, y + 30, 2); g.fillStyle = C.label; g.font = `600 22px ${SANS}`; g.textAlign = 'right'; g.fillText(st.no, R, y + 30); g.textAlign = 'left'; y += 64; }
   };
@@ -480,7 +566,7 @@ async function renderStatement(st) {
   if (st.sign) {
     const s = st.sign, h = 200, split = s.photo ? L + 660 : R;
     g.strokeStyle = C.navy; g.lineWidth = 2.5; g.strokeRect(L, y, W, h);
-    if (s.photo) { g.fillStyle = C.navy; g.fillRect(split, y, 1.5, h); fitInto(g, s.photo, split + 14, y + 14, R - split - 28, h - 28, true); }
+    if (s.photo) { g.fillStyle = C.navy; g.fillRect(split, y, 1.5, h); photoInto(g, s.photo, split + 14, y + 14, R - split - 28, h - 28); }
     const lineY = y + h - 50, lineW = Math.min(520, split - L - 48);
     slipLabel(g, s.label, L + 24, y + 34);
     placeSignature(g, s.sig, L + 24, lineY, lineW, lineY - y - 50);
@@ -578,8 +664,7 @@ async function saveSlip(f) {
   const btn = $('button.btn', f);
   btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
   try {
-    const p = f.elements.photo && f.elements.photo.files[0];
-    const photo = p ? await imgFrom(new Blob([(await prepareFile(p)).data], { type: 'image/jpeg' })) : null;
+    const photo = framedPhoto(f);
     const type = k === 'R' ? 'receipt' : r.pay ? 'slip' : 'voucher';
     const [[no], seq] = nextIds(k === 'R' ? 'RC' : 'PV', 1, S.seq);
     update({ seq });
@@ -591,6 +676,7 @@ async function saveSlip(f) {
     const blob = w ? await renderStatement(spec) : await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, preparedBy: r.by, ref: r.id });
     const name = `${no} ${fileSafe(spec.signName || '')}.pdf`;
     await keepFile({ for: r.id, type, no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
+    await keepTakenPhoto(f, r.id, no);
     readySheet(spec.title, no, blob, name);
   } catch (e) { btn.disabled = false; formErr(f, null, e.message); }
 }

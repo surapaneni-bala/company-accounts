@@ -74,9 +74,8 @@ const signInFields = (autofocus = true) => `
   <label class="fld"><span>Password</span><input type="password" name="password" required autocomplete="current-password"></label>`;
 function viewSignIn() {
   const n = S.dirty.length;
-  return `${moveBanner()}<section class="setup card pad">${APP_LOGO}
+  return `${moveBanner()}<section class="setup card pad">${WIDE_LOGO}
     <h1>Sign in</h1>
-    <p>${esc(S.company || 'Company accounts')}</p>
     ${session.why ? `<p class="note">${esc(session.why)}</p>` : ''}
     <form data-form="signin">${signInFields()}
       <p class="err"></p>
@@ -398,7 +397,7 @@ function pinDraw() {
   const p = pin, q = quick();
   const title = { check: 'Enter your code', new: 'Choose a 4-digit code', confirm: 'Type the code again', pass: 'Enter your password' }[p.mode];
   const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" data-pin="${n}">${n}</button>`).join('');
-  $('#lockIn').innerHTML = `${APP_LOGO}<h2>${title}</h2><p class="lk-why">${esc(p.why)}</p>
+  $('#lockIn').innerHTML = `${WIDE_LOGO}<h2>${title}</h2><p class="lk-why">${esc(p.why)}</p>
     ${p.mode === 'pass' ? `<form id="lkPwForm"><input type="password" id="lkPw" autocomplete="current-password" placeholder="Your password" required><p class="err">${esc(p.err)}</p><button class="btn primary">Unlock</button></form>`
       : `<div class="dots${p.err ? ' shake' : ''}">${Array.from({ length: PIN_LEN }, (_, i) => `<i class="${i < p.typed.length ? 'on' : ''}"></i>`).join('')}</div>
       <p class="err">${esc(p.busy ? 'Checking…' : p.err)}</p>
@@ -464,7 +463,7 @@ function lockApp() {
   if (!quick() && !(session.quick && session.quick.len === PIN_LEN)) {
     return pinPrompt({ mode: 'new', mandatory: true, why: 'You type it (or use Face ID) every time you open the app.' }).then(() => { render(); offerBio(); });
   }
-  pinPrompt({ mandatory: true, why: `${S.company || 'Company accounts'} · ${session.user.name}` }).then(() => render());
+  pinPrompt({ mandatory: true, why: session.user.name }).then(() => render());
 }
 async function offerBio() {
   if (!(await bioAvailable()) || session.quick.cred) return;

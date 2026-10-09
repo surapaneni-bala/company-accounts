@@ -112,6 +112,7 @@ document.addEventListener('input', e => {
   if (t.closest('.brows')) updateBulk(t.form);
   if (t.closest('.amt-in')) refreshAmount(t);
   if (t.name === 'rate' && t.form) refreshRate(t.form);
+  if (t.name === 'zoom' && t.form && t.form._frame) zoomFramer(t.form, +t.value);
   if (t.form && t.form.dataset.form === 'pay') { if (t.name === 'amount') t.form.dataset.typed = '1'; refreshPay(t.form, t); }
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
@@ -128,6 +129,7 @@ document.addEventListener('change', e => {
     refreshRate(t.form);
   }
   if (t.dataset.attach !== undefined) attachPicked(t);
+  if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'pick' && t.form) updatePick(t.form);

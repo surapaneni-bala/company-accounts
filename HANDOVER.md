@@ -192,9 +192,16 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
 - **Sections:** `tab = 'menu'` is the first page (Accounts / Employees tiles); `ACC_TABS` (home, hist, proj, sheet) show
   the bottom bar; `staff` is Employees. Without the `staff` right (store keeper) there is no menu. The header shows the
   section name and a round ‹ back button. `WELCOME` (core.js) is the title of the first screen.
-- **Slip pages are as tall as the slip** (A4 width): the form is drawn on a see-through layer, then put on a page with the
-  letterhead's top part and its bottom tenth (`LH_FOOT`, the address strip) at the foot; `pdfPages` sizes each page
-  from its picture. Nothing is painted white over the letterhead, so its watermark shows (tints are see-through).
+- **Slip pages are as tall as the slip** (A4 width): the form is drawn on a see-through layer, then put on the letterhead
+  in three parts (`drawLetterhead`): its header (top `LH_TOP` = 18 %) at the top, its address strip (bottom `LH_FOOT` =
+  10 %) at the foot, and the watermark band between them shrunk to fit (never larger than on A4, kept to the right
+  edge). `pdfPages` sizes each page from its picture.
+- **Payment photo:** picked or taken, then framed by hand in a 3 : 2 box (drag, pinch, slider; `startFramer`,
+  `framedPhoto`); slips and statements print it in an exact 3 : 2 box (`photoInto`), so the framing is kept. The photo as
+  taken is also kept with the entry (F type `photo`), listed under its files.
+- **Logo:** `tools/make-icons.py` also writes `src/logo-wide.png` (the whole logo, from the private file) for the menu
+  header, the welcome / sign-in / code screens and slips made before a letterhead is set. A letterhead with the
+  original logo (in place of the edited "ENTERPRISES" one) is `private/brand/letterhead-original-logo.png`. Nothing is painted white over the letterhead, so its watermark shows (tints are see-through).
   One plain type family (`SANS`: Helvetica Neue / Arial / Roboto), no 800 weights; the app uses the phone's system font.
   The signature is cut to its ink (`inkOnly`) and set on its line with the name under it, never enlarged past a pen
   line (`placeSignature`). Stamps are kept as PNG; `cleanStamp` removes whatever background a stamp picture has

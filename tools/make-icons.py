@@ -1,4 +1,4 @@
-# Draws the app icon at the sizes phones need: the company's "B" mark on white, cut from private/brand/logo.png
+# Draws the app icon at the sizes phones need, and the wide logo (logo-wide.png): the company's "B" mark on white, cut from private/brand/logo.png
 # (that file is the owner's and stays out of the public repo; only the finished icons are published).
 # Without it, a plain ledger icon is drawn instead.
 # Usage: python3 tools/make-icons.py   (needs Pillow)
@@ -40,6 +40,11 @@ def ledger_icon(size):
     return im.resize((size, size), Image.LANCZOS)
 
 m = mark() if LOGO.exists() else None
+if LOGO.exists():  # the whole logo (mark and words) for the app's headings and slips without a letterhead
+    full = Image.open(LOGO).convert('RGBA')
+    full = full.crop(full.getbbox())
+    full.resize((round(full.width * 180 / full.height), 180), Image.LANCZOS).save(OUT / 'logo-wide.png', optimize=True)
+    print('wrote logo-wide.png')
 for name, size in [('icon-192.png', 192), ('icon-512.png', 512), ('apple-touch-icon.png', 180)]:
     (logo_icon(size, m) if m else ledger_icon(size)).save(OUT / name)
     print('wrote', name, '(company mark)' if m else '(ledger)')
