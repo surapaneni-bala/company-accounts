@@ -192,12 +192,16 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
 - **Sections:** `tab = 'menu'` is the first page (Accounts / Employees tiles); `ACC_TABS` (home, hist, proj, sheet) show
   the bottom bar; `staff` is Employees. Without the `staff` right (store keeper) there is no menu. The header shows the
   section name and a round ‹ back button. `WELCOME` (core.js) is the title of the first screen.
-- **Slip pages are as tall as the slip** (A4 width): the form is drawn on a see-through layer, then put on the page by
-  `drawLetterhead`: the letterhead's header (top `LH_TOP` = 18 %) at the top; its address strip (bottom `LH_FOOT` = 10 %)
-  only on full A4 pages (statements) — vouchers and slips leave it off (the owner's choice, 9 Oct 2026); and the company's
-  "B" (`watermark.png`, cut from the letterhead by `tools/make-icons.py`) in the room below the header, as on the printed
-  letterhead on A4 (`WM`) and shrunk to fit a shorter page, kept to the right edge. The watermark is drawn even without a
-  letterhead. `pdfPages` sizes each page from its picture.
+- **Pages are as tall as what they hold** (A4 width; statements are full A4 pages): the form is drawn on a see-through
+  layer, then put on the page by `drawLetterhead`: only the letterhead's header (top `LH_TOP` = 18 %) — its address
+  strip is left off everywhere (the owner's choice, 9 Oct 2026); the company's contacts at the top right, level with the
+  logo (`drawContacts`); and the company's "B" (`watermark.png`, cut from the letterhead by `tools/make-icons.py`) in
+  the room below the header, as on the printed letterhead on A4 (`WM`) and shrunk to fit a shorter page, kept to the
+  right edge. The watermark is drawn even without a letterhead. `pdfPages` sizes each page from its picture.
+- **Company contacts** (Settings → Letterhead → "Contacts on every PDF": WhatsApp, phone, website, email; empty ones are
+  left off) are kept as `contact` on the latest letterhead F record (`setBrand`, which also saves the stamp's `place`), because
+  script v7 already sends brand files whole to every login and takes changes to them from admins only — no script change,
+  and the numbers stay out of this public repo. A new letterhead upload copies the contacts over.
 - **Payment photo:** picked or taken, then framed by hand in a 3 : 2 box (drag, pinch, slider; `startFramer`,
   `framedPhoto`). Zoom 1 fills the box; zooming out goes down to `min`, where the whole photo fits (the box's empty
   parts are white on screen and see-through on the slip). Slips and statements print it in an exact 3 : 2 box

@@ -127,7 +127,8 @@ async function attachPicked(input) {
   try {
     const p = type === 'stamp' ? await prepareFile(file, 900, 0.92, true) : type === 'letterhead' ? await prepareFile(file, SLIP_H, 0.92) : await prepareFile(file);
     if (type === 'stamp') stampPrev = null;
-    await keepFile({ for: forId, type, name: p.name, mime: p.mime }, p.data);
+    const keep = type === 'letterhead' && (latestFile('settings', 'letterhead') || {}).contact; // a new letterhead keeps the contacts
+    await keepFile({ for: forId, type, name: p.name, mime: p.mime, ...(keep ? { contact: keep } : {}) }, p.data);
   } catch (e) { return alert(e.message); }
   toast(`${FILE_NAME[type] || 'File'} added ✓`);
   reopenHere();
@@ -367,19 +368,37 @@ function drawStamp(g, img, x, y, size, dateText, place) {
   g.restore();
 }
 
+// The company's contacts (Settings → Letterhead), kept on the letterhead's record: the sheet sends that to every login,
+// so every phone's PDFs carry them, and the numbers stay out of the app's (public) code.
+const CONTACT_FIELDS = [['whatsapp', 'WhatsApp', 'e.g. @yourcompany', 'text'], ['phone', 'Phone', 'e.g. +211 900 000 000', 'tel'], ['web', 'Website', 'e.g. yourcompany.com', 'url'], ['email', 'Email', 'e.g. info@yourcompany.com', 'email']];
+const companyContacts = () => { const c = (latestFile('settings', 'letterhead') || {}).contact || {}; return CONTACT_FIELDS.filter(([k]) => c[k]).map(([k, label]) => [label, String(c[k])]); };
+// top right of every page, level with the logo: a thin accent line, then label and value on each row
+function drawContacts(p, rows) {
+  if (!rows.length) return;
+  const R = SLIP_W - 90, lineH = 34, labW = 118, top = 122 - rows.length * lineH / 2;
+  p.font = `500 22px ${SANS}`;
+  const vals = rows.map(([, v]) => fitText(p, v, 400)), x = R - labW - Math.max(...vals.map(v => p.measureText(v).width));
+  p.fillStyle = SLIP_C.accent; p.fillRect(x - 22, top + 2, 3, rows.length * lineH - 4);
+  rows.forEach(([lab], i) => {
+    const y = top + i * lineH + 25;
+    p.fillStyle = SLIP_C.label; p.font = `600 15px ${SANS}`; spaced(p, lab.toUpperCase(), x, y - 1, 1.4);
+    p.fillStyle = SLIP_C.navy; p.font = `500 22px ${SANS}`; p.fillText(vals[i], x + labW, y);
+  });
+}
+
 /* s = { title, no, stampDate, party: [label, value], when: [label, value], forLabel, lines: [{ t, v, strong, muted }],
          amount, cur, extra: [[label, value]], signLabel, signName, sig: canvas, photo: image|null, preparedBy, ref } */
-// A slip is as tall as what it holds (A4 width). The letterhead's header (top LH_TOP) goes at the top; its address strip
-// (bottom LH_FOOT) only on full A4 pages (statements) — a shorter slip leaves it off (the owner's choice). The company's
-// "B" (watermark.png, cut from the letterhead by tools/make-icons.py) fills the room below the header: as on the printed
-// letterhead on a full page, shrunk to fit a shorter one. It is drawn with or without a letterhead.
-const LH_TOP = 0.18, LH_FOOT = 0.1, WM = { h: 1065, right: 1229, fill: 0.9 }; // its height and right edge on A4; the part of the room it may take
-function drawLetterhead(p, lh, wm, H, foot) {
-  const k = lh ? SLIP_W / lh.naturalWidth : 0, ih = lh ? lh.naturalHeight : 0, topH = lh ? ih * LH_TOP * k : 180, footH = lh && foot ? ih * LH_FOOT * k : 0;
-  if (lh) p.drawImage(lh, 0, 0, lh.naturalWidth, ih * LH_TOP, 0, 0, SLIP_W, topH);
-  if (footH) p.drawImage(lh, 0, ih * (1 - LH_FOOT), lh.naturalWidth, ih * LH_FOOT, 0, H - footH, SLIP_W, footH);
+// A page is as tall as what it holds (A4 width). Only the letterhead's header (top LH_TOP) is used — its address strip is
+// left off (the owner's choice); the company's contacts are printed at the top right instead. The company's "B"
+// (watermark.png, cut from the letterhead by tools/make-icons.py) fills the room below the header: as on the printed
+// letterhead on a full A4 page, shrunk to fit a shorter one. It is drawn with or without a letterhead.
+const LH_TOP = 0.18, WM = { h: 1065, right: 1229, fill: 0.9 }; // its height and right edge on A4; the part of the room it may take
+function drawLetterhead(p, lh, wm, H) {
+  const topH = lh ? lh.naturalHeight * LH_TOP * SLIP_W / lh.naturalWidth : 180;
+  if (lh) p.drawImage(lh, 0, 0, lh.naturalWidth, lh.naturalHeight * LH_TOP, 0, 0, SLIP_W, topH);
+  drawContacts(p, companyContacts());
   if (!wm) return;
-  const room = H - topH - footH, dh = Math.min(WM.h, room * WM.fill), dw = dh * wm.naturalWidth / wm.naturalHeight;
+  const room = H - topH, dh = Math.min(WM.h, room * WM.fill), dw = dh * wm.naturalWidth / wm.naturalHeight;
   p.save(); p.globalCompositeOperation = 'multiply'; // its white paper doesn't cover anything
   p.drawImage(wm, WM.right - dw, topH + (room - dh) / 2, dw, dh); // kept to the right edge, as printed
   p.restore();
@@ -482,7 +501,7 @@ async function renderSlip(s) {
   page.width = SLIP_W; page.height = H;
   const p = page.getContext('2d');
   p.fillStyle = '#fff'; p.fillRect(0, 0, SLIP_W, H);
-  drawLetterhead(p, lh, wm, H, false);
+  drawLetterhead(p, lh, wm, H);
   p.drawImage(c, 0, 0);
   const jpeg = new Uint8Array(await (await canvasJpeg(page, 0.9)).arrayBuffer());
   return new Blob([jpegToPdf(jpeg, SLIP_W, H)], { type: 'application/pdf' });
@@ -494,13 +513,13 @@ async function renderSlip(s) {
 const fitText = (g, t, w) => { t = String(t ?? ''); if (g.measureText(t).width <= w) return t; while (t && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; };
 async function renderStatement(st) {
   const [lh, stampImg, logo, wm] = await Promise.all([letterheadImage(), st.sign ? brandImage('stamp') : null, wideLogo(), watermark()]);
-  const C = SLIP_C, L = 90, R = SLIP_W - 90, W = R - L, top = lh ? 268 : 200, limit = lh ? 1560 : SLIP_H - 80, pages = [];
+  const C = SLIP_C, L = 90, R = SLIP_W - 90, W = R - L, top = lh ? 268 : 200, limit = SLIP_H - 80, pages = [];
   let g, y;
   const page = () => {
     const c = document.createElement('canvas');
     c.width = SLIP_W; c.height = SLIP_H; pages.push(c);
     g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, SLIP_W, SLIP_H);
-    drawLetterhead(g, lh, wm, SLIP_H, true);
+    drawLetterhead(g, lh, wm, SLIP_H);
     if (!lh) logoOrName(g, logo);
     y = top;
     if (pages.length > 1) { g.fillStyle = C.navy; g.font = `700 28px ${SANS}`; spaced(g, `${st.title} — CONTINUED`, L, y + 30, 2); g.fillStyle = C.label; g.font = `600 22px ${SANS}`; g.textAlign = 'right'; g.fillText(st.no, R, y + 30); g.textAlign = 'left'; y += 64; }
@@ -704,8 +723,19 @@ function letterheadSheet() {
   openSheet(`${head('Letterhead')}
     <p class="hint">Vouchers, receipts and salary slips are printed on this. Use a picture of the whole A4 page (PNG or JPG), with empty space in the middle.</p>
     ${f ? `<p class="muted">Now: <b>${esc(f.name)}</b>${f.pending ? ' (not uploaded yet)' : ''}</p><button class="btn ghost" data-act="showFile" data-id="${esc(f.id)}" style="margin-bottom:10px">See the letterhead</button>` : '<p class="muted">No letterhead yet — slips get a plain heading with the company name.</p>'}
-    ${attachButton('settings', f ? 'Choose a new letterhead' : 'Choose the letterhead', 'letterhead', 'image/png,image/jpeg')}`);
+    ${attachButton('settings', f ? 'Choose a new letterhead' : 'Choose the letterhead', 'letterhead', 'image/png,image/jpeg')}
+    ${f ? `<form data-form="contacts" class="contacts-form">
+      <h3>Contacts on every PDF</h3>
+      <p class="hint">Printed at the top right, beside the logo. Leave a box empty to leave it off.</p>
+      ${CONTACT_FIELDS.map(([k, label, ph, type]) => `<label class="fld"><span>${label}</span><input name="${k}" type="${type === 'url' ? 'text' : type}" ${type === 'url' ? 'inputmode="url"' : ''} value="${esc((f.contact || {})[k] || '')}" placeholder="${ph}" maxlength="60" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>`).join('')}
+      <button class="btn primary">Save the contacts</button>
+    </form>` : ''}`);
   here = letterheadSheet;
+}
+async function saveContacts(f) {
+  const contact = Object.fromEntries(CONTACT_FIELDS.map(([k]) => [k, clean(f.elements[k].value)]).filter(([, v]) => v));
+  await setBrand('letterhead', { contact });
+  toast('Contacts saved ✓ — they are on every new PDF');
 }
 
 /* ---------- the company stamp (admins, Settings): its picture, and where the date goes on it ---------- */
@@ -733,11 +763,15 @@ async function drawStampPreview() {
 }
 function nudgeStamp(k, d) { stampEdit = { ...stampEdit, [k]: Math.round((stampEdit[k] + Number(d)) * 1000) / 1000 }; drawStampPreview(); }
 async function saveStampPlace() {
-  const f = latestFile('settings', 'stamp'), place = stampEdit;
-  if (f.pending) { // not uploaded yet: the position goes up with it
-    const rec = await fileGet(f.id);
-    if (rec) await filePut({ ...rec, place });
-    outbox = outbox.map(x => (x.id === f.id ? { ...x, place } : x));
-  } else update({ files: S.files.map(x => (x.id === f.id ? { ...x, place } : x)) });
+  await setBrand('stamp', { place: stampEdit });
   toast('Stamp position saved ✓');
+}
+// a setting kept on the latest letterhead or stamp record (the contacts, where the date goes on the stamp)
+async function setBrand(type, patch) {
+  const f = latestFile('settings', type);
+  if (f.pending) { // not uploaded yet: the setting goes up with it
+    const rec = await fileGet(f.id);
+    if (rec) await filePut({ ...rec, ...patch });
+    outbox = outbox.map(x => (x.id === f.id ? { ...x, ...patch } : x));
+  } else update({ files: S.files.map(x => (x.id === f.id ? { ...x, ...patch } : x)) });
 }

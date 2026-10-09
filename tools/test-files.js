@@ -105,6 +105,11 @@ assert.strictEqual(post({ op: 'file', token: m.token, id: 'F-NOPE-1' }).ok, fals
 const sPull = post({ token: s.token, since: 0, push: [] }).pull.filter(p => p.k === 'F').map(p => p.id).sort();
 assert.deepStrictEqual(sPull, ['F-OW1-0001', 'F-OW1-0002', 'F-SK1-0001'], 'a store keeper receives the letterhead, the stamp and their own files only');
 assert.ok(post({ op: 'file', token: s.token, id: 'F-OW1-0001' }).ok, 'and can download the letterhead');
+// the company's contacts ride on the letterhead's record: an admin sets them, every login (store keepers too) gets them
+const contact = { whatsapp: '@testco', phone: '+211 900 000 000', web: 'test.example', email: 'info@test.example' };
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [file('F-OW1-0001', 38, 'x', { for: 'settings', type: 'letterhead', contact })] }).refused, []);
+assert.deepStrictEqual(post({ token: s.token, since: 0, push: [] }).pull.find(p => p.id === 'F-OW1-0001').d.contact, contact, 'a store keeper gets the contacts');
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [file('F-OW1-0001', 39, m.me.id, { for: 'settings', type: 'letterhead', contact: { phone: 'x' } })] }).refused, ['F-OW1-0001'], 'only admins change them');
 
 // a phone with only the company code gets no employees or files once the company has logins
 const codePull = post({ key, since: 0, push: [] }).pull;
