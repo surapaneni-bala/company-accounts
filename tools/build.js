@@ -40,6 +40,11 @@ function read(f) {
   return text;
 }
 
+// the app tells admins when their sheet runs an older script: its idea of the newest must match apps-script/Code.gs
+const scriptV = fs.readFileSync(path.join(root, 'apps-script', 'Code.gs'), 'utf8').match(/^const VERSION = (\d+);/m)[1];
+const appV = fs.readFileSync(path.join(root, 'src', 'sync.js'), 'utf8').match(/^const NEWEST_SCRIPT = (\d+);/m)[1];
+if (scriptV !== appV) throw new Error(`Code.gs is version ${scriptV} but src/sync.js NEWEST_SCRIPT is ${appV}`);
+
 const js = ['core.js', 'calc.js', 'files.js', 'sync.js', 'auth.js', 'staff.js', 'import.js', 'update.js', 'main.js'].map(read).join('\n');
 const page = read('shell.html').replace('<!--APP-->', () => `<script>\n${js}</script>`);
 const version = crypto.createHash('sha256').update(page).digest('hex').slice(0, 10);

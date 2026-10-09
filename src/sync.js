@@ -29,7 +29,8 @@ const okRate = d => d.rate === undefined || (Number.isFinite(d.rate) && d.rate >
 const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
-const OUTDATED_MSG = 'The Google Sheet script needs updating before cash ↔ bank moves can reach the sheet. Everything else is syncing; the moves are kept safe on this device.';
+const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
+const NEWEST_SCRIPT = 7; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 const notAllowedMsg = n => `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
 const SCRIPT_URL = 'https://app.b-e-p-l.com/sheet-script.txt'; // the sheet script, published next to the app
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error
@@ -232,7 +233,8 @@ function syncCard() {
   return `<section class="card pad" id="syncCard"><h3>📊 Company Google Sheet</h3>
     <p class="muted">${esc(syncText())}${outbox.length ? ` ${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload.` : ''}</p>
     ${uploadErr ? `<p class="note">⚠️ ${esc(uploadErr)}</p>` : ''}
-    ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>' : ''}
+    ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>'
+      : (S.link.v || 2) < NEWEST_SCRIPT && can('settings') ? `<p class="note">A newer Google Sheet script is ready (version ${NEWEST_SCRIPT}; this sheet runs ${S.link.v || 2}). It is needed for employees, files, vouchers and days not worked. <button class="link" data-act="howUpdate">Show me how</button></p>` : ''}
     ${S.link.sheet ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
     <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="syncNow">Sync now</button>${can('phones') ? '<button class="btn ghost" data-act="invite">📲 Add a phone 🔒</button>' : ''}</div>
     ${signedIn() ? '' : '<p class="center"><button class="link" data-act="disconnect">Disconnect this device 🔒</button></p>'}</section>`;
@@ -246,10 +248,11 @@ function howUpdateSheet() {
       <li>Open the new script: <a href="${SCRIPT_URL}" target="_blank" rel="noopener">new Code.gs</a>. Select all (<b>Ctrl+A</b>, Mac <b>Cmd+A</b>) and copy (<b>Ctrl+C</b> / <b>Cmd+C</b>).</li>
       <li>In Apps Script click inside the code, select all, press <b>Delete</b>, then paste (<b>Ctrl+V</b> / <b>Cmd+V</b>). Click <b>💾 Save</b>.</li>
       <li>Click the blue <b>Deploy</b> button → <b>Manage deployments</b> → the ✏️ <b>pencil</b>.</li>
+      <li><b>Only the first time you update to version 4 or newer:</b> in the list at the top of Apps Script choose <b>allowFiles</b> and click <b>▶ Run</b>. Google asks for permission to use your Drive: <b>Review permissions</b> → the company account → <b>Advanced → Go to … (unsafe)</b> → <b>Allow</b> (it is your own script). This lets the app keep receipts, vouchers and photos in a private Drive folder.</li>
       <li>Under <b>Version</b> choose <b>New version</b>. Leave “Execute as: Me” and “Who has access: Anyone”. Click <b>Deploy</b>.<br><em>Not “New deployment” — that makes a different link.</em></li>
       <li>Come back here and tap <b>Sync now</b>.</li>
     </ol>
-    <p class="note">Check: open your web app link (ends in /exec) in a browser. After the update it shows <b>"version":3</b>.</p>
+    <p class="note">Check: open your web app link (ends in /exec) in a browser. After the update it shows <b>"version":${NEWEST_SCRIPT}</b>.</p>
     <button class="btn in" data-act="syncNow">Sync now</button>`);
 }
 function connectForm() {
