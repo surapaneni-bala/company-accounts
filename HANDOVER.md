@@ -107,6 +107,7 @@ E = { id, cur:'USD'|'SSP', amount, paidTo, reason, location, project, mode:'Cash
 R = { id, cur, amount, project (required), mode, note, at, rate, … }      T = { id, cur, amount, from, to, note, at, … }
 W = { id, name, job, site, phone, wage, cur, start:'YYYY-MM-DD', idNo, status:'active'|'left', left, openingAmount, openingNote, … }
 F = { id, fileId (Drive), name, mime, for (record id | 'settings'), type: voucher|receipt|slip|photo|attachment|profile|idphoto|letterhead, no (PV-…/RC-…), by, createdAt }
+      + cancelled, cancelledBy (a voucher/receipt/slip whose entry changed after signing), contact (letterhead), place (stamp)
 C = { id, kind, target, action?: 'delete'|'advance', before, after, text, by, at, status: waiting|approved|rejected, decidedBy }
 P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, at, action, id (the entry), text, by }
 ```
@@ -476,6 +477,12 @@ folder, which is temporary:
   if it answers, names the Drive permission step instead of blaming the internet.
   Script v8 goes to the root: `doPost` catches any error and answers `{ ok: false, error }` (`sheetError_`), so the phone
   shows the sheet's own message (any app version does) and Executions logs it with `console.error`.
+- **Signed papers are never changed or thrown away** (owner's choice, 9 Oct 2026). Editing what a voucher, receipt or slip
+  prints in its main lines and boxes (`signedFacts`; muted lines like project, location, a note don't count) cancels it on the
+  editing admin's phone (`cancelSigned`, hooked in `update()`): F gets `cancelled`; the entry asks for a new one (signed again,
+  new number); opened or sent from the app it carries a big CANCELLED stamp (`stampCancelled`). Script v9 (`fileMoves_`) renames
+  a cancelled paper "CANCELLED …" into the Drive folder "Cancelled", and moves every file of a deleted record into "Deleted";
+  the first sync of a new version tidies what was deleted or cancelled before (`FILES_TIDY`). A Drive problem never stops a sync.
 - **Deleting is for good, so a deleted record's waiting files are never sent** (`forDeleted` in `uploadFiles`, which also
   removes them from the phone). Before 9 Oct test entries deleted before their upload still went to Drive.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.

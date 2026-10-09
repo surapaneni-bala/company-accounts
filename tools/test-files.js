@@ -136,4 +136,27 @@ assert.throws(() => nd.allowFiles(), /DriveApp/, 'allowFiles fails loudly withou
 gas.allowFiles();
 assert.ok(Object.values(gas.dump().drive.folders).some(f => f.name === 'Company app files (do not share)'), 'allowFiles makes the files folder');
 
+// nothing is thrown away: a cancelled voucher is renamed and goes to "Cancelled"; a deleted entry's files go to "Deleted"
+const drv = () => gas.dump().drive, folderOf = id => drv().folders[drv().files[id].folder].name;
+const pdf = Buffer.from('%PDF-1.4 voucher').toString('base64');
+const upV = post({ op: 'upload', token: owner, name: 'PV-OW1-0001 Shop.pdf', mime: 'application/pdf', data: pdf }), upP = post({ op: 'upload', token: owner, name: 'photo.png', mime: 'image/png', data: png });
+const voucher = (u, extra = {}) => file('F-OW1-0100', u, 'x', { for: 'E-OW1-0100', type: 'voucher', mime: 'application/pdf', name: 'PV-OW1-0001 Shop.pdf', fileId: upV.fileId, ...extra });
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [exp('E-OW1-0100', 50, 'x'), voucher(50), file('F-OW1-0101', 50, 'x', { for: 'E-OW1-0100', type: 'photo', fileId: upP.fileId })] }).refused, []);
+assert.notStrictEqual(folderOf(upV.fileId), 'Cancelled');
+post({ token: owner, since: 0, push: [voucher(51, { cancelled: '2026-10-09T21:00:00', cancelledBy: 'Owner' })] });
+assert.deepStrictEqual([folderOf(upV.fileId), drv().files[upV.fileId].name], ['Cancelled', 'CANCELLED PV-OW1-0001 Shop.pdf'], 'a cancelled voucher is kept, renamed');
+assert.notStrictEqual(folderOf(upP.fileId), 'Deleted', 'the photo of an entry that only changed stays');
+post({ token: owner, since: 0, push: [exp('E-OW1-0100', 52, 'x', { deleted: '2026-10-09T21:05:00', deletedBy: 'Owner' })] });
+assert.deepStrictEqual([folderOf(upV.fileId), folderOf(upP.fileId)], ['Deleted', 'Deleted'], "a deleted entry's files go to Deleted");
+// once after an update: files of entries deleted before this version are put away too
+drv().files[upP.fileId].folder = 'root'; gas.props.FILES_TIDY = '8';
+post({ token: owner, since: 0, push: [] });
+assert.strictEqual(folderOf(upP.fileId), 'Deleted', 'the first sync of a new version tidies what was deleted before');
+// a Drive problem (the file was removed by hand) never stops a sync
+const upX = post({ op: 'upload', token: owner, name: 'x.png', mime: 'image/png', data: png });
+post({ token: owner, since: 0, push: [exp('E-OW1-0101', 53, 'x'), file('F-OW1-0102', 53, 'x', { for: 'E-OW1-0101', fileId: upX.fileId })] });
+delete drv().files[upX.fileId];
+const gone = post({ token: owner, since: 0, push: [exp('E-OW1-0101', 54, 'x', { deleted: '2026-10-09T21:06:00', deletedBy: 'Owner' })] });
+assert.ok(gone.ok && !gone.refused.length, 'sync still works when a file cannot be moved');
+
 console.log('Employees and files: all checks passed');

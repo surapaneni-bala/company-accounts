@@ -75,7 +75,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 8; // shown when the web app link is opened in a browser
+const VERSION = 9; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -167,6 +167,13 @@ function sync_(req) {
     // the records are saved; a problem drawing the readable tabs must never stop syncing
     try { rebuild_(ss, result.rows.map(toRec_)); } catch (err) { warning = 'The readable tabs could not be refreshed: ' + err.message; Logger.log(warning); }
   }
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FILES_TIDY') !== String(VERSION)) { // once: what was deleted or cancelled before this version
+    props.setProperty('FILES_TIDY', String(VERSION));
+    result.moves = result.moves.concat(result.rows.map(toRec_).filter(r => r.d.deleted || (r.k === 'F' && r.d.cancelled))
+      .map(r => ({ id: r.id, k: r.k, cancelled: !r.d.deleted })));
+  }
+  fileMoves_(result.rows, result.moves);
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role === 'store' ? '' : ss.getUrl(), kinds: KINDS,
@@ -215,7 +222,7 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
   out.forEach((r, i) => { index[r[0]] = i; });
   let seq = out.reduce((m, r) => Math.max(m, Number(r[3]) || 0), 0);
   let changed = false;
-  const refused = [];
+  const refused = [], moves = [];
   const limited = !!user && user.role !== 'admin', now = Date.now();
   (Array.isArray(push) ? push : []).forEach((p, n) => {
     if (!p || typeof p.id !== 'string' || !p.id || KINDS.indexOf(p.k) < 0 || typeof p.u !== 'number' || !isObj_(p.d)) return;
@@ -225,7 +232,8 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     if (i !== undefined && out[i][1] !== p.k) { refused.push(p.id); return; } // a record never changes kind
     const u = limited ? Math.min(p.u, now) : p.u; // a phone can't stamp its copy in the future and so block later edits
     if (i !== undefined && Number(out[i][2]) >= u) return; // already have this copy or a newer one (e.g. sent again after a lost reply)
-    if (!allowed_(user || null, p, i === undefined ? null : JSON.parse(out[i][4]))) { refused.push(p.id); return; }
+    const before = i === undefined ? null : JSON.parse(out[i][4]);
+    if (!allowed_(user || null, p, before)) { refused.push(p.id); return; }
     if (codeOnly && (p.k === 'W' || p.k === 'F')) { refused.push(p.id); return; }
     const t = p.k === 'C' ? index[p.d.target] : 0;
     if (t === undefined || (p.k === 'C' && out[t][1] !== p.d.kind)) { refused.push(p.id); return; } // a change request needs its entry
@@ -245,9 +253,11 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     changed = true;
     const row = [p.id, p.k, u, seq, JSON.stringify(d)];
     if (i === undefined) { index[p.id] = out.length; out.push(row); } else { out[i] = row; }
+    if (d.deleted && !(before && before.deleted)) moves.push({ id: p.id, k: p.k });
+    else if (p.k === 'F' && d.cancelled && !(before && before.cancelled)) moves.push({ id: p.id, k: 'F', cancelled: true });
   });
   const pull = out.filter(r => Number(r[3]) > since).map(toRec_);
-  return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused };
+  return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused, moves: moves };
 }
 
 /* ---------- logins ---------- */
@@ -313,14 +323,35 @@ function uploads_() {
   rowsOf_(FILES_TAB, FILE_COLS).forEach(r => { map[String(r.fileId)] = String(r.uid); });
   return map;
 }
-function monthFolder_() {
+function filesRoot_() {
   const props = PropertiesService.getScriptProperties();
   let root = null;
   try { root = props.getProperty('FILES_FOLDER') ? DriveApp.getFolderById(props.getProperty('FILES_FOLDER')) : null; } catch (err) { root = null; }
   if (!root) { root = DriveApp.createFolder('Company app files (do not share)'); props.setProperty('FILES_FOLDER', root.getId()); }
+  return root;
+}
+function monthFolder_() {
+  const root = filesRoot_();
   const month = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
   const found = root.getFoldersByName(month);
   return found.hasNext() ? found.next() : root.createFolder(month);
+}
+// Nothing is thrown away. A deleted record's files go to the "Deleted" folder; a cancelled voucher, receipt or slip
+// (its entry changed after it was signed) is renamed "CANCELLED …" and goes to "Cancelled". A Drive problem never stops a sync.
+function fileMoves_(rows, moves) {
+  if (!moves.length) return;
+  const files = rows.filter(r => r[1] === 'F').map(r => JSON.parse(r[4]));
+  moves.forEach(m => (m.k === 'F' ? files.filter(f => f.id === m.id) : files.filter(f => f.for === m.id)).forEach(f => {
+    try {
+      const file = DriveApp.getFileById(f.fileId);
+      if (m.cancelled && !/^CANCELLED /.test(file.getName())) file.setName('CANCELLED ' + file.getName());
+      file.moveTo(subFolder_(m.cancelled ? 'Cancelled' : 'Deleted'));
+    } catch (err) { console.error('Could not put away ' + f.id + ': ' + err.message); }
+  }));
+}
+function subFolder_(name) {
+  const root = filesRoot_(), found = root.getFoldersByName(name);
+  return found.hasNext() ? found.next() : root.createFolder(name);
 }
 // Run this once in the Apps Script editor after pasting the script: Google then asks permission to use Drive.
 // Google's permission screen has a box for each permission; one left unticked is never asked for again by itself,

@@ -95,7 +95,7 @@ function makeDrive(drive) {
     getFileById: id => {
       const f = drive.files[id];
       if (!f) throw new Error('No item with the given ID could be found');
-      return { getBlob: () => newBlob([...Buffer.from(f.b64, 'base64')], f.mime, f.name), getName: () => f.name };
+      return { getBlob: () => newBlob([...Buffer.from(f.b64, 'base64')], f.mime, f.name), getName: () => f.name, setName: n => { f.name = n; }, moveTo: folder => { f.folder = folder.getId(); } };
     },
   };
 }
