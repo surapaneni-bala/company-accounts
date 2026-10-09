@@ -19,18 +19,22 @@ function inWage(p, cur) {
   return Math.round((cur === 'USD' ? p.amount / p.rate : p.amount * p.rate) * 100);
 }
 
+const dayAfter = d => { const [y, m, dd] = d.split('-').map(Number), t = new Date(Date.UTC(y, m - 1, dd + 1)); return t.toISOString().slice(0, 10); };
+
 // An employee's account: wage earned month by month (less days not worked, entered with that month's salary),
-// minus everything paid to them (salary, advances, final settlement), plus the balance from the old salary book.
+// minus everything paid to them (salary, advances, final settlement), plus the balance from before the app
+// (openingAmount: owed to them, or negative = already paid). clearedTo = salary already settled up to that day.
 function workerLedger(w, pays, today) {
   const end = w.status === 'left' && w.left && w.left < today ? w.left : today;
+  const from = w.clearedTo && w.clearedTo >= w.start ? dayAfter(w.clearedTo) : w.start;
   const mine = pays.filter(p => p.worker === w.id && !p.deleted);
   const off = {};
   mine.forEach(p => { if (p.pay === 'salary' && p.month && p.daysOff) off[p.month] = (off[p.month] || 0) + p.daysOff; });
   const months = [];
   let earned = 0;
-  if (w.start <= end) {
-    for (let m = w.start.slice(0, 7); m <= end.slice(0, 7); m = nextMonth(m)) {
-      const days = payDays(m, w.start, end), daysOff = Math.min(off[m] || 0, days);
+  if (from <= end) {
+    for (let m = from.slice(0, 7); m <= end.slice(0, 7); m = nextMonth(m)) {
+      const days = payDays(m, from, end), daysOff = Math.min(off[m] || 0, days);
       const cents = Math.round(w.wage * 100 * (days - daysOff) / 30);
       months.push({ month: m, days, daysOff, earned: cents / 100 });
       earned += cents;
@@ -69,8 +73,9 @@ function amountInWords(amount, cur) {
   return s[0].toUpperCase() + s.slice(1);
 }
 
-// A one-page A4 PDF holding a single JPEG (the slip is drawn as a picture): no PDF library needed.
-function jpegToPdf(jpeg, w, h) {
+// An A4 PDF with one JPEG per page (slips and statements are drawn as pictures): no PDF library needed.
+// pages = [{ data: JPEG bytes, w, h }]; each page is objects 3+3i (page), 4+3i (drawing), 5+3i (picture).
+function pdfPages(pages) {
   const enc = new TextEncoder(), parts = [], offsets = [];
   let size = 0;
   const add = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); size += b.length; };
@@ -79,17 +84,21 @@ function jpegToPdf(jpeg, w, h) {
   const draw = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
   add('%PDF-1.4\n');
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
-  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`);
-  obj(4, `<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`);
-  offsets[5] = size;
-  add(`5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`);
-  add(jpeg);
-  add('\nendstream\nendobj\n');
-  const xref = size;
-  add(`xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map(o => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  obj(2, `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + 3 * i} 0 R`).join(' ')}] /Count ${pages.length} >>`);
+  pages.forEach((p, i) => {
+    const n = 3 + 3 * i;
+    obj(n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${n + 2} 0 R >> >> /Contents ${n + 1} 0 R >>`);
+    obj(n + 1, `<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`);
+    offsets[n + 2] = size;
+    add(`${n + 2} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.data.length} >>\nstream\n`);
+    add(p.data);
+    add('\nendstream\nendobj\n');
+  });
+  const count = 3 + 3 * pages.length, xref = size;
+  add(`xref\n0 ${count}\n0000000000 65535 f \n${offsets.slice(1).map(o => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   const out = new Uint8Array(size);
   let at = 0;
   parts.forEach(b => { out.set(b, at); at += b.length; });
   return out;
 }
+const jpegToPdf = (jpeg, w, h) => pdfPages([{ data: jpeg, w, h }]);

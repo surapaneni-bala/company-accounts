@@ -200,6 +200,14 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
   letterhead) is drawn at the right of "approved"; `inkCircle()` finds its ring from the ink, and the date is written
   letter by letter along the arc at `place = {a, r, s}` (angle, radius and size as parts of the ring's radius;
   defaults `STAMP_PLACE` measured on the owner's stamp), adjustable in Settings → Company stamp and saved on the F record.
+- **Statements** (files.js `renderStatement`, as many A4 pages as needed via calc.js `pdfPages`): info box, tables that
+  carry on to the next page with their header, totals, a verdict box, and for a final settlement the signature, photo
+  and stamp. Employee (`workerStatementSpec`: wages by month + payments with voucher numbers; final = signed "FULLY
+  SETTLED", kept as F type `statement` for the employee, or as the settlement payment's slip), project (receipts) and
+  payee (all payments to one "Paid to" name); the last two are made on demand and not kept.
+- **Employees added on an old date:** `clearedTo` (W) = salary settled up to that day (the ledger counts from the next
+  day); "not fully paid" stores what was already paid as a negative `openingAmount` ("paid before the app").
+  New employees need a job and an ID photo; the Site field is gone (old records keep it).
 - **App icon / logo:** `python3 tools/make-icons.py` cuts the "B" mark from `private/brand/logo.png` (never committed)
   into `src/icon-*.png`; the in-app logo (`APP_LOGO`) is `icon-192.png`. Installed iPhones keep their old home-screen
   icon until the app is removed and added again — only do that when nothing is waiting to sync.
@@ -292,8 +300,8 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
-**Version 4/5 — staff, files, vouchers, app lock, stamp: BUILT AND TESTED, NOT RELEASED.** (Script v5 = v4 + the
-company stamp file type; the app needs ≥ 4 for files.) The source is on branch
+**Version 4–6 — staff, files, vouchers, app lock, stamp, statements: BUILT AND TESTED, NOT RELEASED.** (Script v5 = v4 +
+the company stamp; v6 = + `clearedTo` on employees and the `statement` file type; the app needs ≥ 4 for files.) The source is on branch
 **`staff`** (pushed); `main` got only `docs/test/` (commit e71d330, 9 Oct 2026), so https://app.b-e-p-l.com/test/ runs
 d376856f61 with `/test/sheet-script.txt` v4, while the live app stays 186414e5b5 with `sheet-script.txt` v3. Keep it so
 until release: the live app's "Show me how" must not hand the owner v4 before the Drive permission step. To update

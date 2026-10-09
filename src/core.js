@@ -108,11 +108,11 @@ function nextIds(prefix, n, seq) {
 const logWith = (entries, by = S.lastBy || '') => [...S.log, ...entries.map(([action, id, text], i) => ({ lid: `L-${S.dev}-${Date.now().toString(36)}${i}`, at: stampSec(), action, id, text, by }))];
 
 const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved', rate: 'SSP for 1 USD',
-  to: 'Moved to', manualDate: 'Date set by hand', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Opening balance', openingNote: 'Opening note' };
+  to: 'Moved to', manualDate: 'Date set by hand', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
 function showVal(k, r) {
   const v = r[k];
   if (['amount', 'wage', 'openingAmount'].includes(k)) return v === undefined || v === '' ? '(empty)' : money(+v, r.cur);
-  if (['start', 'left'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  if (['start', 'left', 'clearedTo'].includes(k)) return v ? fmtDate(v) : '(empty)';
   return k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : k === 'mode' ? accountOf(v) : k === 'from' ? `${v} → ${v === 'Cash' ? 'Bank' : 'Cash'}` : k === 'rate' ? (v ? plain(+v) : '(empty)') : k === 'status' ? (v === 'left' ? 'Left' : 'Working') : k === 'manualDate' ? (v ? 'yes' : 'no') : (v || '(empty)');
 }
 function diff(a, b) { return Object.keys(LABELS).filter(k => k in b && String(a[k] ?? '') !== String(b[k] ?? '')).map(k => `${LABELS[k]}: ${showVal(k, a)} → ${showVal(k, b)}`); }
@@ -257,6 +257,7 @@ function render() {
   const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were
   main.innerHTML = { menu: viewMenu, home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet }[tab]();
   if (y) scrollTo(0, y);
+  if (tab === 'staff') loadThumbs();
   render.tab = tab;
   renderLock(); paintSync();
 }
@@ -577,6 +578,7 @@ function detail(k, id) {
     ${k === 'T' || r.deleted ? '' : `<div class="two" style="margin-bottom:10px"><button class="btn ${k === 'E' ? 'out' : 'in'}" data-act="slip" data-kind="${k}" data-id="${esc(id)}">🧾 ${k === 'E' ? (r.pay ? 'Slip' : 'Voucher') : 'Receipt'}</button>${attachButton(id, '📎 Attach')}</div>`}
     <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="${k}" data-id="${esc(id)}">🗑 Ask to delete 🔒</button>` : ''}</div>
     ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}
+    ${k === 'E' && r.paidTo ? `<button class="btn ghost" data-act="payeeStatement" data-name="${esc(r.paidTo)}" style="margin-top:10px">📄 All payments to ${esc(r.paidTo)}</button>` : ''}
     ${filesBlock(id)}`);
   here = () => detail(k, id);
 }
@@ -591,7 +593,9 @@ function projectDetail(id) {
     <div style="margin-bottom:16px">${projStatsGrid(s)}</div>
     ${waitingNote(id)}
     <div class="two"><button class="btn in" data-act="addCredit" data-project="${esc(id)}">＋ Money received</button>${canChange() ? `<button class="btn ghost" data-act="editProject" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}</div>
+    <button class="btn ghost" data-act="projectStatement" data-id="${esc(id)}" style="margin-top:10px">📄 Statement of money received</button>
     ${can('edit') ? `<button class="btn ghost" data-act="assignPick" data-id="${esc(id)}" style="margin-top:10px">＋ Add existing expenses 🔒</button>` : ''}
+    ${filesList(R.flatMap(r => filesFor(r.id, 'receipt')), 'Receipts')}
     <h3 class="subh">Money received (${R.length})</h3>
     ${R.length ? `<div class="card list inset">${R.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}
     <h3 class="subh">Spent on this project (${E.length})</h3>

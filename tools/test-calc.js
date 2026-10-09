@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ TextEncoder });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, advancesUsd };', ctx);
-const { payDays, workerLedger, amountInWords, jpegToPdf, advancesUsd } = ctx.api;
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd };', ctx);
+const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd } = ctx.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 
 /* ---------- days on a 30-day month: joining and leaving days both count, day 31 counts as day 30 ---------- */
@@ -48,6 +48,16 @@ assert.strictEqual(plain(workerLedger(ann, [pay('2026-10-05', 40, 'advance', { d
 // an SSP wage paid in SSP needs no rate
 assert.strictEqual(plain(workerLedger({ ...ann, wage: 900000, cur: 'SSP' }, [pay('2026-10-05', 300000, 'advance', { cur: 'SSP' })], '2026-10-10')).balance, 0);
 
+// added on an old date with the salary already paid up to a day: wages count again from the next day
+const ben = { id: 'W-1', wage: 300, cur: 'USD', start: '2026-08-01', status: 'active' };
+l = plain(workerLedger({ ...ben, clearedTo: '2026-09-30' }, [], '2026-10-10'));
+assert.deepStrictEqual([l.earned, l.balance, l.months.map(m => m.month)], [100, 100, ['2026-10']], 'cleared to the end of September: only October counts');
+assert.strictEqual(plain(workerLedger({ ...ben, clearedTo: '2026-10-10' }, [], '2026-10-10')).balance, 0, 'cleared up to today: nothing owed');
+assert.strictEqual(plain(workerLedger({ ...ben, clearedTo: '2026-10-05' }, [], '2026-10-10')).earned, 50, 'cleared mid-month: the days after it count');
+assert.strictEqual(plain(workerLedger({ ...ben, clearedTo: '2026-07-31' }, [], '2026-10-10')).earned, 700, 'a date before the start changes nothing');
+// not fully paid: what was paid before the app comes off (a negative opening balance)
+assert.strictEqual(plain(workerLedger({ ...ben, openingAmount: -450 }, [], '2026-10-10')).balance, 250, '700 earned, 450 paid before the app');
+
 /* ---------- advances this month, in dollars (the $100 limit) ---------- */
 assert.strictEqual(advancesUsd(pays, '2026-09'), 180);
 assert.strictEqual(advancesUsd([pay('2026-10-05', 225000, 'advance', { cur: 'SSP', rate: 4500 })], '2026-10'), 50);
@@ -71,5 +81,13 @@ offsets.forEach((o, i) => assert.ok(text.startsWith(`${i + 1} 0 obj`, o), `objec
 assert.strictEqual(Number(text.slice(text.indexOf('startxref') + 10).trim().split('\n')[0]), xrefAt);
 assert.ok(pdf.includes(Buffer.from(jpeg)), 'the photo bytes are inside, untouched');
 assert.ok(text.includes('/Width 1240 /Height 1754'));
+
+/* ---------- several pages (a long statement) ---------- */
+const two = Buffer.from(pdfPages([{ data: jpeg, w: 1240, h: 1754 }, { data: jpeg, w: 1240, h: 1754 }])).toString('latin1');
+assert.ok(two.includes('/Kids [3 0 R 6 0 R] /Count 2'), 'two pages listed');
+const at2 = two.lastIndexOf('\nxref\n') + 1, rows2 = two.slice(at2).split('\n');
+assert.strictEqual(rows2[1], '0 9', 'catalog, page list and 3 objects per page');
+rows2.slice(3, 11).map(r => Number(r.slice(0, 10))).forEach((o, i) => assert.ok(two.startsWith(`${i + 1} 0 obj`, o), `object ${i + 1} is where the xref says`));
+assert.strictEqual(Number(two.slice(two.indexOf('startxref') + 10).trim().split('\n')[0]), at2);
 
 console.log('Pay maths, words and PDF: all checks passed');

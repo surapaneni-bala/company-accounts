@@ -309,7 +309,8 @@ label.btn { display: block; text-align: center; }
 .okbig { font-size: 30px; font-weight: 800; color: var(--in); text-align: center; margin: 4px 0 6px; }
 
 /* staff */
-.dot.avatar { background: #E8ECF6; color: var(--ink); font-size: 15px; }
+.dot.avatar { background: #E8ECF6; color: var(--ink); font-size: 15px; overflow: hidden; border-radius: 50%; }
+.dot.avatar img { width: 100%; height: 100%; object-fit: cover; }
 .amt small { display: block; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; text-align: right; }
 .amt.neg { color: var(--out); }
 .wtop { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }

@@ -90,7 +90,7 @@ Needs the sheet script **version 3** (see *Updating the sync script later*).
 - Change your own password or sign out: tap your name at the top.
 
 ## Vouchers, receipts, photos and staff (sheet script version 4)
-Needs the sheet script **version 4** and one extra step after pasting it (see *Updating the sync script later*).
+Needs the sheet script **version 4 or newer** (the newest is 6) and one extra step after pasting it (see *Updating the sync script later*).
 
 - **Payment voucher:** when adding an expense, tick **✍️ Get their signature now** — or open any expense later and
   tap **🧾 Voucher**. The person paid signs on the screen with a finger; you can add a photo of them with the money.
@@ -101,13 +101,21 @@ Needs the sheet script **version 4** and one extra step after pasting it (see *U
 - **Letterhead:** an admin taps **Sheet → Settings → Letterhead → Change** and picks a picture of the whole A4 page.
   Every voucher and slip is then printed on it.
 - **Staff** tab (admins and the office manager):
-  - **＋ Add employee:** name, job, monthly wage (USD or SSP), the day they started, ID number, and the balance from
-    the old salary book. Profile photo and ID photo are optional; the store keeper never sees them.
+  - **＋ Add employee:** name, **job**, monthly wage (USD or SSP), the day they started, and a **photo of the national ID
+    or passport** (required; the ID number is optional). A profile photo (optional) shows in the staff list. The store
+    keeper never sees employees. If they started on an **old date**, the form asks whether their salary was paid up to
+    the end of last month, up to today, or not fully — then type what was already paid, and it shows what is still owed.
   - **💵 Pay salary:** pick the month and type the **days not worked** (wage ÷ 30 comes off per day). The amount
     fills in by itself. Save, the employee signs, and the **salary slip** PDF is ready to send.
   - **➖ Advance:** up to **$100 a month** per person. Above that, an admin must approve first (the office manager's
     request appears under **Review**; after approval, **Give it** appears on the employee's page).
-  - **🚪 Has left:** the last day of work (the office manager's request waits for an admin), then **💵 Final settlement**.
+  - **🚪 Has left:** the last day of work (the office manager's request waits for an admin). If money is still owed,
+    pay it — the slip is the **final settlement statement** (every month earned and every payment, signed, "FULLY
+    SETTLED"). If nothing is owed, it goes straight to that signed statement.
+  - Each employee's page lists all their **slips and statements** (tap one to send or save it) and has **📄 Statement**:
+    every wage and payment in one PDF.
+- **Statements:** a project's page has **📄 Statement of money received** (every receipt, total, still to receive) and
+  lists its receipts; an expense has **📄 All payments to …** (every payment to that name).
 - **Office manager deletes:** she taps **🗑 Ask to delete**; it is deleted only when an admin approves.
 - **Company stamp:** an admin taps **Sheet → Settings → Company stamp → Change** and picks a clear picture of the stamp.
   It is printed beside "Approved by" on every slip, with the slip's date written along its dotted "Date:" line. Use

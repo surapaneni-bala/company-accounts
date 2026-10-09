@@ -23,7 +23,7 @@ const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves',
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
 // File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …)
 const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F'];
-const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp'];
+const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement'];
 const BRAND_FILES = ['letterhead', 'stamp']; // the company's own: only admins set them, every login's slips carry them
 const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
 const MAX_FILE = 8 * 1024 * 1024; // bytes
@@ -39,7 +39,7 @@ const EDITABLE = {
   R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate', 'rate'],
   T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
   P: ['name', 'value', 'valueCur'],
-  W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote'],
+  W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote', 'clearedTo'],
 };
 // The same checks the app makes before it shows a record. Anything else is refused: it would also break the tabs.
 const SHAPES = {
@@ -56,7 +56,8 @@ const SHAPES = {
       : d.action === 'advance' ? d.kind === 'W' && num_(d.after.amount) && d.after.amount > 0 && CURS.indexOf(d.after.cur) >= 0 && Object.keys(d.after).length === 2
       : d.action === undefined && Object.keys(d.after).every(f => EDITABLE[d.kind].indexOf(f) >= 0)),
   W: d => str_(d.name) && num_(d.wage) && d.wage >= 0 && CURS.indexOf(d.cur) >= 0 && DATE_RE.test(d.start)
-    && ['active', 'left'].indexOf(d.status || 'active') >= 0 && (!d.left || DATE_RE.test(d.left)) && (d.openingAmount === undefined || num_(d.openingAmount)),
+    && ['active', 'left'].indexOf(d.status || 'active') >= 0 && (!d.left || DATE_RE.test(d.left)) && (d.openingAmount === undefined || num_(d.openingAmount))
+    && (!d.clearedTo || DATE_RE.test(d.clearedTo)),
   F: d => /^[A-Za-z0-9_-]{10,100}$/.test(d.fileId) && str_(d.name) && FILE_MIMES.indexOf(d.mime) >= 0 && SAFE_ID.test(d.for) && FILE_TYPES.indexOf(d.type) >= 0,
 };
 const num_ = v => typeof v === 'number' && isFinite(v);
@@ -71,7 +72,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 5; // shown when the web app link is opened in a browser
+const VERSION = 6; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',

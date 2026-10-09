@@ -26,6 +26,8 @@ assert.deepStrictEqual(res.refused, [], 'the office manager registers an employe
 assert.deepStrictEqual(post({ token: s.token, since: 0, push: [worker('W-SK1-0001', 11, s.me.id)] }).refused, ['W-SK1-0001'], 'store keepers do not');
 assert.ok(!post({ token: s.token, since: 0, push: [] }).pull.some(p => p.k === 'W'), 'store keepers never receive employees');
 assert.deepStrictEqual(post({ token: m.token, since: 0, push: [worker('W-AG1-0002', 12, m.me.id, { wage: -5 }), worker('W-AG1-0003', 12, m.me.id, { start: '1 Aug' })] }).refused.sort(), ['W-AG1-0002', 'W-AG1-0003'], 'wage and start date are checked');
+// added on an old date: "salary cleared up to" is a date (the office manager may correct it through an edit request)
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [worker('W-AG1-0004', 12, m.me.id, { clearedTo: '2026-09-30' }), worker('W-AG1-0005', 12, m.me.id, { clearedTo: 'Sept' })] }).refused, ['W-AG1-0005']);
 
 /* ---------- salary and advance payments are expenses that name the employee ---------- */
 res = post({ token: m.token, since: 0, push: [exp('E-AG1-0001', 13, m.me.id, { worker: 'W-AG1-0001', pay: 'salary', month: '2026-09', daysOff: 2, cur: 'SSP', amount: 1200000, rate: 4500 })] });
@@ -40,6 +42,7 @@ res = post({ token: m.token, since: 0, push: [
   ask('C-AG1-0003', { action: 'advance', kind: 'W', target: 'W-AG1-0001', after: { amount: 150, cur: 'USD' } }),
   ask('C-AG1-0004', { action: 'advance', kind: 'W', target: 'W-AG1-0001', after: { amount: 150, cur: 'USD', deleted: 'x' } }),
   ask('C-AG1-0005', { kind: 'W', target: 'W-AG1-0001', after: { status: 'left', left: '2026-10-15' } }), // marking someone as left
+  ask('C-AG1-0008', { kind: 'W', target: 'W-AG1-0001', after: { clearedTo: '2026-09-30' } }),
   ask('C-AG1-0006', { action: 'pay' }),
 ] });
 assert.deepStrictEqual(res.refused.sort(), ['C-AG1-0002', 'C-AG1-0004', 'C-AG1-0006']);
@@ -79,6 +82,9 @@ const upS = post({ op: 'upload', token: s.token, name: 'stamp.png', mime: 'image
 assert.deepStrictEqual(post({ token: s.token, since: 0, push: [file('F-SK1-0005', 35, s.me.id, { for: 'E-SK1-0001', type: 'stamp', fileId: upS.fileId })] }).refused, ['F-SK1-0005'], 'only admins set the stamp');
 const upO = post({ op: 'upload', token: owner, name: 'stamp.png', mime: 'image/png', data: png });
 assert.deepStrictEqual(post({ token: owner, since: 0, push: [file('F-OW1-0002', 36, 'x', { for: 'settings', type: 'stamp', fileId: upO.fileId, place: { a: 70, r: 0.75, s: 0.12 } })] }).refused, []);
+// a signed final settlement statement is kept with the employee
+const upF = post({ op: 'upload', token: m.token, name: 'final.pdf', mime: 'application/pdf', data: Buffer.from('%PDF-1.4 test').toString('base64') });
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [file('F-AG1-0007', 37, m.me.id, { for: 'W-AG1-0001', type: 'statement', mime: 'application/pdf', name: 'final.pdf', fileId: upF.fileId })] }).refused, []);
 
 // reading a file back goes through its record: whoever may see the record may download it
 const got = post({ op: 'file', token: s.token, id: 'F-SK1-0001' });

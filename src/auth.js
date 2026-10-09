@@ -259,7 +259,7 @@ const EDITABLE = {
   R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate', 'rate'],
   T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
   P: ['name', 'value', 'valueCur'],
-  W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote'],
+  W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote', 'clearedTo'],
 };
 const editPart = c => (c.action ? {} : Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f))));
 const whatIs = (kind, r) => (kind === 'P' ? `Project "${r.name}"` : kind === 'W' ? `Employee ${r.name}` : describe(kind, r));

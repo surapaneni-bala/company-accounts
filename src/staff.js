@@ -12,20 +12,32 @@ const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => 
 // advances an admin approved that nobody has given yet
 const approvedAdvances = id => S.changes.filter(c => c.action === 'advance' && c.target === id && c.status === 'approved' && !live(S.expenses).some(e => e.approval === c.id));
 const owedLabel = l => (l.balance >= 0 ? 'to pay' : 'paid ahead');
+const dayBefore = d => { const [y, m, dd] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, dd - 1)).toISOString().slice(0, 10); };
+const lastMonthEnd = () => dayBefore(today().slice(0, 8) + '01');
+// what was there before the app: owed to them (+) or already paid (−)
+const beforeText = (n, cur) => (n > 0 ? `${money(n, cur)} owed from before the app` : `${money(-n, cur)} paid before the app`);
+// profile photos in the list: fetched once, then kept
+const thumbs = new Map();
+function loadThumbs() {
+  $$('[data-photo]').forEach(async el => {
+    const id = el.dataset.photo;
+    try { if (!thumbs.has(id)) thumbs.set(id, URL.createObjectURL(await fileBlob(id))); el.innerHTML = `<img src="${thumbs.get(id)}" alt="">`; } catch { /* offline: the initials stay */ }
+  });
+}
 
 function viewStaff() {
   const ws = live(S.workers).sort((a, b) => a.name.localeCompare(b.name));
   const on = ws.filter(w => w.status !== 'left'), gone = ws.filter(w => w.status === 'left');
   return `${approvalsBanner()}<div class="sec-head"><h2 class="sec">Staff</h2><button class="btn small primary" data-act="addWorker">＋ Add employee</button></div>
-    ${on.length ? `<div class="card list">${on.map(workerRow).join('')}</div>` : gone.length ? empty('Nobody working now', 'Everyone listed has left the company.') : empty('No employees yet', 'Add each person once: their wage, the day they started and the balance from the salary book.')}
+    ${on.length ? `<div class="card list">${on.map(workerRow).join('')}</div>` : gone.length ? empty('Nobody working now', 'Everyone listed has left the company.') : empty('No employees yet', 'Add each person once: their job, wage, the day they started and a photo of their ID.')}
     ${gone.length ? `<details class="gone"><summary>Left the company (${gone.length})</summary><div class="card list">${gone.map(workerRow).join('')}</div></details>` : ''}`;
 }
 function workerRow(w) {
-  const l = ledgerOf(w);
+  const l = ledgerOf(w), photo = latestFile(w.id, 'profile');
   return `<button class="row" data-act="openWorker" data-id="${esc(w.id)}">
-    <span class="dot avatar">${esc(initials(w.name))}</span>
+    <span class="dot avatar" ${photo ? `data-photo="${esc(photo.id)}"` : ''}>${photo && thumbs.has(photo.id) ? `<img src="${thumbs.get(photo.id)}" alt="">` : esc(initials(w.name))}</span>
     <span class="main"><span class="t"><span class="tt">${esc(w.name)}</span>${waitingFor(w.id).length ? '<i class="tag warn">Waiting</i>' : ''}</span>
-    <span class="s">${esc([w.job, w.site, `${money(w.wage, w.cur)} a month`].filter(Boolean).join(' · '))}</span></span>
+    <span class="s">${esc([w.job, `${money(w.wage, w.cur)} a month`].filter(Boolean).join(' · '))}</span></span>
     <span class="amt${l.balance < 0 ? ' neg' : ''}">${money(l.balance, l.cur)}<small>${owedLabel(l)}</small></span></button>`;
 }
 
@@ -34,61 +46,109 @@ function workerDetail(id) {
   if (!w || w.deleted) return false;
   const l = ledgerOf(w), left = w.status === 'left';
   const pays = live(S.expenses).filter(e => e.worker === id).sort((a, b) => byAt(b, a));
-  const facts = [['Job', w.job], ['Site', w.site], ['Phone', w.phone], ['Monthly wage', money(w.wage, w.cur)], ['Started', fmtDate(w.start)], ['Left on', w.left && fmtDate(w.left)],
-    ['ID number', w.idNo], ['From the salary book', w.openingAmount ? `${money(w.openingAmount, w.cur)}${w.openingNote ? ' · ' + w.openingNote : ''}` : '']];
+  const facts = [['Job', w.job], ['Phone', w.phone], ['Monthly wage', money(w.wage, w.cur)], ['Started', fmtDate(w.start)], ['Salary cleared up to', w.clearedTo && fmtDate(w.clearedTo)], ['Left on', w.left && fmtDate(w.left)],
+    ['ID number', w.idNo], ['Before the app', w.openingAmount ? beforeText(w.openingAmount, w.cur) : '']];
   const idPhoto = latestFile(id, 'idphoto');
+  // every voucher and slip given to them, and their signed statements
+  const payIds = new Set(pays.map(e => e.id));
+  const docs = [...live(S.files), ...outbox.map(f => ({ ...f, pending: true }))].filter(f => (payIds.has(f.for) && ['voucher', 'slip'].includes(f.type)) || (f.for === id && f.type === 'statement'))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   openSheet(`${head(w.name, '', w.id)}
     <div class="wtop"><span class="wphoto" id="wPhoto">${esc(initials(w.name))}</span>
       <div><div class="dbig ${l.balance < 0 ? 'out' : ''}" style="margin:0">${money(l.balance, l.cur)}</div><small class="muted">${l.balance >= 0 ? `still to pay ${esc(w.name)}` : 'paid more than earned so far'}${left ? ' · has left' : ''}</small></div></div>
     ${waitingNote(id)}
     ${approvedAdvances(id).map(c => `<div class="banner new"><span>✅ Advance of ${money(+c.after.amount, c.after.cur)} approved by ${esc(c.decidedBy)}.</span><button class="btn small" data-act="payWorker" data-pay="advance" data-id="${esc(id)}" data-approval="${esc(c.id)}">Give it</button></div>`).join('')}
     <div class="two">${left
-      ? `<button class="btn out" data-act="payWorker" data-pay="settlement" data-id="${esc(id)}">💵 Final settlement</button>`
-      : `<button class="btn out" data-act="payWorker" data-pay="salary" data-id="${esc(id)}">💵 Pay salary</button><button class="btn ghost" data-act="payWorker" data-pay="advance" data-id="${esc(id)}">➖ Advance</button>`}</div>
+      ? `<button class="btn out" data-act="settle" data-id="${esc(id)}">${l.balance > 0.004 ? '💵 Pay final settlement' : '📑 Final settlement statement'}</button>`
+      : `<button class="btn out" data-act="payWorker" data-pay="salary" data-id="${esc(id)}">💵 Pay salary</button><button class="btn ghost" data-act="payWorker" data-pay="advance" data-id="${esc(id)}">➖ Advance</button>`}<button class="btn ghost" data-act="workerStatement" data-id="${esc(id)}">📄 Statement</button></div>
     <dl class="facts" style="margin-top:16px">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
     <div class="two">${canChange() ? `<button class="btn ghost" data-act="editWorker" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${left || !canChange() ? '' : `<button class="btn danger" data-act="markLeft" data-id="${esc(id)}">🚪 Has left 🔒</button>`}</div>
     <div class="two" style="margin-top:10px">${attachButton(id, '🙂 Profile photo', 'profile', 'image/*')}${idPhoto ? `<button class="btn ghost" data-act="showFile" data-id="${esc(idPhoto.id)}">🪪 ID photo</button>` : attachButton(id, '🪪 Add ID photo', 'idphoto')}</div>
     <h3 class="subh">Wage by month</h3>
     <div class="card list inset">${[...l.months].reverse().slice(0, 12).map(m => `<div class="mrow"><span>${monthName(m.month)}</span><span class="muted">${m.days} days${m.daysOff ? ` − ${m.daysOff} not worked` : ''}</span><b>${money(m.earned, l.cur)}</b></div>`).join('') || '<p class="muted pad">Starts on ' + esc(fmtDate(w.start)) + '.</p>'}</div>
-    <p class="muted">Earned ${money(l.earned, l.cur)}${l.opening ? ` + ${money(l.opening, l.cur)} from the salary book` : ''} − paid ${money(l.paid, l.cur)} = ${money(l.balance, l.cur)}.${l.unconverted.length ? ` ⚠️ ${l.unconverted.length} payment(s) in another currency without a rate are not counted.` : ''}</p>
+    <p class="muted">Earned ${money(l.earned, l.cur)}${l.opening > 0 ? ` + ${money(l.opening, l.cur)} owed from before the app` : l.opening < 0 ? ` − ${money(-l.opening, l.cur)} paid before the app` : ''} − paid ${money(l.paid, l.cur)} = ${money(l.balance, l.cur)}.${l.unconverted.length ? ` ⚠️ ${l.unconverted.length} payment(s) in another currency without a rate are not counted.` : ''}</p>
+    ${filesList(docs, 'Slips and statements')}
     <h3 class="subh">Payments (${pays.length})</h3>
     ${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">Nothing paid yet.</p>'}
     ${filesBlock(id)}`);
   comeBack(() => workerDetail(id));
   const photo = latestFile(id, 'profile');
-  if (photo) fileBlob(photo.id).then(b => { const el = $('#wPhoto'); if (el) el.innerHTML = `<img src="${URL.createObjectURL(b)}" alt="">`; }).catch(() => {});
+  if (photo) { $('#wPhoto').dataset.photo = photo.id; loadThumbs(); }
 }
 
 function workerForm(old) {
-  const d = old || { cur: 'USD', start: today(), wage: '', openingAmount: '' };
+  const d = old || { cur: 'USD', start: today(), wage: '' };
   openSheet(`${head(old ? 'Edit employee' : 'New employee', '', old?.id)}
     <form data-form="worker" data-id="${esc(old?.id || '')}">
       ${textField('name', 'Full name', 'e.g. John Deng', d.name)}
-      ${textField('job', 'Job', 'e.g. Mason, driver, guard', d.job, false)}
-      ${textField('site', 'Site', 'Where they work', d.site, false)}
+      ${textField('job', 'Job', 'e.g. Mason, driver, guard', d.job)}
       <label class="fld"><span>Phone <em>(optional)</em></span><input name="phone" type="tel" value="${esc(d.phone)}" autocomplete="off" maxlength="30"></label>
       ${curChips(d.cur, 'Wage is paid in')}
       ${amountField(d.wage, d.cur, 'wage', 'Monthly wage')}
-      <label class="fld"><span>Started work on</span><input type="date" name="start" value="${esc(d.start)}" required></label>
+      <label class="fld"><span>Started work on</span><input type="date" name="start" value="${esc(d.start)}" max="${today()}" required></label>
+      ${old ? `<label class="fld"><span>Salary cleared up to <em>(optional — wages before this day were paid outside the app)</em></span><input type="date" name="clearedTo" value="${esc(d.clearedTo || '')}"></label>
+      <label class="fld"><span>Before the app <em>(optional — owed to them, or put − for what was already paid)</em></span><input name="openingAmount" inputmode="decimal" value="${esc(d.openingAmount || '')}" placeholder="0" autocomplete="off"></label>` : `
+      <div class="oldpay" hidden>
+        <div class="fld"><span>Has their salary been paid?</span><div class="curseg roles">
+          <label class="opt-month"><input type="radio" name="cleared" value="month" checked><span><b>Yes, up to the end of last month</b><small class="lm"></small></span></label>
+          <label><input type="radio" name="cleared" value="today"><span><b>Yes, up to today</b><small>Nothing is owed today</small></span></label>
+          <label><input type="radio" name="cleared" value="part"><span><b>No, not fully</b><small>Type what has been paid since they started</small></span></label>
+        </div></div>
+        <label class="fld paidpart" hidden><span>Already paid since they started</span><div class="amt-in"><b class="cur-sym">${SYM[d.cur].trim()}</b><input name="paidSoFar" inputmode="decimal" placeholder="0" autocomplete="off"></div><small class="amt-preview"></small></label>
+        <p class="note oldinfo"></p>
+      </div>`}
       ${textField('idNo', 'National ID or passport number', '', d.idNo, false)}
-      <label class="fld"><span>Balance from the salary book <em>(optional — what the company still owed them on the day they started in the app; put − if they owed the company)</em></span><input name="openingAmount" inputmode="decimal" value="${esc(d.openingAmount || '')}" placeholder="0" autocomplete="off"></label>
-      ${textField('openingNote', 'Note about that balance', 'e.g. From the salary book, September', d.openingNote, false)}
-      ${old ? '' : `<label class="fld"><span>Profile photo <em>(optional)</em></span><input type="file" name="profile" accept="image/*" capture="environment"></label>
-      <label class="fld"><span>ID or passport photo <em>(optional — only admins and the office see it)</em></span><input type="file" name="idphoto" accept="image/*,application/pdf"></label>`}
+      ${old ? '' : `<label class="fld"><span>Photo of the national ID or passport</span><input type="file" name="idphoto" accept="image/*,application/pdf" required></label>
+      <label class="fld"><span>Profile photo <em>(optional — shown in the staff list)</em></span><input type="file" name="profile" accept="image/*" capture="environment"></label>`}
       ${byField()}${approvalNote(old)}
       <p class="err"></p>
       <button class="btn primary">${old ? saveLabel() : 'Add employee'}</button>
     </form>${datalists()}`);
+  refreshOld($('#sheet form'));
+}
+// Started on an old date: was the salary paid up to the end of last month, up to today, or only partly?
+function refreshOld(f) {
+  const box = $('.oldpay', f);
+  if (!box) return;
+  const start = f.elements.start.value, t = today(), monthEnd = lastMonthEnd();
+  box.hidden = !(DATE_RE.test(start) && start < t);
+  if (box.hidden) return;
+  const canMonth = start <= monthEnd;
+  $('.opt-month', f).hidden = !canMonth;
+  if (!canMonth && f.elements.cleared.value === 'month') $('[name=cleared][value=part]', f).checked = true; // started this month: usually not paid yet
+  $('.lm', f).textContent = `${monthName(monthEnd.slice(0, 7))} and before are paid; wages count from 1 ${MONTHS[+t.slice(5, 7) - 1]}`;
+  const choice = f.elements.cleared.value, wage = parseAmount(f.elements.wage.value) || 0, cur = formCur(f);
+  $('.paidpart', f).hidden = choice !== 'part';
+  const w = { id: 'new', wage, cur, start, status: 'active', ...(choice === 'month' ? { clearedTo: monthEnd } : choice === 'today' ? { clearedTo: t } : {}) };
+  const earned = workerLedger(w, [], t).earned, paid = choice === 'part' ? parseAmount(f.elements.paidSoFar.value) || 0 : 0;
+  $('.oldinfo', f).innerHTML = !wage ? 'Type the monthly wage to see what is owed.'
+    : choice === 'part' ? `Earned since ${fmtDate(start)}: <b>${money(earned, cur)}</b><br>Already paid: <b>${money(paid, cur)}</b><br>Still to pay now: <b>${money(minus(earned, paid), cur)}</b>`
+    : choice === 'month' ? `Still to pay now (this month so far): <b>${money(earned, cur)}</b>` : 'Nothing is owed today. Wages count again from tomorrow.';
 }
 async function saveWorker(f) {
   const v = Object.fromEntries(new FormData(f));
   const old = workerOf(f.dataset.id);
   const wage = parseAmount(v.wage), opening = String(v.openingAmount || '').replace(/[,\s$]/g, '');
-  const rec = { name: clean(v.name), job: clean(v.job), site: clean(v.site), phone: clean(v.phone), wage, cur: formCur(f), start: v.start, idNo: clean(v.idNo), openingAmount: opening ? Math.round(Number(opening) * 100) / 100 : 0, openingNote: clean(v.openingNote) };
+  const rec = { name: clean(v.name), job: clean(v.job), phone: clean(v.phone), wage, cur: formCur(f), start: v.start, idNo: clean(v.idNo) };
   if (!rec.name) return formErr(f, 'name', 'Type their name');
+  if (!rec.job) return formErr(f, 'job', 'Type their job');
   if (wage === null) return formErr(f, 'wage', 'Type the monthly wage, like 300');
-  if (!DATE_RE.test(rec.start)) return formErr(f, 'start', 'Pick the day they started');
-  if (!Number.isFinite(rec.openingAmount)) return formErr(f, 'openingAmount', 'Type a number, like 150 or −50');
+  if (!DATE_RE.test(rec.start) || rec.start > today()) return formErr(f, 'start', 'Pick the day they started');
+  if (old) {
+    rec.openingAmount = opening ? Math.round(Number(opening) * 100) / 100 : 0;
+    rec.clearedTo = DATE_RE.test(v.clearedTo || '') ? v.clearedTo : undefined;
+    if (!Number.isFinite(rec.openingAmount)) return formErr(f, 'openingAmount', 'Type a number, like 150 or −50');
+  } else {
+    if (!f.elements.idphoto.files[0]) return formErr(f, 'idphoto', 'Add a photo of their national ID or passport');
+    const choice = $('.oldpay', f).hidden ? '' : v.cleared;
+    if (choice === 'month') rec.clearedTo = lastMonthEnd();
+    if (choice === 'today') rec.clearedTo = today();
+    if (choice === 'part') {
+      const paid = String(v.paidSoFar || '').trim() ? parseAmount(v.paidSoFar) : 0;
+      if (paid === null) return formErr(f, 'paidSoFar', 'Type what has been paid, like 200 — or 0');
+      if (paid) Object.assign(rec, { openingAmount: -paid, openingNote: 'Paid before the app' });
+    }
+  }
   const by = clean(v.by);
   if (!by) return formErr(f, 'by', 'Type your name');
   if (old) {
@@ -99,9 +159,10 @@ async function saveWorker(f) {
     closeSheet(); render(); return toast('Changes saved ✓');
   }
   const [[id], seq] = nextIds('W', 1, S.seq);
+  const extra = [rec.clearedTo && `salary cleared up to ${fmtDate(rec.clearedTo)}`, rec.openingAmount && beforeText(rec.openingAmount, rec.cur)].filter(Boolean).join(' · ');
   update({ workers: [...S.workers, { id, ...rec, status: 'active', by, createdAt: stampSec() }], seq, lastBy: by,
-    log: logWith([['Employee', id, `${rec.name} added · ${money(wage, rec.cur)} a month from ${fmtDate(rec.start)}`]], by) });
-  for (const type of ['profile', 'idphoto']) {
+    log: logWith([['Employee', id, `${rec.name} added · ${rec.job} · ${money(wage, rec.cur)} a month from ${fmtDate(rec.start)}${extra ? ' · ' + extra : ''}`]], by) });
+  for (const type of ['idphoto', 'profile']) {
     const file = f.elements[type].files[0];
     if (!file) continue;
     try { const p = await prepareFile(file); await keepFile({ for: id, type, name: p.name, mime: p.mime }, p.data); }
@@ -129,8 +190,65 @@ function saveLeft(f) {
   const rec = { status: 'left', left }, changes = [`Status: Working → Left on ${fmtDate(left)}`];
   if (!can('edit')) return requestChange('W', w, rec, changes, by);
   update({ workers: S.workers.map(x => x.id === w.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Left', w.id, `${w.name} left on ${fmtDate(left)}`]], by), lastBy: by });
-  render(); payForm(w.id, 'settlement');
+  render(); settleWorker(w.id);
 }
+// Someone who left: still owed something → pay it (that slip is the full final statement); nothing owed → the signed statement.
+function settleWorker(id) {
+  if (ledgerOf(workerOf(id)).balance > 0.004) return payForm(id, 'settlement');
+  finalSheet(id);
+}
+function finalSheet(id) {
+  const w = workerOf(id), l = ledgerOf(w);
+  openSheet(`${head('Final settlement', 'in', w.name)}
+    <p class="note">${l.balance < -0.004 ? `${esc(w.name)} was paid ${money(-l.balance, l.cur)} more than they earned. The statement shows it as owed by them.` : `Every wage is paid. ${esc(w.name)} signs that they received everything up to ${fmtDate(w.left || today())}.`}</p>
+    <form data-form="final" data-id="${esc(id)}">
+      ${sigField(w.name)}
+      ${photoField(w.name)}
+      <p class="err"></p>
+      <button class="btn in">Make the final settlement (PDF)</button>
+    </form>`);
+  sigPad($('#sheet canvas.sig'));
+}
+async function saveFinal(f) {
+  const w = workerOf(f.dataset.id), cv = $('canvas.sig', f);
+  if (!cv.dataset.ink) return formErr(f, null, 'Please ask them to sign in the box first.');
+  const btn = $('button.btn', f);
+  btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
+  try {
+    const p = f.elements.photo.files[0], photo = p ? await imgFrom(new Blob([(await prepareFile(p)).data], { type: 'image/jpeg' })) : null;
+    const st = workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo });
+    const blob = await renderStatement(st), name = `${st.no} ${fileSafe(w.name)} final settlement.pdf`;
+    await keepFile({ for: w.id, type: 'statement', no: st.no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
+    update({ log: logWith([['Final settlement', w.id, `${w.name}: final settlement statement ${st.no} signed`]]) });
+    readySheet(st.title, st.no, blob, name);
+  } catch (e) { btn.disabled = false; formErr(f, null, e.message); }
+}
+// Everything about one employee: wages month by month, every payment with its voucher number, and the balance.
+// docs = voucher numbers not saved yet (the settlement slip being made right now)
+function workerStatementSpec(w, { final = false, no, sig = null, photo = null, date = today(), docs = {} } = {}) {
+  const l = ledgerOf(w), M = n => slipMoney(n, w.cur), end = w.status === 'left' && w.left ? w.left : today();
+  const pays = live(S.expenses).filter(e => e.worker === w.id).sort(byAt);
+  const settled = Math.abs(l.balance) < 0.005;
+  return {
+    title: final ? 'FINAL SETTLEMENT' : 'STATEMENT OF ACCOUNT', no, date: fmtDate(date), stampDate: date.split('-').reverse().join('-'),
+    info: [['Employee', `${w.name}${w.job ? ` · ${w.job}` : ''}`], ['Employee no.', w.id], ['Started', fmtDate(w.start)], [w.status === 'left' ? 'Last day of work' : 'Up to', fmtDate(end)],
+      ['Monthly wage', `${M(w.wage)} (30-day month)`], w.clearedTo ? ['Salary cleared up to', fmtDate(w.clearedTo)] : ['ID / passport no.', w.idNo || '—']],
+    sections: [
+      { title: 'Wages earned', cols: [{ h: 'Month', w: 330 }, { h: 'Days worked', w: 480 }, { h: 'Earned', w: 250, right: true }],
+        rows: l.months.map(m => [monthName(m.month), `${m.days - m.daysOff} of ${m.days}${m.daysOff ? ` (${m.daysOff} not worked)` : ''}`, M(m.earned)]), total: ['Total earned', M(l.earned)] },
+      { title: 'Payments', cols: [{ h: 'Date', w: 170 }, { h: 'Voucher / ref', w: 200 }, { h: 'Details', w: 440 }, { h: 'Paid', w: 250, right: true }],
+        rows: pays.map(e => { const c = inWage(e, w.cur); return [fmtDate(e.at.slice(0, 10)), docs[e.id] || docNo(e.id) || e.id, `${e.reason}${e.cur !== w.cur ? ` · ${slipMoney(e.amount, e.cur)}${e.rate ? ` at ${plain(e.rate)}` : ''}` : ''}`, c === null ? 'no rate' : M(c / 100)]; }),
+        total: ['Total paid', M(l.paid)] },
+    ],
+    // the tables already total what was earned and paid: here only what is outside them, and the balance
+    summary: [...(l.opening ? [[l.opening > 0 ? 'Owed from before the app' : 'Paid before the app', M(Math.abs(l.opening))]] : []),
+      [l.balance >= 0 ? 'Balance due to the employee' : 'Paid ahead (owed by the employee)', M(Math.abs(l.balance)), true]],
+    verdict: settled ? { text: final ? 'FULLY SETTLED — ALL WAGES PAID' : 'FULLY PAID UP TO DATE', good: true } : l.balance > 0 ? { text: `BALANCE DUE ${M(l.balance)}`, good: false } : { text: `OWED BY THE EMPLOYEE ${M(-l.balance)}`, good: false },
+    sign: final ? { label: 'Received in full and final settlement', name: w.name, sig, photo } : null,
+    preparedBy: myName() || S.lastBy || '', ref: w.id,
+  };
+}
+function workerStatement(id) { const w = workerOf(id), st = workerStatementSpec(w, { no: statementNo() }); shareStatement(st, `${st.no} ${fileSafe(w.name)}.pdf`); }
 
 /* paying an employee: salary for a month, an advance, or the final settlement */
 function monthsOf(w) {

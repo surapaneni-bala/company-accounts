@@ -70,9 +70,13 @@ const ACTIONS = {
   editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
   markLeft: async b => { if (await unlock('Enter the password to record that this employee has left.')) leftForm(b.dataset.id); },
   payWorker: b => payForm(b.dataset.id, b.dataset.pay, b.dataset.approval),
+  settle: b => settleWorker(b.dataset.id),
+  workerStatement: b => workerStatement(b.dataset.id),
+  projectStatement: b => projectStatement(b.dataset.id),
+  payeeStatement: b => payeeStatement(b.dataset.name),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -106,6 +110,7 @@ document.addEventListener('input', e => {
   if (t.closest('.amt-in')) refreshAmount(t);
   if (t.name === 'rate' && t.form) refreshRate(t.form);
   if (t.form && t.form.dataset.form === 'pay') { if (t.name === 'amount') t.form.dataset.typed = '1'; refreshPay(t.form, t); }
+  if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
   if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
@@ -121,6 +126,7 @@ document.addEventListener('change', e => {
   }
   if (t.dataset.attach !== undefined) attachPicked(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
+  if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }

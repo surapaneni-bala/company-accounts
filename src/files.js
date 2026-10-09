@@ -5,8 +5,8 @@
 const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
 const MAX_FILE = 8 * 1024 * 1024; // the sheet script refuses bigger files
 const PHOTO_SIDE = 1600; // photos are shrunk on the phone: quicker to upload, still sharp on a slip
-const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵' };
-const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp' };
+const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑' };
+const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement' };
 let outbox = [];          // files waiting to upload (their details; the bytes stay in IndexedDB)
 let uploading = false, uploadErr = '';
 let shown = null;         // the file on screen, kept in memory so "Send" opens the share sheet straight from the tap
@@ -106,10 +106,10 @@ const fileMeta = id => S.files.find(f => f.id === id) || outbox.find(f => f.id =
 const filesFor = (id, type) => [...live(S.files), ...outbox.map(f => ({ ...f, pending: true }))]
   .filter(f => f.for === id && (!type || f.type === type)).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 const latestFile = (id, type) => filesFor(id, type).pop();
-function filesBlock(id) {
-  const list = filesFor(id).filter(f => f.type !== 'profile');
+const filesBlock = id => filesList(filesFor(id).filter(f => f.type !== 'profile'));
+function filesList(list, title = 'Files') {
   if (!list.length) return '';
-  return `<h3 class="subh">Files (${list.length})</h3><div class="card list inset">${list.map(f => `<button class="row" data-act="showFile" data-id="${esc(f.id)}">
+  return `<h3 class="subh">${esc(title)} (${list.length})</h3><div class="card list inset">${list.map(f => `<button class="row" data-act="showFile" data-id="${esc(f.id)}">
     <span class="dot">${FILE_ICON[f.type] || '📎'}</span>
     <span class="main"><span class="t"><span class="tt">${esc(f.no || FILE_NAME[f.type] || f.name)}</span>${f.pending ? '<i class="tag warn">Not uploaded yet</i>' : ''}</span>
     <span class="s">${esc([f.name, fmtAbs(String(f.createdAt).slice(0, 16)), f.by && 'by ' + f.by].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>`;
@@ -352,6 +352,152 @@ async function renderSlip(s) {
   return new Blob([jpegToPdf(jpeg, SLIP_W, SLIP_H)], { type: 'application/pdf' });
 }
 
+/* ---------- statements: every entry for one person or project, on as many pages as it takes ---------- */
+/* st = { title, no, date, info: [[label, value]], sections: [{ title, cols: [{ h, w, right }], rows: [[cell]], total: [label, value] }],
+          summary: [[label, value, strong]], verdict: { text, good } | null, sign: { label, name, sig, photo } | null, preparedBy, ref } */
+const fitText = (g, t, w) => { t = String(t ?? ''); if (g.measureText(t).width <= w) return t; while (t && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; };
+async function renderStatement(st) {
+  const [lh, stampImg] = await Promise.all([letterheadImage(), st.sign ? brandImage('stamp') : null]);
+  const C = SLIP_C, L = 90, R = SLIP_W - 90, W = R - L, top = lh ? 268 : 200, limit = lh ? 1560 : SLIP_H - 80, pages = [];
+  let g, y;
+  const page = () => {
+    const c = document.createElement('canvas');
+    c.width = SLIP_W; c.height = SLIP_H; pages.push(c);
+    g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, SLIP_W, SLIP_H);
+    if (lh) g.drawImage(lh, 0, 0, SLIP_W, SLIP_H);
+    else { g.fillStyle = C.navy; g.font = `700 46px ${SERIF}`; g.fillText(S.company || 'Company', L, 120); g.fillStyle = C.accent; g.fillRect(L, 142, 90, 5); }
+    g.fillStyle = 'rgba(255,255,255,.9)'; g.fillRect(L - 10, top - 10, W + 20, limit - top + 10); // the letterhead's watermark stays faint under the figures
+    y = top;
+    if (pages.length > 1) { g.fillStyle = C.navy; g.font = `700 28px ${SERIF}`; spaced(g, `${st.title} — CONTINUED`, L, y + 30, 2); g.fillStyle = C.label; g.font = `600 22px ${SANS}`; g.textAlign = 'right'; g.fillText(st.no, R, y + 30); g.textAlign = 'left'; y += 64; }
+  };
+  page();
+  g.fillStyle = C.navy; g.font = `700 44px ${SERIF}`; spaced(g, st.title, L, y + 46, 3);
+  g.fillStyle = C.accent; g.fillRect(L, y + 66, 90, 5);
+  g.font = `600 18px ${SANS}`; g.fillStyle = C.label; spaced(g, 'NO.', R, y + 16, 1.6, 'right');
+  g.fillStyle = C.accent; g.font = `700 34px ${SANS}`; g.textAlign = 'right'; g.fillText(st.no, R, y + 52);
+  g.fillStyle = C.ink; g.font = `500 22px ${SANS}`; g.fillText(st.date, R, y + 84); g.textAlign = 'left';
+  y += 112;
+  // who it is about: a ruled box of label / value pairs, two to a row
+  const rowsN = Math.ceil(st.info.length / 2), ih = 70;
+  g.strokeStyle = C.navy; g.lineWidth = 2; g.strokeRect(L, y, W, rowsN * ih);
+  st.info.forEach(([lab, val], i) => {
+    const x = L + (i % 2) * (W / 2), ry = y + Math.floor(i / 2) * ih;
+    if (i % 2) { g.fillStyle = C.rule; g.fillRect(x, ry, 1.5, ih); }
+    if (i >= 2 && i % 2 === 0) { g.fillStyle = C.rule; g.fillRect(L, ry, W, 1.5); }
+    slipLabel(g, lab, x + 20, ry + 28);
+    g.fillStyle = C.ink; g.font = `700 26px ${SANS}`; g.fillText(fitText(g, val, W / 2 - 40), x + 20, ry + 58);
+  });
+  y += rowsN * ih + 30;
+  // tables: a header band, rows with a light stripe, a total line; they carry on to the next page when full
+  const colX = cols => { let x = L; return cols.map(c => { const at = x; x += c.w; return at; }); };
+  for (const sec of st.sections) {
+    const xs = colX(sec.cols);
+    const headRow = () => {
+      g.fillStyle = C.tint; g.fillRect(L, y, W, 44); g.fillStyle = C.navy; g.fillRect(L, y + 43, W, 1.5);
+      sec.cols.forEach((c, i) => { g.fillStyle = C.label; g.font = `700 17px ${SANS}`; spaced(g, c.h.toUpperCase(), c.right ? xs[i] + c.w - 14 : xs[i] + 14, y + 28, 1.2, c.right ? 'right' : 'left'); });
+      y += 44;
+    };
+    if (y + 170 > limit) page();
+    g.fillStyle = C.navy; g.font = `700 24px ${SANS}`; g.fillText(sec.title, L, y + 24); y += 40;
+    headRow();
+    if (!sec.rows.length) { g.fillStyle = C.label; g.font = `italic 22px ${SERIF}`; g.fillText('Nothing yet.', L + 14, y + 30); y += 44; }
+    sec.rows.forEach((row, ri) => {
+      if (y + 40 > limit - 60) { page(); headRow(); }
+      if (ri % 2) { g.fillStyle = '#FAFAFD'; g.fillRect(L, y, W, 40); }
+      row.forEach((cell, i) => {
+        const c = sec.cols[i];
+        g.fillStyle = C.ink; g.font = `${c.right ? 600 : 500} 22px ${SANS}`;
+        const t = fitText(g, cell, c.w - 28);
+        if (c.right) { g.textAlign = 'right'; g.fillText(t, xs[i] + c.w - 14, y + 27); g.textAlign = 'left'; } else g.fillText(t, xs[i] + 14, y + 27);
+      });
+      y += 40;
+    });
+    if (sec.total) {
+      g.fillStyle = C.navy; g.fillRect(L, y, W, 1.5);
+      g.fillStyle = C.ink; g.font = `700 24px ${SANS}`; g.fillText(sec.total[0], L + 14, y + 34);
+      g.textAlign = 'right'; g.fillText(sec.total[1], R - 14, y + 34); g.textAlign = 'left';
+      y += 50;
+    }
+    y += 24;
+  }
+  // the totals and the verdict stay together; the signature block follows (on the next page only if it must)
+  if (y + st.summary.length * 44 + 24 + (st.verdict ? 100 : 0) > limit) page();
+  const sx = L + W / 2 - 20, sw = R - sx;
+  st.summary.forEach(([lab, val, strong], i) => {
+    const ry = y + i * 44;
+    if (strong) { g.fillStyle = C.navy; g.fillRect(sx, ry, sw, 1.5); }
+    g.fillStyle = strong ? C.ink : C.label; g.font = `${strong ? 700 : 500} ${strong ? 26 : 24}px ${SANS}`; g.fillText(lab, sx + 10, ry + 33);
+    g.fillStyle = C.ink; g.textAlign = 'right'; g.fillText(val, R - 10, ry + 33); g.textAlign = 'left';
+  });
+  y += st.summary.length * 44 + 20;
+  if (st.verdict) {
+    const tone = st.verdict.good ? '#0E7C57' : C.accent;
+    boxPath(g, L, y, W, 76); g.fillStyle = st.verdict.good ? '#E2F3EA' : '#FBEDE6'; g.fill(); g.strokeStyle = tone; g.lineWidth = 3; g.stroke();
+    g.fillStyle = tone; g.font = `800 30px ${SANS}`; spaced(g, st.verdict.text, L + W / 2, y + 49, 2, 'center');
+    y += 100;
+  }
+  if (st.sign && y + 200 + 120 + 40 > limit) page();
+  if (st.sign) {
+    const s = st.sign, h = 200, split = s.photo ? L + 660 : R;
+    g.strokeStyle = C.navy; g.lineWidth = 2.5; g.strokeRect(L, y, W, h);
+    if (s.photo) { g.fillStyle = C.navy; g.fillRect(split, y, 1.5, h); fitInto(g, s.photo, split + 14, y + 14, R - split - 28, h - 28, true); }
+    slipLabel(g, s.label, L + 24, y + 34);
+    g.fillStyle = C.ink; g.font = `700 28px ${SANS}`; g.fillText(s.name, L + 24, y + 72);
+    if (s.sig) fitInto(g, s.sig, L + 24, y + 84, split - L - 48, h - 136, false);
+    g.fillStyle = C.rule; g.fillRect(L + 24, y + h - 44, Math.min(460, split - L - 48), 1.5);
+    g.fillStyle = C.label; g.font = `500 18px ${SANS}`; g.fillText('Signature', L + 24, y + h - 20);
+    y += h + 120;
+    const colW = W / 3;
+    if (stampImg) drawStamp(g, stampImg, R - 104, y - 45, 180, st.stampDate, stampImg.place); // clear of the page number below
+    [['Prepared by', st.preparedBy || ''], ['Checked by', ''], ['Approved by', '']].forEach(([lab, name], i) => {
+      const x = L + i * colW;
+      g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
+      g.fillRect(x, y, colW - 40, 1.5);
+      slipLabel(g, lab, x, y + 30);
+    });
+    y += 40;
+  }
+  // on every page's bottom edge: where it came from (left) and the page number (right)
+  const made = `${st.ref ? `Ref ${st.ref} · ` : ''}made in the company app on ${fmtAbs(stamp())}`;
+  pages.forEach((c, i) => {
+    const p = c.getContext('2d'); p.fillStyle = C.label; p.font = `500 18px ${SANS}`;
+    p.fillText(made, L, limit + 20); p.textAlign = 'right'; p.fillText(`Page ${i + 1} of ${pages.length}`, R, limit + 20);
+  });
+  const jpegs = await Promise.all(pages.map(async c => ({ data: new Uint8Array(await (await canvasJpeg(c, 0.88)).arrayBuffer()), w: SLIP_W, h: SLIP_H })));
+  return new Blob([pdfPages(jpegs)], { type: 'application/pdf' });
+}
+// the voucher or receipt number made for an entry, if any
+const docNo = id => (filesFor(id).filter(f => f.no).pop() || {}).no || '';
+const sumByCur = items => CURS.filter(c => items.some(x => x.cur === c)).map(c => slipMoney(total(items.filter(x => x.cur === c)), c));
+// a statement that isn't kept: made, then offered for sending (it can be made again any time)
+async function shareStatement(st, fileName) {
+  toast('Making the statement…');
+  try { const blob = await renderStatement(st); readySheet(st.title, st.no, blob, fileName); }
+  catch (e) { alert(`The statement could not be made: ${e.message}`); }
+}
+const statementNo = () => { const [[no], seq] = nextIds('ST', 1, S.seq); update({ seq }); return no; };
+// all money received for a project (for its client), with the receipt numbers
+function projectStatement(pid) {
+  const p = S.projects.find(x => x.id === pid), list = live(S.credits).filter(c => c.project === pid).sort(byAt), s = projStats(pid);
+  const st = { title: 'STATEMENT OF PAYMENTS', no: statementNo(), date: fmtDate(stamp().slice(0, 10)),
+    info: [['Project', p.name], ['Project value', p.value ? slipMoney(p.value, p.valueCur || 'USD') : '—'], ['Payments', String(list.length)], ['Period', list.length ? `${fmtDate(list[0].at.slice(0, 10))} – ${fmtDate(list[list.length - 1].at.slice(0, 10))}` : '—']],
+    sections: [{ title: 'Money received', cols: [{ h: 'Date', w: 190 }, { h: 'Receipt / ref', w: 210 }, { h: 'Note', w: 410 }, { h: 'Amount', w: 250, right: true }],
+      rows: list.map(c => [fmtDate(c.at.slice(0, 10)), docNo(c.id) || c.id, c.note || `Into ${accountOf(c.mode)}`, slipMoney(c.amount, c.cur)]) }],
+    summary: sumByCur(list).map(t => ['Total received', t, true]),
+    verdict: p.value ? (s.pending ? { text: `STILL TO RECEIVE ${slipMoney(s.pending, s.vc)}`, good: false } : { text: 'FULLY PAID', good: true }) : null, sign: null };
+  shareStatement(st, `${st.no} ${fileSafe(p.name)}.pdf`);
+}
+// all payments to one name ("Paid to"), with the voucher numbers
+function payeeStatement(name) {
+  const key = clean(name).toLowerCase(), list = live(S.expenses).filter(e => clean(e.paidTo).toLowerCase() === key).sort(byAt);
+  const st = { title: 'STATEMENT OF PAYMENTS', no: statementNo(), date: fmtDate(stamp().slice(0, 10)),
+    info: [['Paid to', name], ['Payments', String(list.length)], ['From', list.length ? fmtDate(list[0].at.slice(0, 10)) : '—'], ['To', list.length ? fmtDate(list[list.length - 1].at.slice(0, 10)) : '—']],
+    sections: [{ title: 'Payments', cols: [{ h: 'Date', w: 190 }, { h: 'Voucher / ref', w: 210 }, { h: 'For', w: 410 }, { h: 'Amount', w: 250, right: true }],
+      rows: list.map(e => [fmtDate(e.at.slice(0, 10)), docNo(e.id) || e.id, e.reason, slipMoney(e.amount, e.cur)]) }],
+    summary: sumByCur(list).map(t => ['Total paid', t, true]), verdict: null, sign: null };
+  shareStatement(st, `${st.no} ${fileSafe(name)}.pdf`);
+}
+
 // the day's rate for an SSP entry, and what it was worth in dollars
 const usdOf = r => (r.cur === 'SSP' && r.rate > 0 ? Math.round(r.amount / r.rate * 100) / 100 : null);
 const rateRow = r => (usdOf(r) === null ? [] : [['Rate', `1 USD = ${plain(r.rate)} SSP · ≈ ${money(usdOf(r), 'USD')}`]]);
@@ -394,10 +540,14 @@ async function saveSlip(f) {
     const p = f.elements.photo && f.elements.photo.files[0];
     const photo = p ? await imgFrom(new Blob([(await prepareFile(p)).data], { type: 'image/jpeg' })) : null;
     const type = k === 'R' ? 'receipt' : r.pay ? 'slip' : 'voucher';
-    const spec = k === 'R' ? receiptSpec(r, clean(f.elements.party.value)) : r.pay ? payslipSpec(r) : voucherSpec(r);
     const [[no], seq] = nextIds(k === 'R' ? 'RC' : 'PV', 1, S.seq);
     update({ seq });
-    const blob = await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, preparedBy: r.by, ref: r.id });
+    // a final settlement payment: its slip is the whole statement (every wage and payment), signed as fully settled
+    const w = r.pay === 'settlement' && workerOf(r.worker);
+    const spec = w ? workerStatementSpec(w, { final: true, no, sig: cv, photo, date: r.at.slice(0, 10), docs: { [r.id]: no } })
+      : k === 'R' ? receiptSpec(r, clean(f.elements.party.value)) : r.pay ? payslipSpec(r) : voucherSpec(r);
+    if (w) spec.signName = w.name;
+    const blob = w ? await renderStatement(spec) : await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, preparedBy: r.by, ref: r.id });
     const name = `${no} ${fileSafe(spec.signName || '')}.pdf`;
     await keepFile({ for: r.id, type, no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
     readySheet(spec.title, no, blob, name);
