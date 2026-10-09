@@ -90,7 +90,7 @@ Needs the sheet script **version 3** (see *Updating the sync script later*).
 - Change your own password or sign out: tap your name at the top.
 
 ## Vouchers, receipts, photos and staff (sheet script version 4)
-Needs the sheet script **version 4 or newer** (the newest is 6) and one extra step after pasting it (see *Updating the sync script later*).
+Needs the sheet script **version 4 or newer** (the newest is 7) and one extra step after pasting it (see *Updating the sync script later*).
 
 - **Payment voucher:** when adding an expense, tick **✍️ Get their signature now** — or open any expense later and
   tap **🧾 Voucher**. The person paid signs on the screen with a finger; you can add a photo of them with the money.
@@ -105,8 +105,12 @@ Needs the sheet script **version 4 or newer** (the newest is 6) and one extra st
     or passport** (required; the ID number is optional). A profile photo (optional) shows in the staff list. The store
     keeper never sees employees. If they started on an **old date**, the form asks whether their salary was paid up to
     the end of last month, up to today, or not fully — then type what was already paid, and it shows what is still owed.
-  - **💵 Pay salary:** pick the month and type the **days not worked** (wage ÷ 30 comes off per day). The amount
-    fills in by itself. Save, the employee signs, and the **salary slip** PDF is ready to send.
+  - **📅 Record days not worked** (on the employee's page): the date (or a first and last day for several days in a
+    row) and a reason. Each day comes off that month's wage (wage ÷ 30 per day). The employee's page lists every day;
+    a day recorded by mistake is deleted by an admin (the office manager asks).
+  - **💵 Pay salary:** pick the month. The days not worked recorded for it are shown with their dates and already taken
+    off; **＋ Add this day** records one more right there. The amount fills in by itself. Save, the employee signs, and
+    the **salary slip** PDF shows the dates ("Less 3 days not worked: 3, 4, 5 Sep").
   - **➖ Advance:** up to **$100 a month** per person. Above that, an admin must approve first (the office manager's
     request appears under **Review**; after approval, **Give it** appears on the employee's page).
   - **🚪 Has left:** the last day of work (the office manager's request waits for an admin). If money is still owed,

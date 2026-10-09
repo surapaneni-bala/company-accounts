@@ -47,6 +47,15 @@ res = post({ token: m.token, since: 0, push: [
 ] });
 assert.deepStrictEqual(res.refused.sort(), ['C-AG1-0002', 'C-AG1-0004', 'C-AG1-0006']);
 
+/* ---------- days not worked: one dated record per day, by admins and the office manager ---------- */
+const absent = (id, u, uid, extra = {}) => ({ id, k: 'A', u, d: { id, worker: 'W-AG1-0001', date: '2026-09-03', note: 'Sick', uid, ...extra } });
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [absent('A-AG1-0001', 15, m.me.id), absent('A-AG1-0002', 15, m.me.id, { date: '3 Sep' }), absent('A-AG1-0003', 15, m.me.id, { worker: 'W-NOPE-0001' })] }).refused.sort(), ['A-AG1-0002', 'A-AG1-0003'], 'a real date, for an employee the sheet has');
+assert.deepStrictEqual(post({ token: s.token, since: 0, push: [absent('A-SK1-0001', 16, s.me.id)] }).refused, ['A-SK1-0001'], 'store keepers do not record them');
+assert.ok(!post({ token: s.token, since: 0, push: [] }).pull.some(p => p.k === 'A'), 'nor receive them');
+assert.ok(post({ token: m.token, since: 0, push: [] }).pull.some(p => p.id === 'A-AG1-0001'), 'the office manager does');
+// a day recorded by mistake: the office manager asks an admin to delete it
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [ask('C-AG1-0009', { kind: 'A', target: 'A-AG1-0001', action: 'delete' })] }).refused, []);
+
 /* ---------- files: uploaded to Drive, then a file record ties them to an entry ---------- */
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC', 'base64').toString('base64');
 const up = post({ op: 'upload', token: s.token, name: 'receipt.png', mime: 'image/png', data: png });

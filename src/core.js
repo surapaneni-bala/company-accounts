@@ -33,7 +33,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', files: 'F' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // A new record made by a signed-in person also carries their login (uid); edits keep the original one.
 function update(patch) {
@@ -821,7 +821,7 @@ async function doSetup(f) {
   const v = Object.fromEntries(new FormData(f));
   if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
   const salt = randHex();
-  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
+  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
   save();
   navigator.storage?.persist?.();
   render(); scrollTo(0, 0); toast('All set! Add your first entry.');
@@ -829,11 +829,11 @@ async function doSetup(f) {
 
 async function deleteRecord(k, id) {
   if (!await unlock('Enter the password to delete this entry.')) return;
-  const key = COLL[k];
+  const key = KIND_KEY[k];
   const r = S[key].find(x => x.id === id);
-  const by = confirmBy(`Delete ${id} — ${money(r.amount, r.cur)}?\n\nIt will be removed from all totals. A record stays in the Change Log.`);
+  const by = confirmBy(`Delete ${k === 'A' ? whatIs(k, r) : `${id} — ${money(r.amount, r.cur)}`}?\n\nIt will be removed from all totals. A record stays in the Change Log.`);
   if (!by) return;
-  update({ [key]: S[key].map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, describe(k, r)]], by), lastBy: by });
+  update({ [key]: S[key].map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, whatIs(k, r)]], by), lastBy: by });
   closeSheet(); render(); toast('Deleted');
 }
 async function deleteProject(id) {

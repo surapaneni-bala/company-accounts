@@ -58,6 +58,16 @@ assert.strictEqual(plain(workerLedger({ ...ben, clearedTo: '2026-07-31' }, [], '
 // not fully paid: what was paid before the app comes off (a negative opening balance)
 assert.strictEqual(plain(workerLedger({ ...ben, openingAmount: -450 }, [], '2026-10-10')).balance, 250, '700 earned, 450 paid before the app');
 
+// days not worked are recorded one by one with their dates; each comes off that month at wage ÷ 30
+const off = (date, extra = {}) => ({ id: 'A-' + date, worker: 'W-1', date, ...extra });
+l = plain(workerLedger(ben, [], '2026-10-20', [off('2026-09-03'), off('2026-09-04'), off('2026-10-02')]));
+assert.deepStrictEqual(l.months.map(m => [m.month, m.daysOff, m.earned]), [['2026-08', 0, 300], ['2026-09', 2, 280], ['2026-10', 1, 190]], 'two days in September, one in October');
+assert.strictEqual(plain(workerLedger(ben, [], '2026-10-20', [off('2026-09-03', { deleted: 'x' }), { ...off('2026-09-04'), worker: 'W-2' }])).earned, 800, 'deleted days and other people\'s days don\'t count');
+assert.strictEqual(plain(workerLedger({ ...ben, clearedTo: '2026-09-30' }, [], '2026-10-20', [off('2026-09-03'), off('2026-10-25')])).earned, 200, 'days before the cleared date or after today don\'t count');
+// salaries saved before dated days existed still carry their number of days, and both add up
+l = plain(workerLedger(ben, [pay('2026-09-30', 0, 'salary', { month: '2026-09', daysOff: 1 })], '2026-10-20', [off('2026-09-03')]));
+assert.strictEqual(l.months.find(m => m.month === '2026-09').daysOff, 2);
+
 /* ---------- advances this month, in dollars (the $100 limit) ---------- */
 assert.strictEqual(advancesUsd(pays, '2026-09'), 180);
 assert.strictEqual(advancesUsd([pay('2026-10-05', 225000, 'advance', { cur: 'SSP', rate: 4500 })], '2026-10'), 50);

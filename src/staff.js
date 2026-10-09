@@ -7,7 +7,11 @@ const ADVANCE_LIMIT_USD = 100; // ponytail: the owner's $100 a month; make it an
 const PAY_REASON = { salary: m => `Salary ${monthName(m)}`, advance: () => 'Salary advance', settlement: () => 'Final settlement' };
 const today = () => stamp().slice(0, 10);
 const workerOf = id => S.workers.find(w => w.id === id);
-const ledgerOf = (w, upTo = today(), extra = []) => workerLedger(w, [...S.expenses, ...extra], upTo);
+const ledgerOf = (w, upTo = today(), extra = []) => workerLedger(w, [...S.expenses, ...extra], upTo, S.absences);
+// the days someone did not work (recorded one by one, with their dates), newest first
+const absencesOf = (id, month) => live(S.absences).filter(a => a.worker === id && (!month || a.date.startsWith(month))).sort((a, b) => b.date.localeCompare(a.date));
+// "3, 7, 8 Oct" — the days of one month
+const dayList = list => { const ds = list.map(a => a.date).sort(); return ds.length ? `${ds.map(d => +d.slice(8, 10)).join(', ')} ${MON[+ds[0].slice(5, 7) - 1]}` : ''; };
 const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join('') || '?';
 // advances an admin approved that nobody has given yet
 const approvedAdvances = id => S.changes.filter(c => c.action === 'advance' && c.target === id && c.status === 'approved' && !live(S.expenses).some(e => e.approval === c.id));
@@ -67,6 +71,9 @@ function workerDetail(id) {
     <h3 class="subh">Wage by month</h3>
     <div class="card list inset">${[...l.months].reverse().slice(0, 12).map(m => `<div class="mrow"><span>${monthName(m.month)}</span><span class="muted">${m.days} days${m.daysOff ? ` − ${m.daysOff} not worked` : ''}</span><b>${money(m.earned, l.cur)}</b></div>`).join('') || '<p class="muted pad">Starts on ' + esc(fmtDate(w.start)) + '.</p>'}</div>
     <p class="muted">Earned ${money(l.earned, l.cur)}${l.opening > 0 ? ` + ${money(l.opening, l.cur)} owed from before the app` : l.opening < 0 ? ` − ${money(-l.opening, l.cur)} paid before the app` : ''} − paid ${money(l.paid, l.cur)} = ${money(l.balance, l.cur)}.${l.unconverted.length ? ` ⚠️ ${l.unconverted.length} payment(s) in another currency without a rate are not counted.` : ''}</p>
+    <h3 class="subh">Days not worked (${absencesOf(id).length})</h3>
+    ${absencesOf(id).length ? `<div class="card list inset">${absencesOf(id).slice(0, 40).map(a => `<button class="row" data-act="openAbsence" data-id="${esc(a.id)}"><span class="dot">📅</span><span class="main"><span class="t"><span class="tt">${esc(fmtDay(a.date))}</span>${waitingFor(a.id).length ? '<i class="tag warn">Delete asked</i>' : ''}</span><span class="s">${esc([a.note, a.by && 'recorded by ' + a.by].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">None recorded.</p>'}
+    ${left ? '' : `<button class="btn ghost" data-act="addAbsence" data-id="${esc(id)}" style="margin-top:10px">📅 Record days not worked</button>`}
     ${filesList(docs, 'Slips and statements')}
     <h3 class="subh">Payments (${pays.length})</h3>
     ${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">Nothing paid yet.</p>'}
@@ -171,6 +178,55 @@ async function saveWorker(f) {
   render(); workerDetail(id); toast(`${rec.name} added ✓`);
 }
 
+// Days not worked: one day, or several days in a row; each comes off that month's wage at wage ÷ 30.
+function absenceForm(id) {
+  const w = workerOf(id);
+  openSheet(`${head('Days not worked', 'out', w.name)}
+    <form data-form="absence" data-id="${esc(id)}">
+      <label class="fld"><span>Day not worked</span><input type="date" name="from" value="${today()}" min="${esc(w.start)}" max="${today()}" required></label>
+      <label class="fld"><span>Until <em>(optional — for several days in a row)</em></span><input type="date" name="to" min="${esc(w.start)}" max="${today()}"></label>
+      ${textField('note', 'Reason', 'e.g. Sick, absent, leave', '', false)}
+      <p class="muted">Each day takes ${money(Math.round(w.wage / 30 * 100) / 100, w.cur)} off that month's wage.</p>
+      ${byField()}
+      <p class="err"></p>
+      <button class="btn out">Save</button>
+    </form>${datalists()}`);
+}
+// the dates from one day to another (both included)
+function datesBetween(a, b) { const out = []; for (let d = a; d <= b && out.length < 62; d = dayAfter(d)) out.push(d); return out; }
+// Record days not worked for someone; days already recorded are skipped. Returns how many were added, or an error.
+function addAbsences(w, from, to, note, by) {
+  if (!DATE_RE.test(from) || from < w.start || from > today()) return 'Pick a day between their start and today';
+  if (to && (!DATE_RE.test(to) || to < from || to > today())) return 'The last day must be after the first, and not after today';
+  const days = datesBetween(from, to || from);
+  if (days.length > 31) return 'At most 31 days at once';
+  if (w.left && days.some(d => d > w.left)) return `They left on ${fmtDate(w.left)}`;
+  if (w.clearedTo && from <= w.clearedTo) return `Their salary is cleared up to ${fmtDate(w.clearedTo)}: days before that don't change the pay`;
+  const have = new Set(absencesOf(w.id).map(a => a.date)), fresh = days.filter(d => !have.has(d));
+  if (!fresh.length) return 'Already recorded';
+  const [ids, seq] = nextIds('A', fresh.length, S.seq), at = stampSec();
+  const span = fresh.length === 1 ? fmtDate(fresh[0]) : `${fmtDate(fresh[0])} – ${fmtDate(fresh[fresh.length - 1])} (${fresh.length} days)`;
+  update({ absences: [...S.absences, ...fresh.map((date, i) => ({ id: ids[i], worker: w.id, date, note, by, createdAt: at }))], seq, lastBy: by,
+    log: logWith([['Days not worked', w.id, `${w.name}: ${span}${note ? ' · ' + note : ''}`]], by) });
+  return fresh.length;
+}
+function saveAbsence(f) {
+  const w = workerOf(f.dataset.id), v = Object.fromEntries(new FormData(f)), by = clean(v.by);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const n = addAbsences(w, v.from, v.to, clean(v.note), by);
+  if (typeof n === 'string') return formErr(f, 'from', n);
+  closeSheet(); render(); toast(`✓ ${n} day${n === 1 ? '' : 's'} not worked recorded for ${w.name}`);
+}
+function absenceSheet(id) {
+  const a = S.absences.find(x => x.id === id), w = a && workerOf(a.worker);
+  if (!a) return;
+  openSheet(`${head('Day not worked', 'out', w ? w.name : a.worker)}
+    <div class="dbig out">${esc(fmtDay(a.date))}</div>
+    ${waitingNote(id)}
+    <dl class="facts">${[['Reason', a.note], ['Recorded by', a.by], ['Recorded', a.createdAt && fmtAbs(String(a.createdAt).slice(0, 16))], ['Comes off', w && `${money(Math.round(w.wage / 30 * 100) / 100, w.cur)} from ${monthName(a.date.slice(0, 7))}`]].filter(x => x[1]).map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    ${can('delete') ? `<button class="btn danger" data-act="del" data-kind="A" data-id="${esc(id)}">🗑 Delete — they did work 🔒</button>` : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="A" data-id="${esc(id)}">🗑 Ask to delete 🔒</button>` : ''}`);
+}
+
 // Someone leaves: an admin records it (the office manager asks), then their final settlement is paid.
 function leftForm(id) {
   const w = workerOf(id);
@@ -235,7 +291,7 @@ function workerStatementSpec(w, { final = false, no, sig = null, photo = null, d
       ['Monthly wage', `${M(w.wage)} (30-day month)`], w.clearedTo ? ['Salary cleared up to', fmtDate(w.clearedTo)] : ['ID / passport no.', w.idNo || '—']],
     sections: [
       { title: 'Wages earned', cols: [{ h: 'Month', w: 330 }, { h: 'Days worked', w: 480 }, { h: 'Earned', w: 250, right: true }],
-        rows: l.months.map(m => [monthName(m.month), `${m.days - m.daysOff} of ${m.days}${m.daysOff ? ` (${m.daysOff} not worked)` : ''}`, M(m.earned)]), total: ['Total earned', M(l.earned)] },
+        rows: l.months.map(m => { const offs = dayList(absencesOf(w.id, m.month)); return [monthName(m.month), `${m.days - m.daysOff} of ${m.days}${m.daysOff ? ` (${m.daysOff} not worked${offs ? `: ${offs}` : ''})` : ''}`, M(m.earned)]; }), total: ['Total earned', M(l.earned)] },
       { title: 'Payments', cols: [{ h: 'Date', w: 170 }, { h: 'Voucher / ref', w: 200 }, { h: 'Details', w: 440 }, { h: 'Paid', w: 250, right: true }],
         rows: pays.map(e => { const c = inWage(e, w.cur); return [fmtDate(e.at.slice(0, 10)), docs[e.id] || docNo(e.id) || e.id, `${e.reason}${e.cur !== w.cur ? ` · ${slipMoney(e.amount, e.cur)}${e.rate ? ` at ${plain(e.rate)}` : ''}` : ''}`, c === null ? 'no rate' : M(c / 100)]; }),
         total: ['Total paid', M(l.paid)] },
@@ -261,11 +317,9 @@ function payMonth(w) {
   const ms = monthsOf(w), paid = new Set(live(S.expenses).filter(e => e.worker === w.id && e.pay === 'salary').map(e => e.month));
   return ms.find((m, i) => i === 1 && !paid.has(m)) || ms[0];
 }
-// what is still owed for work up to the end of that month, if this many days were not worked
-function owedFor(w, month, daysOff) {
-  const end = month ? [today(), `${month}-31`].sort()[0] : today();
-  const extra = month && daysOff ? [{ id: 'new', worker: w.id, pay: 'salary', month, daysOff, amount: 0, cur: w.cur, at: `${end}T00:00` }] : [];
-  return ledgerOf(w, end, extra);
+// what is still owed for work up to the end of that month (the days not worked recorded for it are already off)
+function owedFor(w, month) {
+  return ledgerOf(w, month ? [today(), `${month}-31`].sort()[0] : today());
 }
 function payInfo(f) {
   const w = workerOf(f.dataset.id), pay = f.dataset.pay;
@@ -273,20 +327,21 @@ function payInfo(f) {
     const used = advancesUsd(live(S.expenses).filter(e => e.worker === w.id), today().slice(0, 7));
     return `Advances given to ${esc(w.name)} this month: <b>${money(used, 'USD')}</b> of the ${money(ADVANCE_LIMIT_USD, 'USD')} limit.`;
   }
-  const month = f.elements.month ? f.elements.month.value : '', off = Math.max(0, Math.round(Number(f.elements.daysOff?.value || 0)));
-  const l = owedFor(w, month, off), m = l.months.find(x => x.month === month);
-  return `${m ? `${monthName(month)}: ${m.days - m.daysOff} days worked of ${m.days} → <b>${money(m.earned, l.cur)}</b><br>` : ''}Still to pay ${esc(w.name)}${month ? ` up to the end of ${monthName(month)}` : ''}: <b>${money(l.balance, l.cur)}</b>`;
+  const month = f.elements.month ? f.elements.month.value : '';
+  const l = owedFor(w, month), m = l.months.find(x => x.month === month), offs = month ? absencesOf(w.id, month) : [];
+  return `${m ? `${monthName(month)}: ${m.days - m.daysOff} days worked of ${m.days}${offs.length ? ` (not worked: ${esc(dayList(offs))})` : ''} → <b>${money(m.earned, l.cur)}</b><br>` : ''}Still to pay ${esc(w.name)}${month ? ` up to the end of ${monthName(month)}` : ''}: <b>${money(l.balance, l.cur)}</b>`;
 }
 function payForm(id, pay, approval) {
   const w = workerOf(id), appr = approval && approvedAdvances(id).find(c => c.id === approval);
   const month = pay === 'salary' ? payMonth(w) : '';
-  const suggested = appr ? +appr.after.amount : pay === 'advance' ? '' : Math.max(0, owedFor(w, month, 0).balance);
+  const suggested = appr ? +appr.after.amount : pay === 'advance' ? '' : Math.max(0, owedFor(w, month).balance);
   const cur = appr ? appr.after.cur : w.cur;
   const title = { salary: 'Pay salary', advance: 'Give an advance', settlement: 'Final settlement' }[pay];
   openSheet(`${head(title, 'out', w.name)}
     <form data-form="pay" data-id="${esc(id)}" data-pay="${pay}" data-approval="${esc(appr ? appr.id : '')}">
       ${pay === 'salary' ? `<label class="fld"><span>For the month of</span><select name="month">${monthsOf(w).map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select></label>
-      <label class="fld"><span>Days not worked that month <em>(${money(Math.round(w.wage / 30 * 100) / 100, w.cur)} a day comes off)</em></span><input name="daysOff" type="number" inputmode="numeric" min="0" max="30" step="1" value="0"></label>` : ''}
+      <div class="fld"><span>Days not worked that month <em>(${money(Math.round(w.wage / 30 * 100) / 100, w.cur)} a day comes off)</em></span>
+        <div class="addoff"><input type="date" name="offDate" min="${esc(w.start)}" max="${today()}" aria-label="Day not worked"><button type="button" class="btn small ghost" data-act="addOffHere">＋ Add this day</button></div></div>` : ''}
       <p class="note payinfo"></p>
       ${appr ? `<input type="hidden" name="cur" value="${esc(cur)}"><p class="muted">Approved by ${esc(appr.decidedBy)}: ${money(+appr.after.amount, cur)}</p>` : curChips(cur, 'Paid in')}
       ${amountField(suggested, cur)}
@@ -301,19 +356,28 @@ function payForm(id, pay, approval) {
 }
 function refreshPay(f, t) {
   $('.payinfo', f).innerHTML = payInfo(f);
-  if (t && (t.name === 'month' || t.name === 'daysOff') && !f.dataset.typed) { // keep the suggested amount in step until they type their own
-    const w = workerOf(f.dataset.id), l = owedFor(w, f.elements.month.value, Math.max(0, Math.round(Number(f.elements.daysOff.value || 0))));
+  if (t && (t.name === 'month' || t.name === 'offDate') && !f.dataset.typed) { // keep the suggested amount in step until they type their own
+    const w = workerOf(f.dataset.id), l = owedFor(w, f.elements.month.value);
     f.elements.amount.value = Math.max(0, l.balance) || '';
     refreshAmount(f.elements.amount);
   }
+}
+// a day not worked added straight from the salary screen
+function addOffHere(b) {
+  const f = b.closest('form'), w = workerOf(f.dataset.id), d = f.elements.offDate.value;
+  const by = clean(f.elements.by.value) || myName() || S.lastBy || '';
+  const n = addAbsences(w, d, '', '', by);
+  if (typeof n === 'string') return formErr(f, 'offDate', n);
+  if (d.slice(0, 7) !== f.elements.month.value) toast(`Recorded for ${monthName(d.slice(0, 7))} — another month`);
+  f.elements.offDate.value = '';
+  $('.err', f).textContent = '';
+  refreshPay(f, f.elements.offDate);
 }
 function savePay(f) {
   const w = workerOf(f.dataset.id), pay = f.dataset.pay, v = Object.fromEntries(new FormData(f));
   const amount = parseAmount(v.amount), cur = formCur(f), rate = rateFrom(f, cur);
   if (amount === null) return formErr(f, 'amount', 'Type the amount paid, like 250');
   if (rate === null) return formErr(f, 'rate', RATE_ERR);
-  const daysOff = pay === 'salary' ? Number(v.daysOff || 0) : 0;
-  if (!Number.isInteger(daysOff) || daysOff < 0 || daysOff > 30) return formErr(f, 'daysOff', 'Days not worked: a whole number from 0 to 30');
   const by = clean(v.by);
   if (!by) return formErr(f, 'by', 'Type your name');
   const appr = f.dataset.approval && approvedAdvances(w.id).find(c => c.id === f.dataset.approval);
@@ -328,7 +392,7 @@ function savePay(f) {
   if (appr && (cur !== appr.after.cur || amount > +appr.after.amount)) return formErr(f, 'amount', `The admin approved ${money(+appr.after.amount, appr.after.cur)} — not more.`);
   const month = pay === 'salary' ? v.month : '';
   const rec = { cur, amount, rate, paidTo: w.name, reason: PAY_REASON[pay](month), location: '', project: '', mode: v.mode || 'Cash', ...dateFrom({}),
-    worker: w.id, pay, ...(month ? { month } : {}), ...(daysOff ? { daysOff } : {}), ...(appr ? { approval: appr.id } : {}) };
+    worker: w.id, pay, ...(month ? { month } : {}), ...(appr ? { approval: appr.id } : {}) };
   const [[id], seq] = nextIds('E', 1, S.seq);
   update({ expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq, lastBy: by, lastMode: rec.mode, ...(rate ? { lastRate: rate } : {}) });
   render(); toast(`Saved ✓ ${money(amount, cur)} to ${w.name}`);
@@ -358,7 +422,8 @@ function payslipSpec(r) {
     const m = upTo.months.find(x => x.month === r.month) || { days: 0, daysOff: 0, earned: 0 };
     lines.push({ t: 'Monthly wage (30-day month)', v: M(w.wage) });
     if (m.days < 30) lines.push({ t: `Pay for ${m.days} days (wage ÷ 30 × ${m.days})`, v: M(round2(w.wage * m.days / 30)) });
-    if (m.daysOff) lines.push({ t: `Less ${m.daysOff} day${m.daysOff === 1 ? '' : 's'} not worked`, v: `−${M(round2(w.wage * m.days / 30) - m.earned)}` });
+    const offs = dayList(absencesOf(w.id, r.month));
+    if (m.daysOff) lines.push({ t: `Less ${m.daysOff} day${m.daysOff === 1 ? '' : 's'} not worked${offs ? `: ${offs}` : ''}`, v: `−${M(round2(w.wage * m.days / 30) - m.earned)}` });
     lines.push({ t: `Earned for ${monthName(r.month)}`, v: M(m.earned), strong: true });
     const other = due === null ? 0 : round2(due - m.earned);
     if (other) lines.push({ t: other > 0 ? 'Earlier months still unpaid' : 'Less advances and earlier payments', v: `${other > 0 ? '+' : '−'}${M(Math.abs(other))}` });

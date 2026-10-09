@@ -21,15 +21,17 @@ function inWage(p, cur) {
 
 const dayAfter = d => { const [y, m, dd] = d.split('-').map(Number), t = new Date(Date.UTC(y, m - 1, dd + 1)); return t.toISOString().slice(0, 10); };
 
-// An employee's account: wage earned month by month (less days not worked, entered with that month's salary),
+// An employee's account: wage earned month by month (less days not worked: the dated ones recorded for them, plus
+// the number older salary payments carried),
 // minus everything paid to them (salary, advances, final settlement), plus the balance from before the app
 // (openingAmount: owed to them, or negative = already paid). clearedTo = salary already settled up to that day.
-function workerLedger(w, pays, today) {
+function workerLedger(w, pays, today, absences = []) {
   const end = w.status === 'left' && w.left && w.left < today ? w.left : today;
   const from = w.clearedTo && w.clearedTo >= w.start ? dayAfter(w.clearedTo) : w.start;
   const mine = pays.filter(p => p.worker === w.id && !p.deleted);
   const off = {};
   mine.forEach(p => { if (p.pay === 'salary' && p.month && p.daysOff) off[p.month] = (off[p.month] || 0) + p.daysOff; });
+  absences.forEach(a => { if (a.worker === w.id && !a.deleted && a.date >= from && a.date <= end) off[a.date.slice(0, 7)] = (off[a.date.slice(0, 7)] || 0) + 1; });
   const months = [];
   let earned = 0;
   if (from <= end) {

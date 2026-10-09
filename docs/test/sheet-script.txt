@@ -21,8 +21,9 @@ const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pd
 const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees'];
 // record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
-// File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …)
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F'];
+// File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …),
+// Absence (one day an employee did not work: it comes off that month's wage)
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A'];
 const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement'];
 const BRAND_FILES = ['letterhead', 'stamp']; // the company's own: only admins set them, every login's slips carry them
 const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
@@ -40,6 +41,7 @@ const EDITABLE = {
   T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
   P: ['name', 'value', 'valueCur'],
   W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote', 'clearedTo'],
+  A: ['date', 'note'],
 };
 // The same checks the app makes before it shows a record. Anything else is refused: it would also break the tabs.
 const SHAPES = {
@@ -55,6 +57,7 @@ const SHAPES = {
     && (d.action === 'delete' ? !Object.keys(d.after).length
       : d.action === 'advance' ? d.kind === 'W' && num_(d.after.amount) && d.after.amount > 0 && CURS.indexOf(d.after.cur) >= 0 && Object.keys(d.after).length === 2
       : d.action === undefined && Object.keys(d.after).every(f => EDITABLE[d.kind].indexOf(f) >= 0)),
+  A: d => SAFE_ID.test(d.worker) && DATE_RE.test(d.date) && (d.note === undefined || str_(d.note)),
   W: d => str_(d.name) && num_(d.wage) && d.wage >= 0 && CURS.indexOf(d.cur) >= 0 && DATE_RE.test(d.start)
     && ['active', 'left'].indexOf(d.status || 'active') >= 0 && (!d.left || DATE_RE.test(d.left)) && (d.openingAmount === undefined || num_(d.openingAmount))
     && (!d.clearedTo || DATE_RE.test(d.clearedTo)),
@@ -72,7 +75,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 6; // shown when the web app link is opened in a browser
+const VERSION = 7; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -190,7 +193,7 @@ function allowed_(user, p, before) {
   if (before) return false; // only admins change what is already there (an office manager's edit is a change request)
   if (p.d.uid !== user.id || p.d.deleted) return false; // a new record carries its sender's login and isn't born deleted
   if (p.k === 'F' && BRAND_FILES.indexOf(p.d.type) >= 0) return false; // the company letterhead and stamp: admins only
-  if (user.role === 'manager') return ['E', 'R', 'T', 'P', 'L', 'C', 'W', 'F'].indexOf(p.k) >= 0 && (p.k !== 'C' || p.d.status === 'waiting');
+  if (user.role === 'manager') return ['E', 'R', 'T', 'P', 'L', 'C', 'W', 'F', 'A'].indexOf(p.k) >= 0 && (p.k !== 'C' || p.d.status === 'waiting');
   return p.k === 'E' || p.k === 'L' || p.k === 'F'; // store keeper: own expenses, notes and their receipts
 }
 
@@ -223,6 +226,7 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     // and a non-admin only one they uploaded themselves
     const up = p.k === 'F' ? (uploads || {})[p.d.fileId] : '';
     if (up === undefined || (p.k === 'F' && limited && up !== user.id)) { refused.push(p.id); return; }
+    if (p.k === 'A' && limited && (index[p.d.worker] === undefined || out[index[p.d.worker]][1] !== 'W')) { refused.push(p.id); return; } // a day not worked belongs to an employee
     if (p.k === 'F' && limited) { // a file belongs to a record the sender may see (a store keeper: their own)
       const f = index[p.d.for];
       if (f === undefined || (user.role === 'store' && JSON.parse(out[f][4]).uid !== user.id)) { refused.push(p.id); return; }

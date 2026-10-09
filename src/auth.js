@@ -11,7 +11,7 @@ const RIGHTS = {
   manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval
   store: ['add'],
 };
-const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], files: [] };
+const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [] };
 
 // { token, user: { id, name, username, role }, check: { salt, hash } } — or { out: true, why } once signed out
 let session = loadSession();
@@ -260,9 +260,11 @@ const EDITABLE = {
   T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
   P: ['name', 'value', 'valueCur'],
   W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote', 'clearedTo'],
+  A: ['date', 'note'],
 };
 const editPart = c => (c.action ? {} : Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f))));
-const whatIs = (kind, r) => (kind === 'P' ? `Project "${r.name}"` : kind === 'W' ? `Employee ${r.name}` : describe(kind, r));
+const whatIs = (kind, r) => (kind === 'P' ? `Project "${r.name}"` : kind === 'W' ? `Employee ${r.name}`
+  : kind === 'A' ? `Day not worked: ${(workerOf(r.worker) || {}).name || r.worker}, ${fmtDate(r.date)}${r.note ? ` (${r.note})` : ''}` : describe(kind, r));
 // what approving would really change, worked out from the entry itself — never from the text sent with the request
 function changeLines(c, r) {
   if (!r) return [];
@@ -332,10 +334,10 @@ async function decide(id, ok) {
 // An office manager's delete waits for an admin, like her edits.
 async function askDelete(k, id) {
   if (!await unlock('Enter the password to ask for this entry to be deleted.')) return;
-  const r = S[COLL[k]].find(x => x.id === id);
-  if (!confirm(`Ask an admin to delete ${id} — ${money(r.amount, r.cur)}?\n\nIt stays in the totals until an admin approves.`)) return;
+  const r = S[KIND_KEY[k]].find(x => x.id === id);
+  if (!confirm(`Ask an admin to delete this?\n\n${whatIs(k, r)}\n\nIt stays as it is until an admin approves.`)) return;
   const by = myName() || S.lastBy || '';
-  const [[cid], seq] = nextIds('C', 1, S.seq), text = `Delete: ${describe(k, r)}`;
+  const [[cid], seq] = nextIds('C', 1, S.seq), text = `Delete: ${whatIs(k, r)}`;
   update({
     changes: [...S.changes, { id: cid, kind: k, target: id, action: 'delete', before: {}, after: {}, text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
     log: logWith([['Delete asked', id, `${text} — waiting for an admin`]], by),

@@ -205,6 +205,11 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
   and stamp. Employee (`workerStatementSpec`: wages by month + payments with voucher numbers; final = signed "FULLY
   SETTLED", kept as F type `statement` for the employee, or as the settlement payment's slip), project (receipts) and
   payee (all payments to one "Paid to" name); the last two are made on demand and not kept.
+- **Days not worked** (kind A `{ id, worker, date, note, by }`, one record per day): added by admins and the office
+  manager (the sheet checks the employee exists; store keepers never receive them); `workerLedger(w, pays, today,
+  absences)` takes each day in the counted range off its month (plus the `daysOff` number older salary payments
+  carried). The salary screen lists the month's days and can add one; slips and statements print the dates. Deleting
+  one: admin directly, office manager via a change request (`EDITABLE.A`). `KINDS_SEEN` = 4.
 - **Employees added on an old date:** `clearedTo` (W) = salary settled up to that day (the ledger counts from the next
   day); "not fully paid" stores what was already paid as a negative `openingAmount` ("paid before the app").
   New employees need a job and an ID photo; the Site field is gone (old records keep it).
@@ -301,7 +306,8 @@ git commit -m "fix: …" && git push
 ## 6. Where things stand (open items)
 
 **Version 4–6 — staff, files, vouchers, app lock, stamp, statements: BUILT AND TESTED, NOT RELEASED.** (Script v5 = v4 +
-the company stamp; v6 = + `clearedTo` on employees and the `statement` file type; the app needs ≥ 4 for files.) The source is on branch
+the company stamp; v6 = + `clearedTo` on employees and the `statement` file type; v7 = + days not worked (kind A);
+the app needs ≥ 4 for files.) The source is on branch
 **`staff`** (pushed); `main` got only `docs/test/` (commit e71d330, 9 Oct 2026), so https://app.b-e-p-l.com/test/ runs
 d376856f61 with `/test/sheet-script.txt` v4, while the live app stays 186414e5b5 with `sheet-script.txt` v3. Keep it so
 until release: the live app's "Show me how" must not hand the owner v4 before the Drive permission step. To update

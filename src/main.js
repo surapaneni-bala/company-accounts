@@ -71,12 +71,15 @@ const ACTIONS = {
   markLeft: async b => { if (await unlock('Enter the password to record that this employee has left.')) leftForm(b.dataset.id); },
   payWorker: b => payForm(b.dataset.id, b.dataset.pay, b.dataset.approval),
   settle: b => settleWorker(b.dataset.id),
+  addAbsence: b => absenceForm(b.dataset.id),
+  openAbsence: b => absenceSheet(b.dataset.id),
+  addOffHere: b => addOffHere(b),
   workerStatement: b => workerStatement(b.dataset.id),
   projectStatement: b => projectStatement(b.dataset.id),
   payeeStatement: b => payeeStatement(b.dataset.name),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
