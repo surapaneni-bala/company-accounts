@@ -274,9 +274,11 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
-**Version 4 — staff, files, vouchers, quick unlock: BUILT AND TESTED 8 Oct 2026, NOT RELEASED (uncommitted on `main`).**
-Do not push `main` until the owner has tried it: pushing publishes `sheet-script.txt` v4, and the live app's
-"Show me how" would then hand the owner a script that needs the Drive permission step.
+**Version 4 — staff, files, vouchers, quick unlock: BUILT AND TESTED, NOT RELEASED.** The source is on branch
+**`staff`** (pushed); `main` got only `docs/test/` (commit e71d330, 9 Oct 2026), so https://app.b-e-p-l.com/test/ runs
+d376856f61 with `/test/sheet-script.txt` v4, while the live app stays 186414e5b5 with `sheet-script.txt` v3. Keep it so
+until release: the live app's "Show me how" must not hand the owner v4 before the Drive permission step. To update
+the test copy: on `staff` build `--test`, commit, then on `main` `git checkout staff -- docs/test` and push.
 - Checked: all five `tools/test-*.js` pass; end to end in the browser with the mock (admin, office manager, store
   keeper as three phones): SSP rate required; voucher, receipt and salary slip PDFs (on the real letterhead, read
   back from fake Drive and rendered); upload → F record → other phone downloads it; employee ledger matches a hand
