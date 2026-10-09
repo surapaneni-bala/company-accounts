@@ -147,7 +147,7 @@ function doPost(e) {
 function sheetError_(err) {
   const msg = String(err && err.message || err).slice(0, 300);
   return /permission|authori[sz]/i.test(msg)
-    ? `The Google Sheet may not use Google Drive yet. In Apps Script choose allowFiles, press Run and allow it, then Deploy → Manage deployments → ✏️ → New version. (${msg})`
+    ? `The Google Sheet may not use Google Drive yet. In Apps Script choose allowFiles and press Run; on Google's permission screen tick every box (Select all) and press Continue. (${msg})`
     : `The Google Sheet hit an error: ${msg}`;
 }
 
@@ -322,10 +322,13 @@ function monthFolder_() {
   const found = root.getFoldersByName(month);
   return found.hasNext() ? found.next() : root.createFolder(month);
 }
-// Run this once in the Apps Script editor after pasting version 4: Google then asks permission to use Drive.
+// Run this once in the Apps Script editor after pasting the script: Google then asks permission to use Drive.
+// Google's permission screen has a box for each permission; one left unticked is never asked for again by itself,
+// so this asks for every missing one, then makes the files folder: if Drive is still not allowed, it fails here.
 function allowFiles() {
-  DriveApp.getRootFolder();
-  Logger.log('Drive access is allowed. Now: Deploy → Manage deployments → ✏️ → New version → Deploy.');
+  ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  const folder = monthFolder_();
+  Logger.log(`Drive access is allowed: files go to "Company app files (do not share)/${folder.getName()}". Now: Deploy → Manage deployments → ✏️ → New version → Deploy.`);
 }
 
 // The very first login is the owner's. It needs the company code AND a one-time setup code that is written only

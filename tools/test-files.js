@@ -131,5 +131,9 @@ const nd = loadGas(fs.readFileSync(path.join(__dirname, '../apps-script/Code.gs'
 nd.setup();
 const ndUp = JSON.parse(nd.doPost({ postData: { contents: JSON.stringify({ op: 'upload', key: nd.props.KEY, name: 'a.png', mime: 'image/png', data: png }) } }).getContent());
 assert.ok(!ndUp.ok && /allowFiles/.test(ndUp.error) && /DriveApp/.test(ndUp.error), 'a sheet without Drive permission says so: ' + ndUp.error);
+// allowFiles proves Drive works by making the files folder: without Drive it fails in the editor, not later on the phones
+assert.throws(() => nd.allowFiles(), /DriveApp/, 'allowFiles fails loudly without Drive');
+gas.allowFiles();
+assert.ok(Object.values(gas.dump().drive.folders).some(f => f.name === 'Company app files (do not share)'), 'allowFiles makes the files folder');
 
 console.log('Employees and files: all checks passed');

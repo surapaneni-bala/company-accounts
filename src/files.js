@@ -86,7 +86,7 @@ function uploadWhy() {
 const SLOW_MSG = 'no internet, or it is very slow — they try again by themselves.';
 // A script error comes back as a page the phone cannot read, which looks like "no internet". If the sheet does answer,
 // the failure is the sheet's: almost always a sheet that was never allowed to use Google Drive (allowFiles not run).
-const DRIVE_MSG = 'the Google Sheet answers but cannot save files — it has no permission to use Google Drive yet. In Apps Script choose allowFiles at the top, press Run and allow it, then Deploy → Manage deployments → ✏️ → Version: New version → Deploy.';
+const DRIVE_MSG = "the Google Sheet answers but cannot save files — it has no permission to use Google Drive yet. In Apps Script choose allowFiles at the top and press Run; on Google's permission screen tick every box (Select all) and press Continue.";
 async function uploadFailure(e) {
   if (e.code === 'LOGIN') return '';
   if (!e.offline) return `a file could not be uploaded: ${e.message}`;

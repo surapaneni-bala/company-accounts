@@ -247,7 +247,7 @@ function howUpdateSheet() {
       <li>Open the new script: <a href="${SCRIPT_URL}" target="_blank" rel="noopener">new Code.gs</a>. Select all (<b>Ctrl+A</b>, Mac <b>Cmd+A</b>) and copy (<b>Ctrl+C</b> / <b>Cmd+C</b>).</li>
       <li>In Apps Script click inside the code, select all, press <b>Delete</b>, then paste (<b>Ctrl+V</b> / <b>Cmd+V</b>). Click <b>💾 Save</b>.</li>
       <li>Click the blue <b>Deploy</b> button → <b>Manage deployments</b> → the ✏️ <b>pencil</b>.</li>
-      <li><b>Only the first time you update to version 4 or newer:</b> in the list at the top of Apps Script choose <b>allowFiles</b> and click <b>▶ Run</b>. Google asks for permission to use your Drive: <b>Review permissions</b> → the company account → <b>Advanced → Go to … (unsafe)</b> → <b>Allow</b> (it is your own script). This lets the app keep receipts, vouchers and photos in a private Drive folder.</li>
+      <li><b>Only the first time you update to version 4 or newer:</b> in the list at the top of Apps Script choose <b>allowFiles</b> and click <b>▶ Run</b>. Google asks for permission to use your Drive: <b>Review permissions</b> → the company account → <b>Advanced → Go to … (unsafe)</b> → <b>tick every box (Select all)</b> → <b>Continue</b> (it is your own script; without the Drive box, files can't be saved). This lets the app keep receipts, vouchers and photos in a private Drive folder.</li>
       <li>Under <b>Version</b> choose <b>New version</b>. Leave “Execute as: Me” and “Who has access: Anyone”. Click <b>Deploy</b>.<br><em>Not “New deployment” — that makes a different link.</em></li>
       <li>Come back here and tap <b>Sync now</b>.</li>
     </ol>
