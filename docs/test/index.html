@@ -431,7 +431,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'd9fd992dce'; // filled in by tools/build.js
+const APP_VERSION = '2326eac539'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1514,6 +1514,15 @@ function uploadWhy() {
   return uploadErr || 'they upload by themselves when the internet is on.';
 }
 const SLOW_MSG = 'no internet, or it is very slow — they try again by themselves.';
+// A script error comes back as a page the phone cannot read, which looks like "no internet". If the sheet does answer,
+// the failure is the sheet's: almost always a sheet that was never allowed to use Google Drive (allowFiles not run).
+const DRIVE_MSG = 'the Google Sheet answers but cannot save files — it has no permission to use Google Drive yet. In Apps Script choose allowFiles at the top, press Run and allow it, then Deploy → Manage deployments → ✏️ → Version: New version → Deploy.';
+async function uploadFailure(e) {
+  if (e.code === 'LOGIN') return '';
+  if (!e.offline) return `a file could not be uploaded: ${e.message}`;
+  if (e.timedOut || !await answers(S.link.u)) return SLOW_MSG;
+  return can('settings') ? DRIVE_MSG : 'the Google Sheet cannot save files yet — tell the owner (it needs permission to use Google Drive).';
+}
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
 // ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
 async function uploadFiles() {
@@ -1525,7 +1534,7 @@ async function uploadFiles() {
       if (!rec || !rec.pending) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
       let res;
       try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
-      catch (e) { uploadErr = e.code === 'LOGIN' ? '' : e.offline ? SLOW_MSG : `a file could not be uploaded: ${e.message}`; break; }
+      catch (e) { uploadErr = await uploadFailure(e); break; }
       const { data, pending, ...d } = rec;
       update({ files: [...S.files, { ...d, fileId: res.fileId }] });
       await filePut({ ...rec, fileId: res.fileId, pending: false });
@@ -2311,7 +2320,7 @@ async function callServer(link, body) {
   let res;
   // text/plain body = no CORS preflight, which Apps Script cannot answer
   try { res = await fetch(link.u, { method: 'POST', body: text, signal: ctl.signal }); }
-  catch { throw Object.assign(new Error('No internet'), { offline: true }); }
+  catch (e) { throw Object.assign(new Error('No internet'), { offline: true, timedOut: e.name === 'AbortError' }); }
   finally { clearTimeout(timer); }
   const j = await res.json().catch(() => null);
   if (!j) throw new SyncError('The Google Sheet did not answer. Check the web app link, and that "Who has access" is set to "Anyone".');
