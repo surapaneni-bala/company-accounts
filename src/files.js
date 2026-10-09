@@ -73,18 +73,27 @@ async function keepFile(meta, data) {
   return id;
 }
 
+// Why files are still only on this phone, in plain words (shown wherever a waiting file is).
+function uploadWhy() {
+  if (!S.link) return 'connect the Google Sheet to upload them.';
+  if ((S.link.v || 2) < 4) return can('settings') ? `they upload once the Google Sheet script is updated to version ${NEWEST_SCRIPT} (see "Show me how" below).` : "they upload once the company's Google Sheet script is updated — tell the owner.";
+  if (mustSignIn()) return 'sign in to upload them.';
+  if (uploading) return 'uploading now…';
+  return uploadErr || 'they upload by themselves when the internet is on.';
+}
+const SLOW_MSG = 'no internet, or it is very slow — they try again by themselves.';
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
 // ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
 async function uploadFiles() {
   if (uploading || !S || !S.link || mustSignIn() || !outbox.length || (S.link.v || 2) < 4) return;
-  uploading = true;
+  uploading = true; paintSync();
   try {
     for (const meta of outbox) {
       const rec = await fileGet(meta.id);
       if (!rec || !rec.pending) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
       let res;
       try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
-      catch (e) { uploadErr = e.offline || e.code === 'LOGIN' ? '' : `A file could not be uploaded: ${e.message}`; break; }
+      catch (e) { uploadErr = e.code === 'LOGIN' ? '' : e.offline ? SLOW_MSG : `a file could not be uploaded: ${e.message}`; break; }
       const { data, pending, ...d } = rec;
       update({ files: [...S.files, { ...d, fileId: res.fileId }] });
       await filePut({ ...rec, fileId: res.fileId, pending: false });
@@ -144,7 +153,7 @@ async function showFile(id) {
   openSheet(`${head(title, '', f.name)}
     ${f.mime === 'application/pdf' ? '<p class="filebig">📄</p>' : `<img class="viewimg" src="${URL.createObjectURL(blob)}" alt="${esc(title)}">`}
     <button class="btn in" data-act="shareShown">📤 Send or save</button>
-    ${f.pending ? '<p class="muted center">Kept on this phone. It uploads to the company Drive when the internet is on.</p>' : ''}`);
+    ${f.pending ? `<p class="muted center">Kept on this phone, not uploaded yet: ${esc(uploadWhy())}</p>` : ''}`);
 }
 const shareShown = () => shown && download(shown.blob, shown.name);
 
@@ -712,7 +721,7 @@ function readySheet(title, no, blob, name) {
   shown = { blob, name };
   openSheet(`${head(title[0] + title.slice(1).toLowerCase(), 'in', no)}
     <p class="okbig">✓ Ready</p>
-    <p class="hint center">Kept with the entry${S.link ? ' and saved to the company Google Drive' : ''}. Send it on WhatsApp now, or open it later from the entry.</p>
+    <p class="hint center">Kept with the entry${S.link ? ', and it goes to the company Google Drive by itself (the Sheet tab shows any file still waiting)' : ''}. Send it on WhatsApp now, or open it later from the entry.</p>
     <button class="btn in" data-act="shareShown">📤 Send on WhatsApp or save</button>
     <button class="btn ghost" data-act="close" style="margin-top:10px">Done</button>`);
 }

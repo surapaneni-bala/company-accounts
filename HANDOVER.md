@@ -291,6 +291,7 @@ to `/test/` on an address that already has the real app reloads once while the t
 node tools/pages-like-server.js docs 8795          # behaves like GitHub Pages (10-minute caching)
 node tools/chrome-check.js http://127.0.0.1:8795/ expr.js            # e.g. expr.js: (async()=>({v:APP_VERSION}))()
 node tools/chrome-check.js http://127.0.0.1:8795/ expr.js --offline  # network cut: the app must still open
+node tools/chrome-check.js http://127.0.0.1:8795/ expr.js --slow=8000 # a 64 kbps phone connection (an upload must still finish)
 ```
 
 To test an update, edit `APP_VERSION` in the served `index.html`, the cache name in `sw.js` and
@@ -451,6 +452,9 @@ folder, which is temporary:
 - **Reproduce first:** rebuild the owner's exact data state before fixing a reported total.
 - **Never test a "fix" in a browser that can't run it:** use `tools/chrome-check.js` for anything
   involving the offline copy (and remember the built-in pane now has its own service worker, see §4).
+- **Time limits must grow with what is sent:** a fixed 45-second limit on every request cut off voucher uploads on slow
+  phone connections, silently, forever (reproduced at 64 kbps; `callServer` now adds the body's time at 32 kbps). A file
+  that waits must always say why (`uploadWhy`).
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.
 - **Expect pasted links to be damaged:** the join box replaces its content on paste and finds the
   invite inside any text.
