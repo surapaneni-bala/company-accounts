@@ -271,10 +271,10 @@ async function saveFinal(f) {
   const btn = $('button.btn', f);
   btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
   try {
-    const p = f.elements.photo.files[0], photo = p ? await imgFrom(new Blob([(await prepareFile(p)).data], { type: 'image/jpeg' })) : null;
-    const st = workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo });
+    const st = workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo: framedPhoto(f) });
     const blob = await renderStatement(st), name = `${st.no} ${fileSafe(w.name)} final settlement.pdf`;
     await keepFile({ for: w.id, type: 'statement', no: st.no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
+    await keepTakenPhoto(f, w.id, st.no);
     update({ log: logWith([['Final settlement', w.id, `${w.name}: final settlement statement ${st.no} signed`]]) });
     readySheet(st.title, st.no, blob, name);
   } catch (e) { btn.disabled = false; formErr(f, null, e.message); }

@@ -295,6 +295,9 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 .setup h1 { margin: 10px 0 4px; font-size: 32px; letter-spacing: -.02em; }
 .setup > p { color: var(--muted); margin: 0 0 22px; }
 .logo { display: block; width: 64px; height: 64px; border-radius: 18px; background: #fff; box-shadow: var(--shadow); }
+.wide-logo { display: block; width: auto; height: 72px; max-width: 100%; margin: 0 0 6px; }
+.lk .wide-logo { height: 60px; margin: 0 auto 18px; }
+.co-logo { display: block; height: 48px; width: auto; max-width: 100%; }
 .center { text-align: center; }
 
 /* files, signatures, slips */
@@ -303,9 +306,20 @@ label.btn { display: block; text-align: center; }
 .viewimg { display: block; width: 100%; border-radius: var(--r-sm); margin-bottom: 14px; background: var(--paper); }
 .filebig { font-size: 64px; text-align: center; margin: 10px 0; }
 .stampprev { display: block; width: min(300px, 100%); aspect-ratio: 1; margin: 0 auto 6px; border-radius: var(--r-sm); background: #fff; box-shadow: var(--shadow); }
+.contacts-form { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
+.contacts-form h3 { margin: 0 0 12px; }
 .nudge { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 8px 0 14px; }
 .nudge button { border: 2px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 0; font-size: 18px; font-weight: 800; cursor: pointer; }
 .nudge button:active { background: var(--line); }
+/* framing the payment photo */
+.framer { position: relative; width: 100%; aspect-ratio: 3 / 2; margin-top: 10px; border-radius: var(--r-sm); overflow: hidden; background: #fff; touch-action: none; } /* white like the slip */
+.framer canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.frame-guide { position: absolute; inset: 0; pointer-events: none; border: 3px solid #26306B; border-radius: inherit;
+  background-image: linear-gradient(to right, transparent calc(33.33% - 1px), rgba(255,255,255,.45) calc(33.33% - 1px) 33.33%, transparent 33.33% calc(66.66% - 1px), rgba(255,255,255,.45) calc(66.66% - 1px) 66.66%, transparent 66.66%),
+    linear-gradient(to bottom, transparent calc(33.33% - 1px), rgba(255,255,255,.45) calc(33.33% - 1px) 33.33%, transparent 33.33% calc(66.66% - 1px), rgba(255,255,255,.45) calc(66.66% - 1px) 66.66%, transparent 66.66%); }
+.framer-tools { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 22px; color: var(--muted); }
+.framer-tools input { flex: 1; }
+.framer-hint { margin: 6px 0 0; font-size: 14px; }
 .okbig { font-size: 30px; font-weight: 800; color: var(--in); text-align: center; margin: 4px 0 6px; }
 
 /* staff */

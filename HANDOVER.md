@@ -1,7 +1,7 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **c4014f2231** (employees, files, vouchers, app lock, statements, days not
-worked) · script in this repo: **version 7** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
+Last updated **9 Oct 2026** · live app version **245800c246** (employees, files, vouchers, app lock, statements, days not
+worked, logo, photo framing, B watermark, company contacts on PDFs) · script in this repo: **version 7** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
 
@@ -192,17 +192,30 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
 - **Sections:** `tab = 'menu'` is the first page (Accounts / Employees tiles); `ACC_TABS` (home, hist, proj, sheet) show
   the bottom bar; `staff` is Employees. Without the `staff` right (store keeper) there is no menu. The header shows the
   section name and a round ‹ back button. `WELCOME` (core.js) is the title of the first screen.
-- **Slip pages are as tall as the slip** (A4 width): the form is drawn on a see-through layer, then put on a page with the
-  letterhead's top part and its bottom tenth (`LH_FOOT`, the address strip) at the foot; `pdfPages` sizes each page
-  from its picture. Nothing is painted white over the letterhead, so its watermark shows (tints are see-through).
+- **Pages are as tall as what they hold** (A4 width; statements are full A4 pages): the form is drawn on a see-through
+  layer, then put on the page by `drawLetterhead`: only the letterhead's header (top `LH_TOP` = 18 %) — its address
+  strip is left off everywhere (the owner's choice, 9 Oct 2026); the company's contacts at the top right, level with the
+  logo (`drawContacts`); and the company's "B" (`watermark.png`, cut from the letterhead by `tools/make-icons.py`) in
+  the room below the header, as on the printed letterhead on A4 (`WM`) and shrunk to fit a shorter page, kept to the
+  right edge. The watermark is drawn even without a letterhead. `pdfPages` sizes each page from its picture.
+- **Company contacts** (Settings → Letterhead → "Contacts on every PDF": WhatsApp, phone, website, email; empty ones are
+  left off) are kept as `contact` on the latest letterhead F record (`setBrand`, which also saves the stamp's `place`), because
+  script v7 already sends brand files whole to every login and takes changes to them from admins only — no script change,
+  and the numbers stay out of this public repo. A new letterhead upload copies the contacts over.
+- **Payment photo:** picked or taken, then framed by hand in a 3 : 2 box (drag, pinch, slider; `startFramer`,
+  `framedPhoto`). Zoom 1 fills the box; zooming out goes down to `min`, where the whole photo fits (the box's empty
+  parts are white on screen and see-through on the slip). Slips and statements print it in an exact 3 : 2 box
+  (`photoInto`), so the framing is kept. The photo as taken is also kept with the entry (F type `photo`), listed under its files.
+- **Logo:** `tools/make-icons.py` also writes `src/logo-wide.png` (the whole logo, from the private file) for the menu
+  header, the welcome / sign-in / code screens and slips made before a letterhead is set. A letterhead with the
+  original logo (in place of the edited "ENTERPRISES" one) is `private/brand/letterhead-original-logo.png`. Nothing is painted white over the letterhead, so its watermark shows (tints are see-through).
   One plain type family (`SANS`: Helvetica Neue / Arial / Roboto), no 800 weights; the app uses the phone's system font.
   The signature is cut to its ink (`inkOnly`) and set on its line with the name under it, never enlarged past a pen
   line (`placeSignature`). Stamps are kept as PNG; `cleanStamp` removes whatever background a stamp picture has
   (white paper, a black square from an old JPEG, or none) before it is drawn.
 - **Slips** (files.js `renderSlip`) follow the company's paper voucher: ruled box with paid to | date, being payment
   for | amount in (SSP/USD boxes + amount), amount in words | paid from / rate, received by (signature) | photo, then
-  prepared / checked / approved. It measures first and sets a long slip tighter so it ends above the letterhead
-  footer (y ≤ 1570). The **company stamp** (F type `stamp`, for `settings`, admins only, sent to everyone like the
+  prepared / checked / approved. The page grows to fit what it holds. The **company stamp** (F type `stamp`, for `settings`, admins only, sent to everyone like the
   letterhead) is drawn at the right of "approved"; `inkCircle()` finds its ring from the ink, and the date is written
   letter by letter along the arc at `place = {a, r, s}` (angle, radius and size as parts of the ring's radius;
   defaults `STAMP_PLACE` measured on the owner's stamp), adjustable in Settings → Company stamp and saved on the F record.
@@ -310,6 +323,13 @@ git commit -m "fix: …" && git push
 - Commits use the `type: description` style. No attribution lines (the owner's setting).
 
 ## 6. Where things stand (open items)
+
+**RELEASED 9 Oct 2026 (evening): live app 245800c246** (`main` merged from `photos`; sheet script unchanged, still v7):
+the whole logo in the app, the "B" watermark sized to each page, no address strip on any PDF, the company contacts at the top
+right of every PDF (typed once in Settings → Letterhead), a photo framing box that zooms out to the whole photo, photos kept
+with their entries. Display only — no money code changed (checked by diff); all tests pass; the offline copy installs and
+opens offline in real Chrome. Owner's steps: Update now on each phone; in the real app upload
+`private/brand/letterhead-original-logo.png` as the letterhead, then type the contacts under it.
 
 **RELEASED 9 Oct 2026: live app c4014f2231 + sheet script v7 published** (`main` merged from `staff`). Proved before
 release: all tests; the reviewer's attack scripts stay closed; the owner's old list entered in 186414e5b5 and opened by

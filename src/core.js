@@ -22,7 +22,7 @@ let S = load();
 // 'menu' = the first page after signing in (Accounts, Employees); the bottom bar belongs to Accounts
 let tab = 'menu', histKind = 'E', histQuery = '', histMonth = '';
 const ACC_TABS = ['home', 'hist', 'proj', 'sheet'];
-const WELCOME = 'Welcome to Brookfield';
+const WELCOME = 'Welcome';
 let unlockedUntil = 0;
 
 /* ---------- storage ---------- */
@@ -251,7 +251,8 @@ function render() {
   $('#tabs [data-tab=proj]').hidden = !can('projects');
   $('#whoChip').hidden = !signedIn();
   $('#whoChip').textContent = signedIn() ? `👤 ${session.user.name.split(' ')[0]}` : '';
-  $('#coName').textContent = tab === 'menu' || !can('staff') ? S.company : tab === 'staff' ? 'Employees' : 'Accounts'; // inside a section: its name
+  // the company's logo where its name would be; inside a section, the section's name
+  $('#coName').innerHTML = tab === 'menu' || !can('staff') ? `<img class="co-logo" src="logo-wide.png" alt="${esc(S.company)}">` : tab === 'staff' ? 'Employees' : 'Accounts';
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
   const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were
@@ -266,6 +267,7 @@ let setupMode = ''; // '' = decide when drawn: an invite link in the address ope
 const isPhone = () => matchMedia('(pointer: coarse)').matches;
 const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const APP_LOGO = `<img class="logo" src="icon-192.png" alt="" width="64" height="64">`; // the company's mark (tools/make-icons.py)
+const WIDE_LOGO = `<img class="wide-logo" src="logo-wide.png" alt="Brookfield Enterprises Limited" width="441" height="180">`; // mark and name
 function viewSetup() {
   const mode = setupMode || 'join';
   const logo = APP_LOGO;
@@ -282,7 +284,7 @@ function viewSetup() {
       <p class="err"></p>
       <button class="btn primary">Start</button>
     </form>${back}</section>`;
-  return `<section class="setup card pad">${logo}
+  return `<section class="setup card pad">${WIDE_LOGO}
     <h1>${WELCOME}</h1>
     <p>Open the invite link you were sent, or paste it below. Then sign in with the username and password your admin gave you.</p>${tip}
     <form data-form="join">
