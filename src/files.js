@@ -84,6 +84,15 @@ function uploadWhy() {
   return uploadErr || 'they upload by themselves when the internet is on.';
 }
 const SLOW_MSG = 'no internet, or it is very slow — they try again by themselves.';
+// A script error comes back as a page the phone cannot read, which looks like "no internet". If the sheet does answer,
+// the failure is the sheet's: almost always a sheet that was never allowed to use Google Drive (allowFiles not run).
+const DRIVE_MSG = 'the Google Sheet answers but cannot save files — it has no permission to use Google Drive yet. In Apps Script choose allowFiles at the top, press Run and allow it, then Deploy → Manage deployments → ✏️ → Version: New version → Deploy.';
+async function uploadFailure(e) {
+  if (e.code === 'LOGIN') return '';
+  if (!e.offline) return `a file could not be uploaded: ${e.message}`;
+  if (e.timedOut || !await answers(S.link.u)) return SLOW_MSG;
+  return can('settings') ? DRIVE_MSG : 'the Google Sheet cannot save files yet — tell the owner (it needs permission to use Google Drive).';
+}
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
 // ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
 async function uploadFiles() {
@@ -95,7 +104,7 @@ async function uploadFiles() {
       if (!rec || !rec.pending) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
       let res;
       try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
-      catch (e) { uploadErr = e.code === 'LOGIN' ? '' : e.offline ? SLOW_MSG : `a file could not be uploaded: ${e.message}`; break; }
+      catch (e) { uploadErr = await uploadFailure(e); break; }
       const { data, pending, ...d } = rec;
       update({ files: [...S.files, { ...d, fileId: res.fileId }] });
       await filePut({ ...rec, fileId: res.fileId, pending: false });

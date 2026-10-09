@@ -92,7 +92,7 @@ async function callServer(link, body) {
   let res;
   // text/plain body = no CORS preflight, which Apps Script cannot answer
   try { res = await fetch(link.u, { method: 'POST', body: text, signal: ctl.signal }); }
-  catch { throw Object.assign(new Error('No internet'), { offline: true }); }
+  catch (e) { throw Object.assign(new Error('No internet'), { offline: true, timedOut: e.name === 'AbortError' }); }
   finally { clearTimeout(timer); }
   const j = await res.json().catch(() => null);
   if (!j) throw new SyncError('The Google Sheet did not answer. Check the web app link, and that "Who has access" is set to "Anyone".');

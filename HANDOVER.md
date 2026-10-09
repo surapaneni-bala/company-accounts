@@ -277,6 +277,8 @@ python3 -m http.server 8764 --bind 127.0.0.1 --directory docs
 node tools/mock-server.js           # prints a company code; web app link = http://127.0.0.1:8770/exec
 #   CODE=/path/to/other/Code.gs  → run another script version (e.g. an old one: git show <rev>:apps-script/Code.gs)
 #   BLOCK=1                      → behave like a sheet whose access is not "Anyone"
+#   NODRIVE=1                    → a sheet never allowed to use Google Drive (allowFiles not run): sync works, uploads fail
+#                                   with an error page the browser cannot read, exactly like Google
 ```
 
 - Open `http://127.0.0.1:8764/` and `http://localhost:8764/`. They are two different origins, so they
@@ -461,6 +463,10 @@ folder, which is temporary:
 - **Time limits must grow with what is sent:** a fixed 45-second limit on every request cut off voucher uploads on slow
   phone connections, silently, forever (reproduced at 64 kbps; `callServer` now adds the body's time at 32 kbps). A file
   that waits must always say why (`uploadWhy`).
+- **A script error looks like "no internet"** to the phone: Google answers an uncaught error with a page that has no CORS
+  headers, so `fetch` rejects. The owner's first live vouchers (9 Oct) never uploaded while sync worked — most likely the real
+  sheet had never been allowed to use Drive (`allowFiles` not run); reproduced with the mock's NODRIVE=1. `uploadFailure` now asks the sheet (`answers`) and,
+  if it answers, names the Drive permission step instead of blaming the internet.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.
 - **Expect pasted links to be damaged:** the join box replaces its content on paste and finds the
   invite inside any text.

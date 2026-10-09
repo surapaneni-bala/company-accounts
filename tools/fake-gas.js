@@ -100,7 +100,9 @@ function makeDrive(drive) {
 }
 const newBlob = (bytes, mime, name) => ({ getBytes: () => bytes.slice(), getContentType: () => mime, getName: () => name });
 
-function loadGas(code, state = {}) {
+// opts.noDrive: like a sheet whose owner never allowed Google Drive (allowFiles not run): every Drive call fails
+const NO_DRIVE = new Proxy({}, { get: (_, k) => () => { throw new Error(`You do not have permission to call DriveApp.${String(k)}. Required permissions: https://www.googleapis.com/auth/drive`); } });
+function loadGas(code, state = {}, opts = {}) {
   const props = { ...(state.props || {}) };
   const drive = state.drive || {};
   const ss = makeSpreadsheet(state);
@@ -120,7 +122,7 @@ function loadGas(code, state = {}) {
       base64Encode: bytes => Buffer.from(Uint8Array.from(bytes, b => b & 255)).toString('base64'),
       newBlob,
     },
-    DriveApp: makeDrive(drive),
+    DriveApp: opts.noDrive ? NO_DRIVE : makeDrive(drive),
     Session: { getScriptTimeZone: () => 'UTC' },
     Logger: { log: () => {} },
   };
