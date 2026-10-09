@@ -26,6 +26,7 @@
   --ease: cubic-bezier(.16,1,.3,1);
 }
 * { box-sizing: border-box; }
+html { touch-action: manipulation; } /* no double-tap zoom on phones */
 html, body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
@@ -296,6 +297,29 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 .logo { width: 64px; height: 64px; border-radius: 20px; background: var(--ink); display: grid; place-items: center; }
 .center { text-align: center; }
 
+/* files, signatures, slips */
+label.btn { display: block; text-align: center; }
+.sig { display: block; width: 100%; height: 200px; touch-action: none; background: #fff; border: 2px dashed #CFC6B4; border-radius: var(--r-sm); }
+.viewimg { display: block; width: 100%; border-radius: var(--r-sm); margin-bottom: 14px; background: var(--paper); }
+.filebig { font-size: 64px; text-align: center; margin: 10px 0; }
+.okbig { font-size: 30px; font-weight: 800; color: var(--in); text-align: center; margin: 4px 0 6px; }
+
+/* staff */
+.dot.avatar { background: #E8ECF6; color: var(--ink); font-size: 15px; }
+.amt small { display: block; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; text-align: right; }
+.amt.neg { color: var(--out); }
+.wtop { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.wphoto { width: 84px; height: 84px; flex: none; border-radius: 50%; background: #E8ECF6; display: grid; place-items: center; font-weight: 800; font-size: 26px; overflow: hidden; }
+.wphoto img { width: 100%; height: 100%; object-fit: cover; }
+.wtop > div { min-width: 0; }
+.wtop .dbig { white-space: nowrap; font-size: clamp(24px, 8vw, 44px); }
+.mrow { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; padding: 10px 14px; border-top: 1px solid var(--line); }
+.mrow:first-child { border-top: 0; }
+.mrow b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mrow .muted { font-size: 13px; text-align: right; }
+details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-weight: 800; color: var(--muted); padding: 8px 4px 12px; }
+.payinfo { line-height: 1.5; }
+
 .toast { position: fixed; left: 50%; bottom: 100px; transform: translate(-50%, 20px); background: var(--ink); color: #fff; font-weight: 800; padding: 14px 20px; border-radius: 16px; opacity: 0; pointer-events: none; transition: .3s var(--ease); z-index: 10; max-width: calc(100% - 32px); text-align: center; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 </style>
@@ -315,6 +339,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
     <button data-act="tab" data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
     <button data-act="tab" data-tab="hist"><svg viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>History</button>
     <button data-act="tab" data-tab="proj"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/></svg>Projects</button>
+    <button data-act="tab" data-tab="staff" hidden><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg>Staff</button>
     <button data-act="tab" data-tab="sheet"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Sheet</button>
   </div>
 </nav>
@@ -324,12 +349,13 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 <dialog id="pw" class="sheet pwbox">
   <form id="pwForm" class="sin">
     <div class="lockic">🔒</div>
-    <h2>Password needed</h2>
+    <h2 id="pwTitle">Password needed</h2>
     <p id="pwWhy"></p>
     <input type="password" id="pwIn" autocomplete="current-password" placeholder="Password" required>
     <p class="err" id="pwErr"></p>
+    <button type="button" class="btn in" id="pwBio" hidden style="margin-bottom:10px">Use Face ID / fingerprint</button>
     <div class="two"><button type="button" class="btn ghost" id="pwCancel">Cancel</button><button class="btn primary">Unlock</button></div>
-    <p class="muted" style="margin:14px 0 0">Stays unlocked for 5 minutes.</p>
+    <p class="muted" style="margin:14px 0 0">Stays unlocked for 5 minutes. <button type="button" class="link" id="pwSwitch" hidden></button></p>
   </form>
 </dialog>
 
@@ -337,7 +363,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 <script>
 'use strict';
-const APP_VERSION = '792efc598e'; // filled in by tools/build.js
+const APP_VERSION = 'd376856f61'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -368,7 +394,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', files: 'F' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // A new record made by a signed-in person also carries their login (uid); edits keep the original one.
 function update(patch) {
@@ -442,8 +468,14 @@ function nextIds(prefix, n, seq) {
 }
 const logWith = (entries, by = S.lastBy || '') => [...S.log, ...entries.map(([action, id, text], i) => ({ lid: `L-${S.dev}-${Date.now().toString(36)}${i}`, at: stampSec(), action, id, text, by }))];
 
-const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved' };
-function showVal(k, r) { const v = r[k]; return k === 'amount' ? money(+v, r.cur) : k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : k === 'mode' ? accountOf(v) : k === 'from' ? `${v} → ${v === 'Cash' ? 'Bank' : 'Cash'}` : (v || '(empty)'); }
+const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved', rate: 'SSP for 1 USD',
+  to: 'Moved to', manualDate: 'Date set by hand', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Opening balance', openingNote: 'Opening note' };
+function showVal(k, r) {
+  const v = r[k];
+  if (['amount', 'wage', 'openingAmount'].includes(k)) return v === undefined || v === '' ? '(empty)' : money(+v, r.cur);
+  if (['start', 'left'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  return k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : k === 'mode' ? accountOf(v) : k === 'from' ? `${v} → ${v === 'Cash' ? 'Bank' : 'Cash'}` : k === 'rate' ? (v ? plain(+v) : '(empty)') : k === 'status' ? (v === 'left' ? 'Left' : 'Working') : k === 'manualDate' ? (v ? 'yes' : 'no') : (v || '(empty)');
+}
 function diff(a, b) { return Object.keys(LABELS).filter(k => k in b && String(a[k] ?? '') !== String(b[k] ?? '')).map(k => `${LABELS[k]}: ${showVal(k, a)} → ${showVal(k, b)}`); }
 function describe(k, r) {
   if (k === 'T') return `${money(r.amount, r.cur)} moved from ${r.from} to ${r.to}${r.note ? ' · ' + r.note : ''} · dated ${fmtAbs(r.at)}`;
@@ -467,40 +499,76 @@ async function hashPw(pw, salt) {
   return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 const isUnlocked = () => Date.now() < unlockedUntil;
-function unlock(why) {
-  if (isUnlocked()) return Promise.resolve(true);
+// fresh = ask for the password itself even if unlocked a moment ago (e.g. before setting up quick unlock)
+function unlock(why, fresh) {
+  if (isUnlocked() && !fresh) return Promise.resolve(true);
   return new Promise(resolve => {
-    const d = $('#pw');
-    // signed in: your own password; otherwise the company password, as before logins
-    const pass = signedIn() ? session.check : S.pass;
+    const d = $('#pw'), inp = $('#pwIn'), q = fresh ? null : quick();
+    let useCode = !!q;
+    // signed in: your own password (or your quick-unlock code); otherwise the company password, as before logins
+    const paint = () => {
+      $('#pwTitle').textContent = useCode ? 'Code needed' : 'Password needed';
+      inp.placeholder = useCode ? 'Your code' : signedIn() ? 'Your password' : 'Password';
+      inp.inputMode = useCode ? 'numeric' : 'text';
+      inp.autocomplete = useCode ? 'off' : 'current-password';
+      $('#pwBio').hidden = !(useCode && q.cred);
+      $('#pwSwitch').hidden = !q;
+      $('#pwSwitch').textContent = useCode ? 'Use my password instead' : 'Use my code';
+      inp.value = ''; inp.focus();
+    };
+    const ok = () => { unlockedUntil = Date.now() + UNLOCK_MS; d.close('ok'); renderLock(); resolve(true); };
+    const wrong = msg => { $('#pwErr').textContent = msg; inp.select(); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake'); };
     $('#pwWhy').textContent = signedIn() ? why.replace('the password', 'your password') : why;
-    $('#pwIn').value = ''; $('#pwErr').textContent = ''; $('#pwIn').placeholder = signedIn() ? 'Your password' : 'Password';
+    $('#pwErr').textContent = '';
     d.returnValue = '';
-    d.showModal(); $('#pwIn').focus();
+    d.showModal(); paint();
     $('#pwCancel').onclick = () => d.close();
+    $('#pwSwitch').onclick = () => { useCode = !useCode; $('#pwErr').textContent = ''; paint(); };
+    $('#pwBio').onclick = async () => { if (await bioCheck()) ok(); else $('#pwErr').textContent = 'Face ID / fingerprint did not work. Type your code.'; };
     $('#pwForm').onsubmit = async e => {
       e.preventDefault();
-      if (pass && await (signedIn() ? slowHash : hashPw)($('#pwIn').value, pass.salt) === pass.hash) {
-        unlockedUntil = Date.now() + UNLOCK_MS; d.close('ok'); renderLock(); resolve(true);
-      } else {
-        $('#pwErr').textContent = 'Wrong password. Try again.';
-        $('#pwIn').select(); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake');
+      if (useCode) {
+        const now = quick();
+        if (now && await slowHash(inp.value, now.salt) === now.hash) { if (now.tries) saveSession({ ...session, quick: { ...now, tries: 0 } }); return ok(); }
+        const tries = (session.quick.tries || 0) + 1;
+        saveSession({ ...session, quick: { ...session.quick, tries } });
+        if (tries < QUICK_TRIES) return wrong(`Wrong code. ${QUICK_TRIES - tries} ${QUICK_TRIES - tries === 1 ? 'try' : 'tries'} left, then your password is needed.`);
+        useCode = false; paint();
+        return wrong('Too many wrong codes. Type your password.');
       }
+      const pass = signedIn() ? session.check : S.pass;
+      if (pass && await (signedIn() ? slowHash : hashPw)(inp.value, pass.salt) === pass.hash) {
+        if (session && session.quick && session.quick.tries) saveSession({ ...session, quick: { ...session.quick, tries: 0 } }); // the password opens the code again
+        ok();
+      } else wrong('Wrong password. Try again.');
     };
     d.onclose = () => { if (d.returnValue !== 'ok') resolve(false); };
+    if (useCode && q.cred) $('#pwBio').click(); // straight to Face ID; the code is right there if it fails
   });
 }
 function renderLock() { const p = $('#lockPill'); if (p) p.hidden = !isUnlocked(); }
 
 /* ---------- ui bits ---------- */
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2600); }
+// here = how to redraw the sheet on screen (after a file is added); back = the sheet to return to when the one
+// on top closes: an entry opened from a project or an employee goes back there after it is edited or closed.
+let here = null, back = null;
 function openSheet(html) {
   const d = $('#sheet'); $('#sheetIn').innerHTML = html;
-  if (!d.open) d.showModal();
+  if (!d.open) { back = null; d.showModal(); }
+  here = null;
   d.scrollTop = 0;
   ($('[autofocus]', d) || $('.close', d))?.focus();
 }
-const closeSheet = () => $('#sheet').close();
+// a sheet others can return to: call right after drawing it
+function comeBack(fn) { here = back = fn; }
+function closeSheet() {
+  const to = back;
+  if (to && to !== here && $('#sheet').open && to() !== false) return;
+  closeAll();
+}
+function closeAll() { back = here = null; $('#sheet').close(); }
+const reopenHere = () => { if (here && $('#sheet').open) here(); };
 const head = (title, tone = '', sub = '') => `<div class="sh-head ${tone ? 'tone-' + tone : ''}"><div><h2>${esc(title)}</h2>${sub ? `<small>${esc(sub)}</small>` : ''}</div><button type="button" class="close" data-act="close" aria-label="Close">×</button></div>`;
 const empty = (title, text) => `<div class="card empty"><strong>${title}</strong>${text}</div>`;
 const curLines = (vals, curs = CURS) => curs.map(c => `<b>${money(vals[c], c)}</b>`).join('');
@@ -524,6 +592,11 @@ const datalists = () => ['paidTo', 'reason', 'location', 'by'].map(f => `<datali
 const textField = (name, label, ph, val, req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input name="${name}" placeholder="${ph}" value="${esc(val)}" ${['paidTo', 'reason', 'location'].includes(name) ? `list="dl-${name}"` : ''} autocomplete="off" maxlength="160" ${req ? 'required' : ''}></label>`;
 const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${esc(c)}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
 const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${esc(val || '')}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
+// Every SSP entry states that day's rate (SSP for 1 US dollar), so its dollar value is known later.
+const rateField = (cur, rate) => `<label class="fld ratef" ${cur === 'SSP' ? '' : 'hidden'}><span>SSP for 1 USD <em>(today's rate)</em></span><input name="rate" inputmode="decimal" placeholder="e.g. 4500" value="${esc(rate || S.lastRate || '')}" autocomplete="off" ${cur === 'SSP' ? 'required' : ''}><small class="amt-preview rate-usd"></small></label>`;
+// the rate typed in a form: undefined for USD, null when SSP and missing or wrong
+const rateFrom = (f, cur) => (cur === 'SSP' ? parseAmount(f.elements.rate && f.elements.rate.value) : undefined);
+const RATE_ERR = 'Type how many SSP make 1 US dollar today, like 4500';
 const byField = () => (signedIn()
   ? `<input type="hidden" name="by" value="${esc(myName())}"><p class="muted">Entered by <b>${esc(myName())}</b></p>`
   : `<label class="fld"><span>Your name <em>(who is entering this)</em></span><input name="by" placeholder="Type your name" value="${esc(S.lastBy || '')}" list="dl-by" autocomplete="off" maxlength="60" required></label>`);
@@ -556,14 +629,18 @@ function render() {
   $('#hdr').hidden = $('#tabs').hidden = !ready;
   if (!ready) { main.innerHTML = viewSetup(); $('[autofocus]', main)?.focus(); return; }
   if (mustSignIn()) { $('#hdr').hidden = $('#tabs').hidden = true; main.innerHTML = viewSignIn(); $('[autofocus]', main)?.focus(); return; }
-  if (tab === 'proj' && !can('projects')) tab = 'home';
+  if ((tab === 'proj' && !can('projects')) || (tab === 'staff' && !can('staff'))) tab = 'home';
   $('#tabs [data-tab=proj]').hidden = !can('projects');
+  $('#tabs [data-tab=staff]').hidden = !can('staff');
   $('#whoChip').hidden = !signedIn();
   $('#whoChip').textContent = signedIn() ? `👤 ${session.user.name.split(' ')[0]}` : '';
   $('#coName').textContent = S.company;
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
-  main.innerHTML = { home: viewHome, hist: viewHistory, proj: viewProjects, sheet: viewSheet }[tab]();
+  const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were
+  main.innerHTML = { home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet }[tab]();
+  if (y) scrollTo(0, y);
+  render.tab = tab;
   renderLock(); paintSync();
 }
 
@@ -738,6 +815,7 @@ function viewSheet() {
       <section class="card pad">
         <h3>⚙️ Settings</h3>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : 'Not set — slips get a plain heading'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
       </section>
@@ -751,6 +829,7 @@ function expenseForm(old) {
     <form data-form="expense" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
+      ${rateField(d.cur, d.rate)}
       ${textField('paidTo', 'Paid to', 'Who did you pay?', d.paidTo)}
       ${textField('reason', 'Reason', 'What was it for?', d.reason)}
       ${textField('location', 'Location', 'Where?', d.location, false)}
@@ -758,6 +837,7 @@ function expenseForm(old) {
       ${accountChips(d.mode, 'Paid from')}
       ${whenField(old?.at, !!old)}
       ${byField()}${approvalNote(old)}
+      ${old ? '' : `<label class="fld check"><input type="checkbox" name="sign"> ✍️ Get their signature now (payment voucher)</label>`}
       <p class="err"></p>
       <button class="btn out">${old ? saveLabel() : 'Save expense'}</button>
     </form>${datalists()}`);
@@ -768,11 +848,13 @@ function creditForm(old, presetProject) {
     <form data-form="credit" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
+      ${rateField(d.cur, d.rate)}
       ${projectSelect(d.project, false)}
       ${accountChips(d.mode, 'Received into')}
       ${textField('note', 'Note', 'e.g. 2nd installment', d.note, false)}
       ${whenField(old?.at, !!old)}
       ${byField()}${approvalNote(old)}
+      ${old ? '' : `<label class="fld check"><input type="checkbox" name="sign"> 🧾 Make a receipt now</label>`}
       <p class="err"></p>
       <button class="btn in">${old ? saveLabel() : 'Save money received'}</button>
     </form>${datalists()}`);
@@ -801,6 +883,7 @@ function bulkForm() {
     <p class="hint">One line for each payment. Empty lines are skipped.</p>
     <form data-form="bulk">
       ${curChips(defCur(), 'Money type (for every line)')}
+      ${rateField(defCur())}
       <div class="brows">${bulkRow().repeat(4)}</div>
       <button type="button" class="btn small ghost" data-act="addRow">＋ Add another line</button>
       <div class="shared"><h3>Same for every line</h3>
@@ -849,8 +932,8 @@ function detail(k, id) {
   if (!r) return;
   const common = [['Date', fmtAbs(r.at)], ['Entered by', r.by], ['Recorded', fmtAbs(r.createdAt)], ['Last edited', r.editedAt && fmtAbs(r.editedAt)], ['Edited by', r.editedBy]];
   const facts = {
-    E: () => [['Money type', CUR_NAME[r.cur]], ['Paid to', r.paidTo], ['Reason', r.reason], ['Location', r.location], ['Project', projName(r.project)], ['Paid from', `${ACCOUNT_ICON[accountOf(r.mode)]} ${accountOf(r.mode)}`], ['Bulk group', r.batch], ...common],
-    R: () => [['Money type', CUR_NAME[r.cur]], ['Project', projName(r.project)], ['Received into', `${ACCOUNT_ICON[accountOf(r.mode)]} ${accountOf(r.mode)}`], ['Note', r.note], ...common],
+    E: () => [['Money type', CUR_NAME[r.cur]], ...rateFact(r), ['Paid to', r.paidTo], ['Reason', r.reason], ['Location', r.location], ['Project', projName(r.project)], ['Paid from', `${ACCOUNT_ICON[accountOf(r.mode)]} ${accountOf(r.mode)}`], ['Bulk group', r.batch], ...common],
+    R: () => [['Money type', CUR_NAME[r.cur]], ...rateFact(r), ['Project', projName(r.project)], ['Received into', `${ACCOUNT_ICON[accountOf(r.mode)]} ${accountOf(r.mode)}`], ['Note', r.note], ...common],
     T: () => [['Money type', CUR_NAME[r.cur]], ['From', `${ACCOUNT_ICON[r.from]} ${r.from}`], ['To', `${ACCOUNT_ICON[r.to]} ${r.to}`], ['Note', r.note], ...common],
   }[k]();
   const look = { E: ['Expense', 'out', '−'], R: ['Money received', 'in', '+'], T: ['Money moved', '', ''] }[k];
@@ -858,11 +941,15 @@ function detail(k, id) {
     <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
     ${waitingNote(id)}
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
-    <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : ''}</div>
-    ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}`);
+    ${k === 'T' || r.deleted ? '' : `<div class="two" style="margin-bottom:10px"><button class="btn ${k === 'E' ? 'out' : 'in'}" data-act="slip" data-kind="${k}" data-id="${esc(id)}">🧾 ${k === 'E' ? (r.pay ? 'Slip' : 'Voucher') : 'Receipt'}</button>${attachButton(id, '📎 Attach')}</div>`}
+    <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="${k}" data-id="${esc(id)}">🗑 Ask to delete 🔒</button>` : ''}</div>
+    ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}
+    ${filesBlock(id)}`);
+  here = () => detail(k, id);
 }
+const rateFact = r => (usdOf(r) === null ? [] : [['SSP for 1 USD', `${plain(r.rate)} · about ${money(usdOf(r), 'USD')}`]]);
 function projectDetail(id) {
-  const p = S.projects.find(x => x.id === id); if (!p) return;
+  const p = S.projects.find(x => x.id === id); if (!p || p.deleted) return false;
   const s = projStats(id);
   const R = live(S.credits).filter(c => c.project === id).sort((a, b) => byAt(b, a));
   const E = live(S.expenses).filter(e => e.project === id).sort((a, b) => byAt(b, a));
@@ -876,6 +963,7 @@ function projectDetail(id) {
     ${R.length ? `<div class="card list inset">${R.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}
     <h3 class="subh">Spent on this project (${E.length})</h3>
     ${E.length ? `<div class="card list inset">${E.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">No expenses linked to this project yet.</p>'}`);
+  comeBack(() => projectDetail(id));
 }
 
 /* ---------- saving ---------- */
@@ -889,7 +977,9 @@ function saveExpense(f) {
   const old = S.expenses.find(x => x.id === f.dataset.id);
   const amount = parseAmount(v.amount);
   if (amount === null) return formErr(f, 'amount', 'Type a correct amount, like 500');
-  const rec = { cur: formCur(f), amount, paidTo: clean(v.paidTo), reason: clean(v.reason), location: clean(v.location), project: v.project || '', mode: v.mode || 'Cash', ...dateFrom(v, old) };
+  const cur = formCur(f), rate = rateFrom(f, cur);
+  if (rate === null) return formErr(f, 'rate', RATE_ERR);
+  const rec = { cur, amount, rate, paidTo: clean(v.paidTo), reason: clean(v.reason), location: clean(v.location), project: v.project || '', mode: v.mode || 'Cash', ...dateFrom(v, old) };
   if (!rec.paidTo) return formErr(f, 'paidTo', 'Who did you pay?');
   if (!rec.reason) return formErr(f, 'reason', 'What was it for?');
   const by = clean(v.by);
@@ -905,9 +995,10 @@ function saveExpense(f) {
     update({
       expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq,
       log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('E', rec)}`]], by) : S.log,
-      lastLoc: rec.location, lastMode: rec.mode, lastExpProject: rec.project, lastBy: by, lastCur: rec.cur,
+      lastLoc: rec.location, lastMode: rec.mode, lastExpProject: rec.project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
     });
     toast(`Saved ✓ ${money(amount, rec.cur)} to ${rec.paidTo}`);
+    if (v.sign) { render(); return slipSheet('E', id); }
   }
   closeSheet(); render();
 }
@@ -994,7 +1085,9 @@ function saveCredit(f) {
   const [project, projects, seq0] = projectFromForm(v);
   if (!project) return formErr(f, 'newProject', 'Type the new project name');
   if (!by) return formErr(f, 'by', 'Type your name');
-  const rec = { cur: formCur(f), amount, project, mode: v.mode || 'Bank', note: clean(v.note), ...dateFrom(v, old) };
+  const cur = formCur(f), rate = rateFrom(f, cur);
+  if (rate === null) return formErr(f, 'rate', RATE_ERR);
+  const rec = { cur, amount, rate, project, mode: v.mode || 'Bank', note: clean(v.note), ...dateFrom(v, old) };
   if (projects !== S.projects) update({ projects, seq: seq0 }); // a new project must exist before describe()/log
   if (old) {
     const changes = diff(old, rec);
@@ -1005,10 +1098,11 @@ function saveCredit(f) {
   } else {
     const [[id], seq] = nextIds('R', 1, S.seq);
     update({
-      credits: [...S.credits, { id, ...rec, by, createdAt: stampSec() }], seq, lastProject: project, lastBy: by, lastCur: rec.cur,
+      credits: [...S.credits, { id, ...rec, by, createdAt: stampSec() }], seq, lastProject: project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
       log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('R', rec)}`]], by) : S.log,
     });
     toast(`Saved ✓ ${money(amount, rec.cur)} received`);
+    if (v.sign) { render(); return slipSheet('R', id); }
   }
   closeSheet(); render();
 }
@@ -1035,15 +1129,17 @@ function saveBulk(f) {
   const by = clean(f.elements.by.value);
   if (!by) return formErr(f, 'by', 'Type your name');
   const v = { cur: formCur(f), location: clean(f.elements.location.value), project: f.elements.project.value, mode: f.elements.mode.value || 'Cash', at: f.elements.at?.value };
+  const rate = rateFrom(f, v.cur);
+  if (rate === null) return formErr(f, 'rate', RATE_ERR);
   const { at, manualDate } = dateFrom(v);
   let seq = S.seq, batch, ids;
   [[batch], seq] = nextIds('B', 1, seq);
   [ids, seq] = nextIds('E', rows.length, seq);
-  const recs = rows.map((r, i) => ({ id: ids[i], cur: v.cur, amount: parseAmount(r.amount), paidTo: r.paidTo, reason: r.reason, location: v.location, project: v.project, mode: v.mode, at, manualDate, by, createdAt: stampSec(), batch }));
+  const recs = rows.map((r, i) => ({ id: ids[i], cur: v.cur, amount: parseAmount(r.amount), rate, paidTo: r.paidTo, reason: r.reason, location: v.location, project: v.project, mode: v.mode, at, manualDate, by, createdAt: stampSec(), batch }));
   update({
     expenses: [...S.expenses, ...recs], seq,
     log: manualDate ? logWith([['Old date', batch, `${recs.length} expenses (${ids[0]} to ${ids[ids.length - 1]}) added with date ${fmtAbs(at)} (password used), total ${money(total(recs), v.cur)}`]], by) : S.log,
-    lastLoc: v.location, lastMode: v.mode, lastExpProject: v.project, lastBy: by, lastCur: v.cur,
+    lastLoc: v.location, lastMode: v.mode, lastExpProject: v.project, lastBy: by, lastCur: v.cur, ...(rate ? { lastRate: rate } : {}),
   });
   closeSheet(); render();
   toast(`Saved ✓ ${recs.length} payments · ${money(total(recs), v.cur)}`);
@@ -1088,7 +1184,7 @@ async function doSetup(f) {
   const v = Object.fromEntries(new FormData(f));
   if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
   const salt = randHex();
-  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
+  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
   save();
   navigator.storage?.persist?.();
   render(); scrollTo(0, 0); toast('All set! Add your first entry.');
@@ -1152,7 +1248,414 @@ async function doRestore(file) {
   S = { ...fresh, dirty: fresh.link ? allIds(fresh) : [] };
   update({ log: logWith([['Restored', '—', `Data restored from backup file "${file.name}"`]]) });
   unlockedUntil = 0; tab = 'home';
-  closeSheet(); render(); scheduleSync(0); toast('Backup restored ✓ — use the password from the backup');
+  closeAll(); render(); scheduleSync(0); toast('Backup restored ✓ — use the password from the backup');
+}
+
+/* ---------- pay maths, amounts in words, one-page PDF ---------- */
+// No screen code here: tools/test-calc.js checks all of it in Node.
+
+// Days paid in a month, on a 30-day month (the owner's rule): joining and leaving days both count, and the
+// 31st counts as the 30th. start/end are 'YYYY-MM-DD'; end is the leaving day, or today.
+function payDays(month, start, end) {
+  if (start.slice(0, 7) > month || end.slice(0, 7) < month) return 0;
+  const first = start.slice(0, 7) === month ? Math.min(+start.slice(8, 10), 30) : 1;
+  const last = end.slice(0, 7) === month ? Math.min(+end.slice(8, 10), 30) : 30;
+  return Math.max(0, last - first + 1);
+}
+const nextMonth = m => { const y = +m.slice(0, 4), mo = +m.slice(5, 7); return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`; };
+
+// A payment in the wage's currency, in cents; null when it can't be converted (another currency, no rate).
+// rate = SSP for 1 USD, saved on every SSP entry.
+function inWage(p, cur) {
+  if (p.cur === cur) return Math.round(p.amount * 100);
+  if (!(p.rate > 0)) return null;
+  return Math.round((cur === 'USD' ? p.amount / p.rate : p.amount * p.rate) * 100);
+}
+
+// An employee's account: wage earned month by month (less days not worked, entered with that month's salary),
+// minus everything paid to them (salary, advances, final settlement), plus the balance from the old salary book.
+function workerLedger(w, pays, today) {
+  const end = w.status === 'left' && w.left && w.left < today ? w.left : today;
+  const mine = pays.filter(p => p.worker === w.id && !p.deleted);
+  const off = {};
+  mine.forEach(p => { if (p.pay === 'salary' && p.month && p.daysOff) off[p.month] = (off[p.month] || 0) + p.daysOff; });
+  const months = [];
+  let earned = 0;
+  if (w.start <= end) {
+    for (let m = w.start.slice(0, 7); m <= end.slice(0, 7); m = nextMonth(m)) {
+      const days = payDays(m, w.start, end), daysOff = Math.min(off[m] || 0, days);
+      const cents = Math.round(w.wage * 100 * (days - daysOff) / 30);
+      months.push({ month: m, days, daysOff, earned: cents / 100 });
+      earned += cents;
+    }
+  }
+  let paid = 0;
+  const unconverted = [];
+  mine.forEach(p => { const c = inWage(p, w.cur); if (c === null) unconverted.push(p.id); else paid += c; });
+  const opening = Math.round((w.openingAmount || 0) * 100);
+  return { cur: w.cur, months, earned: earned / 100, paid: paid / 100, opening: opening / 100, balance: (opening + earned - paid) / 100, unconverted };
+}
+
+// Advances given in a month, in US dollars (the monthly limit is in dollars).
+function advancesUsd(pays, month) {
+  const cents = pays.filter(p => p.pay === 'advance' && !p.deleted && p.at.slice(0, 7) === month)
+    .reduce((t, p) => t + (p.cur === 'USD' ? Math.round(p.amount * 100) : p.rate > 0 ? Math.round(p.amount / p.rate * 100) : 0), 0);
+  return cents / 100;
+}
+
+// "Two hundred fifty US dollars only" — printed on every slip so a figure can't be quietly changed.
+const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const BIG = [[1e12, 'trillion'], [1e9, 'billion'], [1e6, 'million'], [1e3, 'thousand']];
+const UNITS = { USD: ['US dollar', 'US dollars', 'cent', 'cents'], SSP: ['South Sudanese pound', 'South Sudanese pounds', 'piaster', 'piasters'] };
+function words(n) {
+  if (n < 20) return ONES[n];
+  if (n < 100) return TENS[Math.floor(n / 10)] + (n % 10 ? '-' + ONES[n % 10] : '');
+  if (n < 1000) return ONES[Math.floor(n / 100)] + ' hundred' + (n % 100 ? ' ' + words(n % 100) : '');
+  const [size, name] = BIG.find(([s]) => n >= s);
+  return words(Math.floor(n / size)) + ' ' + name + (n % size ? ' ' + words(n % size) : '');
+}
+function amountInWords(amount, cur) {
+  const c = Math.round(amount * 100), whole = Math.floor(c / 100), part = c % 100;
+  const [one, many, sub, subs] = UNITS[cur];
+  const s = `${words(whole)} ${whole === 1 ? one : many}${part ? ` and ${words(part)} ${part === 1 ? sub : subs}` : ''} only`;
+  return s[0].toUpperCase() + s.slice(1);
+}
+
+// A one-page A4 PDF holding a single JPEG (the slip is drawn as a picture): no PDF library needed.
+function jpegToPdf(jpeg, w, h) {
+  const enc = new TextEncoder(), parts = [], offsets = [];
+  let size = 0;
+  const add = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); size += b.length; };
+  const obj = (n, body) => { offsets[n] = size; add(`${n} 0 obj\n${body}\nendobj\n`); };
+  const W = 595.28, H = 841.89; // A4 in points
+  const draw = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+  add('%PDF-1.4\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`);
+  obj(4, `<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`);
+  offsets[5] = size;
+  add(`5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`);
+  add(jpeg);
+  add('\nendstream\nendobj\n');
+  const xref = size;
+  add(`xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map(o => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  const out = new Uint8Array(size);
+  let at = 0;
+  parts.forEach(b => { out.set(b, at); at += b.length; });
+  return out;
+}
+
+/* ---------- files: photos, PDFs, signatures and slips ---------- */
+// A file is kept on this phone first (IndexedDB: localStorage is far too small), then uploaded to the company
+// Google Drive through the sheet script. Its record (kind F) is made only once the upload worked, so the sheet
+// never holds a record whose file it can't give back. Uploaded files stay on the phone as an offline copy.
+const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
+const MAX_FILE = 8 * 1024 * 1024; // the sheet script refuses bigger files
+const PHOTO_SIDE = 1600; // photos are shrunk on the phone: quicker to upload, still sharp on a slip
+const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄' };
+const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead' };
+let outbox = [];          // files waiting to upload (their details; the bytes stay in IndexedDB)
+let uploading = false, uploadErr = '';
+let shown = null;         // the file on screen, kept in memory so "Send" opens the share sheet straight from the tap
+
+/* IndexedDB: one store per app copy (the test copy has its own KEY) */
+function idb(mode, fn) {
+  return new Promise((ok, no) => {
+    const open = indexedDB.open(KEY + '-files', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore('files', { keyPath: 'id' });
+    open.onerror = () => no(open.error);
+    open.onsuccess = () => {
+      const db = open.result, tx = db.transaction('files', mode), req = fn(tx.objectStore('files'));
+      tx.oncomplete = () => { db.close(); ok(req.result); };
+      tx.onerror = tx.onabort = () => { db.close(); no(tx.error || new Error('Could not keep the file on this phone')); };
+    };
+  });
+}
+const fileGet = id => idb('readonly', s => s.get(id));
+const filePut = rec => idb('readwrite', s => s.put(rec));
+const fileAll = () => idb('readonly', s => s.getAll());
+async function loadOutbox() {
+  try { outbox = (await fileAll()).filter(f => f.pending).map(({ data, ...meta }) => meta); }
+  catch { outbox = []; } // storage blocked (private browsing): nothing can be waiting
+}
+// a phone that lost access keeps only what it hasn't uploaded yet
+async function dropFileCopies() {
+  try { await idb('readwrite', s => { const req = s.openCursor(); req.onsuccess = () => { const c = req.result; if (!c) return; if (!c.value.pending) c.delete(); c.continue(); }; return req; }); }
+  catch { /* nothing kept */ }
+}
+
+const toB64 = buf => { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
+const fromB64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const imgFrom = blob => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('This picture could not be read.')); i.src = URL.createObjectURL(blob); });
+const canvasJpeg = (c, q) => new Promise(ok => c.toBlob(ok, 'image/jpeg', q));
+
+// A picked or photographed file → { data, mime, name }: photos become a smaller JPEG, PDFs pass as they are.
+async function prepareFile(file, side = PHOTO_SIDE, quality = 0.82) {
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if (isPdf) {
+    if (file.size > MAX_FILE) throw new Error('This PDF is bigger than 8 MB.');
+    return { data: await file.arrayBuffer(), mime: 'application/pdf', name: file.name };
+  }
+  if (!/^image\//.test(file.type) && !/\.(jpe?g|png|heic|webp)$/i.test(file.name)) throw new Error('Only photos and PDF files can be added.');
+  const img = await imgFrom(file);
+  const k = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  const blob = await canvasJpeg(c, quality);
+  return { data: await blob.arrayBuffer(), mime: 'image/jpeg', name: (file.name || 'photo').replace(/\.\w+$/, '') + '.jpg' };
+}
+
+// Keep a file for a record ('for' = its id, or 'settings' for the letterhead). Returns the file's id.
+async function keepFile(meta, data) {
+  const [[id], seq] = nextIds('F', 1, S.seq);
+  const rec = { id, ...meta, by: myName() || S.lastBy || '', createdAt: stampSec() };
+  await filePut({ ...rec, data, pending: true });
+  update({ seq });
+  outbox = [...outbox, rec];
+  uploadFiles();
+  return id;
+}
+
+// Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
+// ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
+async function uploadFiles() {
+  if (uploading || !S || !S.link || mustSignIn() || !outbox.length || (S.link.v || 2) < 4) return;
+  uploading = true;
+  try {
+    for (const meta of outbox) {
+      const rec = await fileGet(meta.id);
+      if (!rec || !rec.pending) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
+      let res;
+      try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
+      catch (e) { uploadErr = e.offline || e.code === 'LOGIN' ? '' : `A file could not be uploaded: ${e.message}`; break; }
+      const { data, pending, ...d } = rec;
+      update({ files: [...S.files, { ...d, fileId: res.fileId }] });
+      await filePut({ ...rec, fileId: res.fileId, pending: false });
+      outbox = outbox.filter(x => x.id !== meta.id);
+      uploadErr = '';
+    }
+  } catch (e) { uploadErr = e.message; } finally { uploading = false; paintSync(); }
+}
+
+// The file's bytes: the copy on this phone, or fetched from the company Drive (and kept for next time).
+async function fileBlob(id) {
+  const hit = await fileGet(id).catch(() => null);
+  if (hit) return new Blob([hit.data], { type: hit.mime });
+  const rec = S.files.find(f => f.id === id);
+  if (!rec || !S.link) throw new Error('This file is not on this phone.');
+  const res = await callServer(S.link, { op: 'file', id });
+  const data = fromB64(res.data).buffer;
+  filePut({ ...rec, data, pending: false }).catch(() => {});
+  return new Blob([data], { type: res.mime });
+}
+const fileMeta = id => S.files.find(f => f.id === id) || outbox.find(f => f.id === id);
+const filesFor = (id, type) => [...live(S.files), ...outbox.map(f => ({ ...f, pending: true }))]
+  .filter(f => f.for === id && (!type || f.type === type)).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+const latestFile = (id, type) => filesFor(id, type).pop();
+function filesBlock(id) {
+  const list = filesFor(id).filter(f => f.type !== 'profile');
+  if (!list.length) return '';
+  return `<h3 class="subh">Files (${list.length})</h3><div class="card list inset">${list.map(f => `<button class="row" data-act="showFile" data-id="${esc(f.id)}">
+    <span class="dot">${FILE_ICON[f.type] || '📎'}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(f.no || FILE_NAME[f.type] || f.name)}</span>${f.pending ? '<i class="tag warn">Not uploaded yet</i>' : ''}</span>
+    <span class="s">${esc([f.name, fmtAbs(String(f.createdAt).slice(0, 16)), f.by && 'by ' + f.by].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>`;
+}
+// an "attach" button: a file box styled as a button (data-type says what it is)
+const attachButton = (id, label = '📎 Attach photo/PDF', type = 'attachment', accept = 'image/*,application/pdf') =>
+  `<label class="btn ghost">${label}<input type="file" hidden accept="${accept}" data-attach="${esc(id)}" data-type="${esc(type)}"></label>`;
+async function attachPicked(input) {
+  const file = input.files[0], forId = input.dataset.attach, type = input.dataset.type;
+  input.value = '';
+  if (!file) return;
+  try {
+    const p = type === 'letterhead' ? await prepareFile(file, SLIP_H, 0.92) : await prepareFile(file);
+    await keepFile({ for: forId, type, name: p.name, mime: p.mime }, p.data);
+  } catch (e) { return alert(e.message); }
+  toast(`${FILE_NAME[type] || 'File'} added ✓`);
+  reopenHere();
+}
+
+async function showFile(id) {
+  const f = fileMeta(id);
+  if (!f) return;
+  let blob;
+  try { blob = await fileBlob(id); } catch (e) { return toast(e.offline ? 'No internet — this file is not on this phone yet.' : e.message); }
+  shown = { blob, name: f.name };
+  const title = f.no || FILE_NAME[f.type] || 'File';
+  openSheet(`${head(title, '', f.name)}
+    ${f.mime === 'application/pdf' ? '<p class="filebig">📄</p>' : `<img class="viewimg" src="${URL.createObjectURL(blob)}" alt="${esc(title)}">`}
+    <button class="btn in" data-act="shareShown">📤 Send or save</button>
+    ${f.pending ? '<p class="muted center">Kept on this phone. It uploads to the company Drive when the internet is on.</p>' : ''}`);
+}
+const shareShown = () => shown && download(shown.blob, shown.name);
+
+/* ---------- signature pad ---------- */
+function sigPad(cv) {
+  const box = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  cv.width = Math.round(box.width * dpr); cv.height = Math.round(box.height * dpr);
+  const g = cv.getContext('2d');
+  g.scale(dpr, dpr); g.lineWidth = 3; g.lineCap = g.lineJoin = 'round'; g.strokeStyle = g.fillStyle = '#1B2232';
+  delete cv.dataset.ink;
+  let last = null;
+  const at = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  cv.onpointerdown = e => { cv.setPointerCapture(e.pointerId); last = at(e); g.beginPath(); g.arc(last[0], last[1], 1.5, 0, 7); g.fill(); cv.dataset.ink = '1'; };
+  cv.onpointermove = e => { if (!last) return; const p = at(e); g.beginPath(); g.moveTo(last[0], last[1]); g.lineTo(p[0], p[1]); g.stroke(); last = p; };
+  cv.onpointerup = cv.onpointercancel = () => { last = null; };
+}
+const sigField = who => `<div class="fld"><span>Signature of ${esc(who)} <em>(sign with a finger)</em></span><canvas class="sig"></canvas><button type="button" class="link" data-act="sigClear">Clear and sign again</button></div>`;
+const photoField = who => `<label class="fld"><span>Photo of ${esc(who)} with the money <em>(optional)</em></span><input type="file" name="photo" accept="image/*" capture="environment"></label>`;
+
+/* ---------- slips: an A4 page drawn on a canvas, saved as a one-page PDF ---------- */
+const SLIP_W = 1240, SLIP_H = 1754; // A4 at 150 dots per inch
+const SLIP_FONT = 'Helvetica, Arial, sans-serif';
+const SLIP_TITLE = { voucher: 'PAYMENT VOUCHER', receipt: 'RECEIPT', salary: 'SALARY SLIP', advance: 'ADVANCE VOUCHER', settlement: 'FINAL SETTLEMENT' };
+function wrapText(g, text, width) {
+  const lines = [];
+  let line = '';
+  for (const w of String(text).split(/\s+/)) {
+    const t = line ? `${line} ${w}` : w;
+    if (line && g.measureText(t).width > width) { lines.push(line); line = w; } else line = t;
+  }
+  return line ? [...lines, line] : lines;
+}
+function fitInto(g, img, x, y, w, h, cover) {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const k = cover ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih), dw = iw * k, dh = ih * k;
+  g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
+  g.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  g.restore();
+}
+const boxPath = (g, x, y, w, h) => { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, 18); else g.rect(x, y, w, h); };
+async function letterheadImage() {
+  const f = latestFile('settings', 'letterhead');
+  if (!f) return null;
+  try { return await imgFrom(await fileBlob(f.id)); } catch { return null; } // offline and never fetched: a plain page
+}
+// keep the letterhead on the phone, so slips made offline still carry it
+function warmLetterhead() { const f = latestFile('settings', 'letterhead'); if (f && !f.pending) fileBlob(f.id).catch(() => {}); }
+
+// s = { title, no, date, rows: [[label, value]], amount, cur, signLabel, signName, sig: canvas, photo: image|null, by }
+async function renderSlip(s) {
+  const c = document.createElement('canvas');
+  c.width = SLIP_W; c.height = SLIP_H;
+  const g = c.getContext('2d'), INK = '#1B2232', MUTED = '#6A6458', L = 100, R = SLIP_W - 100;
+  g.fillStyle = '#fff'; g.fillRect(0, 0, SLIP_W, SLIP_H);
+  const lh = await letterheadImage();
+  let top, bottom;
+  if (lh) { g.drawImage(lh, 0, 0, SLIP_W, SLIP_H); top = 270; bottom = 1570; } // the letterhead's own header and footer stay clear
+  else {
+    g.fillStyle = INK; g.font = `800 44px ${SLIP_FONT}`; g.fillText(S.company || 'Company', L, 120);
+    g.fillRect(L, 145, R - L, 3); top = 180; bottom = SLIP_H - 90;
+  }
+  g.textAlign = 'center'; g.fillStyle = INK; g.font = `800 52px ${SLIP_FONT}`;
+  g.fillText(s.title, SLIP_W / 2, top + 50);
+  g.textAlign = 'left'; g.font = `700 28px ${SLIP_FONT}`;
+  g.fillText(`No. ${s.no}`, L, top + 110);
+  g.textAlign = 'right'; g.fillText(`Date: ${s.date}`, R, top + 110);
+  g.textAlign = 'left';
+  let y = top + 180;
+  for (const [label, value] of s.rows) {
+    g.fillStyle = MUTED; g.font = `600 26px ${SLIP_FONT}`; g.fillText(label, L, y);
+    g.fillStyle = INK; g.font = `600 30px ${SLIP_FONT}`;
+    const lines = wrapText(g, value, R - 400);
+    lines.forEach((t, i) => g.fillText(t, 400, y + i * 40));
+    y += lines.length * 40 + 16;
+  }
+  // the amount, in figures and in words, so it can't be quietly changed
+  g.font = `italic 26px ${SLIP_FONT}`;
+  const words = wrapText(g, amountInWords(s.amount, s.cur), R - L - 60);
+  const boxH = 140 + words.length * 36;
+  y += 10;
+  boxPath(g, L, y, R - L, boxH); g.fillStyle = '#F3EFE7'; g.fill();
+  g.fillStyle = MUTED; g.font = `600 26px ${SLIP_FONT}`; g.fillText('Amount', L + 30, y + 44);
+  g.fillStyle = INK; g.font = `800 60px ${SLIP_FONT}`; g.fillText(money(s.amount, s.cur), L + 30, y + 108);
+  g.font = `italic 26px ${SLIP_FONT}`; words.forEach((t, i) => g.fillText(t, L + 30, y + 150 + i * 36));
+  y += boxH + 30;
+  // signature box (and the photo beside it)
+  const boxY = Math.max(y, bottom - 330), signW = s.photo ? 620 : R - L;
+  boxPath(g, L, boxY, signW, 260); g.strokeStyle = '#B8B0A0'; g.lineWidth = 2; g.stroke();
+  g.fillStyle = MUTED; g.font = `600 24px ${SLIP_FONT}`; g.fillText(s.signLabel, L + 20, boxY + 36);
+  if (s.sig) fitInto(g, s.sig, L + 20, boxY + 50, signW - 40, 150, false);
+  g.fillStyle = INK; g.font = `700 26px ${SLIP_FONT}`; g.fillText(s.signName || '', L + 20, boxY + 238);
+  if (s.photo) {
+    const px = L + signW + 30, pw = R - px;
+    fitInto(g, s.photo, px, boxY, pw, 260, true);
+    boxPath(g, px, boxY, pw, 260); g.stroke();
+  }
+  g.fillStyle = MUTED; g.font = `500 22px ${SLIP_FONT}`;
+  g.fillText(`Paid / entered by ${s.by || '—'} · made in the company app ${fmtAbs(stamp())}`, L, boxY + 300);
+  const jpeg = new Uint8Array(await (await canvasJpeg(c, 0.88)).arrayBuffer());
+  return new Blob([jpegToPdf(jpeg, SLIP_W, SLIP_H)], { type: 'application/pdf' });
+}
+
+// rate line for an SSP entry: what it was worth in dollars that day
+const usdOf = r => (r.cur === 'SSP' && r.rate > 0 ? Math.round(r.amount / r.rate * 100) / 100 : null);
+const rateRow = r => (usdOf(r) === null ? [] : [['Rate', `1 USD = ${plain(r.rate)} SSP · about ${money(usdOf(r), 'USD')}`]]);
+const slipDate = r => `${fmtDate(r.at.slice(0, 10))}, ${fmtTime(r.at)}`;
+function voucherSpec(r) {
+  return { title: SLIP_TITLE.voucher, rows: [['Paid to', r.paidTo], ['For', r.reason], ['Project', r.project ? projName(r.project) : ''], ['Location', r.location], ['Paid from', accountOf(r.mode)], ...rateRow(r)].filter(x => x[1]),
+    signLabel: 'Received by', signName: r.paidTo };
+}
+function receiptSpec(r, party) {
+  return { title: SLIP_TITLE.receipt, rows: [['Received from', party], ['For', projName(r.project)], ['Note', r.note], ['Received into', accountOf(r.mode)], ...rateRow(r)].filter(x => x[1]),
+    signLabel: 'Received by (for the company)', signName: myName() || r.by };
+}
+
+// Make a voucher (expense), receipt (money received) or salary slip (a payment to an employee) for an entry.
+function slipSheet(k, id) {
+  const r = S[COLL[k]].find(x => x.id === id);
+  if (!r) return;
+  const isR = k === 'R', who = isR ? (myName() || r.by || 'the person receiving') : r.paidTo;
+  const title = isR ? 'Receipt' : r.pay ? { salary: 'Salary slip', advance: 'Advance voucher', settlement: 'Final settlement' }[r.pay] : 'Payment voucher';
+  openSheet(`${head(title, isR ? 'in' : 'out', r.id)}
+    <p class="hint">${esc(money(r.amount, r.cur))} · ${esc(isR ? projName(r.project) : `${r.paidTo} — ${r.reason}`)}</p>
+    <form data-form="slip" data-kind="${k}" data-id="${esc(id)}">
+      ${isR ? textField('party', 'Received from', 'Who paid the money?', '', false) : ''}
+      ${sigField(who)}
+      ${isR ? '' : photoField(who)}
+      <p class="err"></p>
+      <button class="btn ${isR ? 'in' : 'out'}">Make the ${title.toLowerCase()} (PDF)</button>
+    </form>`);
+  sigPad($('#sheet canvas.sig'));
+}
+async function saveSlip(f) {
+  const k = f.dataset.kind, r = S[COLL[k]].find(x => x.id === f.dataset.id), cv = $('canvas.sig', f);
+  if (!cv.dataset.ink) return formErr(f, null, 'Please sign in the box first.');
+  const btn = $('button.btn', f);
+  btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
+  try {
+    const p = f.elements.photo && f.elements.photo.files[0];
+    const photo = p ? await imgFrom(new Blob([(await prepareFile(p)).data], { type: 'image/jpeg' })) : null;
+    const type = k === 'R' ? 'receipt' : r.pay ? 'slip' : 'voucher';
+    const spec = k === 'R' ? receiptSpec(r, clean(f.elements.party.value)) : r.pay ? payslipSpec(r) : voucherSpec(r);
+    const [[no], seq] = nextIds(k === 'R' ? 'RC' : 'PV', 1, S.seq);
+    update({ seq });
+    const blob = await renderSlip({ ...spec, no, date: slipDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, by: r.by });
+    const name = `${no} ${fileSafe(spec.signName || '')}.pdf`;
+    await keepFile({ for: r.id, type, no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
+    readySheet(spec.title, no, blob, name);
+  } catch (e) { btn.disabled = false; formErr(f, null, e.message); }
+}
+function readySheet(title, no, blob, name) {
+  shown = { blob, name };
+  openSheet(`${head(title[0] + title.slice(1).toLowerCase(), 'in', no)}
+    <p class="okbig">✓ Ready</p>
+    <p class="hint center">Kept with the entry${S.link ? ' and saved to the company Google Drive' : ''}. Send it on WhatsApp now, or open it later from the entry.</p>
+    <button class="btn in" data-act="shareShown">📤 Send on WhatsApp or save</button>
+    <button class="btn ghost" data-act="close" style="margin-top:10px">Done</button>`);
+}
+
+/* ---------- the company letterhead (admins, Settings) ---------- */
+function letterheadSheet() {
+  const f = latestFile('settings', 'letterhead');
+  openSheet(`${head('Letterhead')}
+    <p class="hint">Vouchers, receipts and salary slips are printed on this. Use a picture of the whole A4 page (PNG or JPG), with empty space in the middle.</p>
+    ${f ? `<p class="muted">Now: <b>${esc(f.name)}</b>${f.pending ? ' (not uploaded yet)' : ''}</p><button class="btn ghost" data-act="showFile" data-id="${esc(f.id)}" style="margin-bottom:10px">See the letterhead</button>` : '<p class="muted">No letterhead yet — slips get a plain heading with the company name.</p>'}
+    ${attachButton('settings', f ? 'Choose a new letterhead' : 'Choose the letterhead', 'letterhead', 'image/png,image/jpeg')}`);
+  here = letterheadSheet;
 }
 
 /* ---------- google sheet sync ---------- */
@@ -1163,18 +1666,24 @@ const SYNC_DELAY_MS = 2000;
 const SYNC_EVERY_MS = 2 * 60 * 1000;
 const SYNC_TIMEOUT_MS = 45000;
 const APP_URL = 'https://app.b-e-p-l.com/test/';
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers', C: 'changes' };
+// the order is the order records are sent in: an employee before a change request about them, files last
+// (the sheet only takes a file record whose entry it already has)
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers', W: 'workers', C: 'changes', F: 'files' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
-const KINDS_SEEN = 2; // 2 = change requests (C)
+const KINDS_SEEN = 3; // 2 = change requests (C), 3 = employees (W) and files (F)
 const VALID = {
-  E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string',
-  R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur),
+  E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string' && okRate(d),
+  R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && okRate(d),
   P: d => typeof d.id === 'string' && typeof d.name === 'string',
   L: d => typeof d.lid === 'string' && typeof d.text === 'string' && typeof d.at === 'string',
   T: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && ACCOUNTS.includes(d.from) && ACCOUNTS.includes(d.to) && d.from !== d.to,
-  C: d => typeof d.id === 'string' && SAFE_ID.test(d.target) && ['E', 'R', 'T', 'P'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string' && AT_RE.test(d.at),
+  C: d => typeof d.id === 'string' && SAFE_ID.test(d.target) && ['E', 'R', 'T', 'P', 'W'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string' && AT_RE.test(d.at),
+  W: d => typeof d.id === 'string' && typeof d.name === 'string' && Number.isFinite(d.wage) && CURS.includes(d.cur) && DATE_RE.test(d.start),
+  F: d => typeof d.id === 'string' && /^[\w-]{10,100}$/.test(d.fileId) && typeof d.name === 'string' && FILE_MIMES.includes(d.mime) && SAFE_ID.test(d.for) && typeof d.type === 'string',
 };
+const DATE_RE = /^\d{4}-\d\d-\d\d$/;
+const okRate = d => d.rate === undefined || (Number.isFinite(d.rate) && d.rate > 0);
 // ids end up inside the app's pages: only plain ones are ever accepted (the sheet checks this too)
 const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
@@ -1350,6 +1859,7 @@ async function syncNow() {
   } finally {
     syncBusy = false; paintSync();
     if (syncAgain) { syncAgain = false; scheduleSync(); }
+    if (sync.state === 'ok' || sync.state === 'error') { uploadFiles(); warmLetterhead(); }
   }
 }
 const typing = () => { const a = document.activeElement; return !!a && $('#main').contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName); };
@@ -1379,7 +1889,8 @@ function syncCard() {
     <p class="muted">Connect your company Google Sheet so phones and computers share the same records. The app keeps working offline and syncs when the internet is on.</p>
     <button class="btn in" data-act="connect">Connect to Google Sheet 🔒</button></section>`;
   return `<section class="card pad" id="syncCard"><h3>📊 Company Google Sheet</h3>
-    <p class="muted">${esc(syncText())}</p>
+    <p class="muted">${esc(syncText())}${outbox.length ? ` ${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload.` : ''}</p>
+    ${uploadErr ? `<p class="note">⚠️ ${esc(uploadErr)}</p>` : ''}
     ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>' : ''}
     ${S.link.sheet ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
     <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="syncNow">Sync now</button>${can('phones') ? '<button class="btn ghost" data-act="invite">📲 Add a phone 🔒</button>' : ''}</div>
@@ -1442,7 +1953,7 @@ async function doJoin(f) {
     return formErr(f, null, /^No internet/.test(e.message) ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
   }
   if (!(res.pull || []).some(p => p.k === 'S')) return formErr(f, null, 'That Google Sheet has no company yet. Connect the main computer first.');
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
+  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
   applyPull(res.pull);
   S = { ...S, link: { ...S.link, since: res.seq } };
   save(); navigator.storage?.persist?.();
@@ -1463,7 +1974,7 @@ async function joinSignedIn(f, link, username, password) {
     const offline = /^No internet/.test(e.message);
     return formErr(f, offline ? null : 'password', offline ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
   }
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev, dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { u: link.u, k: '', since: 0, sheet: '', logins: true } };
+  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev, dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { u: link.u, k: '', since: 0, sheet: '', logins: true } };
   await signedInAs(res, password);
   navigator.storage?.persist?.();
   history.replaceState(null, '', location.pathname);
@@ -1495,7 +2006,7 @@ async function disconnect() {
 function migrate(s) {
   const dev = s.dev || newDev();
   const relearn = s.link && (s.kindsSeen || 1) < KINDS_SEEN;
-  return { ...s, dev, transfers: s.transfers || [], changes: s.changes || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, kindsSeen: KINDS_SEEN,
+  return { ...s, dev, transfers: s.transfers || [], changes: s.changes || [], workers: s.workers || [], files: s.files || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, kindsSeen: KINDS_SEEN,
     link: relearn ? { ...s.link, since: 0 } : (s.link || null), log: s.log.map((l, i) => l.lid ? l : { ...l, lid: `L-${dev}-old${i}` }) };
 }
 
@@ -1508,11 +2019,11 @@ const SESSION_KEY = KEY + '-login';
 const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper' };
 const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Sees everything · adds entries · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
 const RIGHTS = {
-  admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones'],
-  manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup'], // suggest = edits wait for an admin's approval
+  admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones', 'staff'],
+  manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval
   store: ['add'],
 };
-const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [] };
+const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], files: [] };
 
 // { token, user: { id, name, username, role }, check: { salt, hash } } — or { out: true, why } once signed out
 let session = loadSession();
@@ -1546,6 +2057,7 @@ async function signedInAs(res, password) {
   // reload the company settings as this person may see them (only admins get the company password);
   // a store keeper sees only their own entries: drop everything else this phone held (it's all on the sheet)
   const clear = { settingsU: 0, ...(res.me.role === 'admin' ? {} : { pass: null }), ...(res.me.role === 'store' ? onlyUnsent() : {}) };
+  if (res.me.role === 'store') dropFileCopies();
   S = { ...S, ...clear, link: { ...S.link, k: '', since: 0, logins: true }, lastBy: res.me.name };
   save();
 }
@@ -1553,16 +2065,17 @@ async function signedInAs(res, password) {
 function signedOutByServer(why) {
   saveSession({ out: true, why });
   // nothing stays on a phone that lost access — except changes it hasn't sent yet
-  S = { ...S, ...(S.dirty.length ? {} : NOTHING_SEEN), link: { ...S.link, since: 0 } };
-  save(); closeSheet(); render();
+  S = { ...S, ...onlyUnsent(), pass: null, link: { ...S.link, since: 0 } }; // signing in again brings back what this login may see
+  dropFileCopies();
+  save(); closeAll(); render();
 }
 async function signOut() {
-  const n = S.dirty.length;
-  if (n) return alert(`This phone has ${n} change${n === 1 ? '' : 's'} not sent to the Google Sheet yet.\n\nConnect to the internet and wait until it says "Up to date", then sign out.`);
+  const n = S.dirty.length + outbox.length;
+  if (n) return alert(`This phone has ${n} change${n === 1 ? '' : 's'} or file${n === 1 ? '' : 's'} not sent to the Google Sheet yet.\n\nConnect to the internet and wait until it says "Up to date", then sign out.`);
   if (!confirm('Sign out of this phone?\n\nThe company records leave this phone. They come back when someone signs in.')) return;
   const token = session.token;
   saveSession({ out: true }); // the sign-in screen shows at once, so nothing new can be added meanwhile
-  closeSheet(); render();
+  closeAll(); render(); dropFileCopies();
   try { await callServer(S.link, { op: 'logout', token }); } catch { /* already signed out on the sheet: fine */ }
   if (!S.dirty.length) { S = { ...S, ...NOTHING_SEEN, link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
   render();
@@ -1718,7 +2231,8 @@ function loginsCard() {
   if (signedIn()) {
     return `<section class="card pad"><h3>👤 ${esc(session.user.name)}</h3>
       <p class="muted">Signed in as <b>${esc(session.user.username)}</b> · ${ROLES[session.user.role]}</p>
-      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">My password · Sign out</button></div></section>`;
+      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">My password · Sign out</button></div>
+      <div class="setrow" style="margin-top:12px"><span>Quick unlock<br><span class="muted">${session.quick ? `On: a code${session.quick.cred ? ' and Face ID / fingerprint' : ''}` : 'A short code or Face ID instead of your password'}</span></span><button class="btn small ghost" data-act="quick">${session.quick ? 'Change' : 'Set up'} 🔒</button></div></section>`;
   }
   if (S.link.logins) {
     return `<section class="card pad"><h3>👥 Logins</h3><p class="muted">Everyone can have their own username and password. Sign in with yours.</p>
@@ -1740,19 +2254,23 @@ const saveLabel = () => (can('edit') ? 'Save changes' : 'Send for approval');
 const approvalNote = old => (old && !can('edit') ? '<p class="note">An admin approves this change first. Until then the entry and the totals stay as they are.</p>' : '');
 const waiting = () => (S.changes || []).filter(c => c.status === 'waiting');
 const waitingFor = id => waiting().filter(c => c.target === id);
-const recordsOf = kind => S[kind === 'P' ? 'projects' : COLL[kind]] || [];
+const recordsOf = kind => S[KIND_KEY[kind]] || [];
 const targetOf = c => recordsOf(c.kind).find(x => x.id === c.target);
 // the fields an edit may change, per kind (the Google Sheet checks the same list)
 const EDITABLE = {
-  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate'],
-  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate'],
+  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate', 'rate'],
+  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate', 'rate'],
   T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
   P: ['name', 'value', 'valueCur'],
+  W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote'],
 };
-const editPart = c => Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f)));
+const editPart = c => (c.action ? {} : Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f))));
+const whatIs = (kind, r) => (kind === 'P' ? `Project "${r.name}"` : kind === 'W' ? `Employee ${r.name}` : describe(kind, r));
 // what approving would really change, worked out from the entry itself — never from the text sent with the request
 function changeLines(c, r) {
   if (!r) return [];
+  if (c.action === 'delete') return [`Delete it: ${whatIs(c.kind, r)}`];
+  if (c.action === 'advance') return [`Give an advance of ${money(+c.after.amount, c.after.cur)} — more than the $${ADVANCE_LIMIT_USD} a month limit`];
   const next = { ...r, ...editPart(c) };
   if (c.kind !== 'P') return diff(r, next);
   const vc = x => x.valueCur || 'USD';
@@ -1788,7 +2306,7 @@ function changeCard(c) {
   // the entry was changed by someone else after this request: show it so the admin looks first
   const moved = r && Object.keys(c.before || {}).some(f => String(r[f] ?? '') !== String(c.before[f] ?? ''));
   return `<section class="card pad" style="margin-bottom:12px">
-    <p style="margin:0 0 6px"><b>${esc(r ? (c.kind === 'P' ? `Project "${r.name}"` : describe(c.kind, r)) : c.target)}</b></p>
+    <p style="margin:0 0 6px"><b>${esc(r ? whatIs(c.kind, r) : c.target)}</b></p>
     <ul style="margin:0 0 8px;padding-left:20px">${(lines.length ? lines : ['No real change — reject it']).map(t => `<li>${esc(t)}</li>`).join('')}</ul>
     <p class="muted" style="margin:0 0 10px">Asked by ${esc(c.by)} · ${esc(fmtAbs(c.at))}</p>
     ${gone ? '<p class="note">This entry was deleted — the change can only be rejected.</p>' : moved ? '<p class="note">⚠️ This entry was changed after the request. Check it before approving.</p>' : ''}
@@ -1799,17 +2317,335 @@ async function decide(id, ok) {
   if (!await unlock('Enter the password to approve or reject changes.')) return;
   const c = S.changes.find(x => x.id === id);
   if (!c || c.status !== 'waiting') return approvalsSheet();
-  const me = myName() || S.lastBy || 'Admin', key = c.kind === 'P' ? 'projects' : COLL[c.kind];
+  const me = myName() || S.lastBy || 'Admin', key = KIND_KEY[c.kind];
   const r = targetOf(c), next = r && { ...r, ...editPart(c) };
   if (ok && (!r || r.deleted || !VALID[c.kind](next))) return alert("This change can't be applied: the entry is gone or the new values aren't valid. Reject it instead.");
+  if (ok && c.action === 'delete' && c.kind === 'P' && [...live(S.expenses), ...live(S.credits)].some(x => x.project === c.target)) return alert('This project still has entries. Move or delete them first, or reject this.');
   const what = changeLines(c, r).join(' ; ') || 'no real change';
   const patch = {
     changes: S.changes.map(x => (x.id === id ? { ...x, status: ok ? 'approved' : 'rejected', decidedBy: me, decidedAt: stampSec() } : x)),
     log: logWith([[ok ? 'Approved' : 'Rejected', c.target, `${what} — asked by ${c.by}`]], me),
   };
-  if (ok) patch[key] = S[key].map(x => (x.id === c.target ? { ...next, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
+  // an approved advance changes nothing yet: whoever hands over the money then records it against this approval
+  if (ok && c.action === 'delete') patch[key] = S[key].map(x => (x.id === c.target ? { ...x, deleted: stampSec(), deletedBy: `${c.by} (approved by ${me})` } : x));
+  if (ok && !c.action) patch[key] = S[key].map(x => (x.id === c.target ? { ...next, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
   update(patch);
-  render(); approvalsSheet(); toast(ok ? 'Approved ✓ The entry is changed' : 'Rejected — the entry stays as it was');
+  render(); approvalsSheet(); toast(!ok ? 'Rejected — the entry stays as it was' : c.action === 'delete' ? 'Approved ✓ The entry is deleted' : c.action === 'advance' ? 'Approved ✓ The advance can be given now' : 'Approved ✓ The entry is changed');
+}
+// An office manager's delete waits for an admin, like her edits.
+async function askDelete(k, id) {
+  if (!await unlock('Enter the password to ask for this entry to be deleted.')) return;
+  const r = S[COLL[k]].find(x => x.id === id);
+  if (!confirm(`Ask an admin to delete ${id} — ${money(r.amount, r.cur)}?\n\nIt stays in the totals until an admin approves.`)) return;
+  const by = myName() || S.lastBy || '';
+  const [[cid], seq] = nextIds('C', 1, S.seq), text = `Delete: ${describe(k, r)}`;
+  update({
+    changes: [...S.changes, { id: cid, kind: k, target: id, action: 'delete', before: {}, after: {}, text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
+    log: logWith([['Delete asked', id, `${text} — waiting for an admin`]], by),
+  });
+  closeSheet(); render(); toast('Sent for approval ✓ It is deleted when an admin approves.');
+}
+
+/* ---------- quick unlock: a short code, and Face ID / fingerprint where the phone has it ---------- */
+// Both live only in this phone's sign-in slot. The code is checked like the password (slow hash); after 5 wrong
+// codes only the password works. Face ID is a key made on this phone for this address; the phone's own check
+// (the "user verified" flag) is what counts. iPhone home-screen apps are known to fumble it, so the code always works.
+const QUICK_TRIES = 5;
+const quick = () => (signedIn() && session.quick && session.quick.tries < QUICK_TRIES ? session.quick : null);
+const rndBytes = n => crypto.getRandomValues(new Uint8Array(n));
+const bytesB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64uBytes = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function bioAvailable() {
+  try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch { return false; }
+}
+async function bioCheck() {
+  const q = quick();
+  if (!q || !q.cred) return false;
+  try {
+    const a = await navigator.credentials.get({ publicKey: { challenge: rndBytes(32), allowCredentials: [{ type: 'public-key', id: b64uBytes(q.cred) }], userVerification: 'required', timeout: 60000 } });
+    return !!(new Uint8Array(a.response.authenticatorData)[32] & 4); // the phone checked the face or finger, not just a tap
+  } catch { return false; }
+}
+async function quickSheet() {
+  if (!await unlock('Enter your password to set up quick unlock.', true)) return;
+  const bio = await bioAvailable();
+  openSheet(`${head('Quick unlock')}
+    <p class="hint">Unlock with a short code${bio ? ' or Face ID / fingerprint' : ''} instead of typing your password. It works only on this phone.</p>
+    <form data-form="quick">
+      <label class="fld"><span>Choose a code <em>(4 to 6 numbers)</em></span><input name="code" type="password" inputmode="numeric" maxlength="6" required autocomplete="off" autofocus></label>
+      <label class="fld"><span>Type it again</span><input name="code2" type="password" inputmode="numeric" maxlength="6" required autocomplete="off"></label>
+      ${bio ? '<label class="fld check"><input type="checkbox" name="bio" checked> Also use Face ID / fingerprint</label>' : ''}
+      <p class="err"></p>
+      <button class="btn primary">Save</button>
+    </form>
+    ${session.quick ? '<p class="center"><button class="link" data-act="quickOff">Turn quick unlock off</button></p>' : ''}`);
+}
+async function saveQuick(f) {
+  const v = Object.fromEntries(new FormData(f));
+  if (!/^\d{4,6}$/.test(v.code)) return formErr(f, 'code', 'The code is 4 to 6 numbers.');
+  if (v.code !== v.code2) return formErr(f, 'code2', "The two codes don't match.");
+  let cred = null;
+  if (v.bio) {
+    $('.err', f).textContent = 'Setting up Face ID / fingerprint…';
+    try {
+      const make = navigator.credentials.create({ publicKey: {
+        challenge: rndBytes(32), rp: { name: 'Company Accounts' }, user: { id: rndBytes(16), name: session.user.username, displayName: session.user.name },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
+      // some phones never answer (iPhone home-screen apps): give up after the time limit instead of waiting forever
+      const c = await Promise.race([make, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 65000))]);
+      cred = bytesB64u(c.rawId);
+    } catch { if (!confirm('Face ID / fingerprint could not be set up on this phone.\n\nSave the code only?')) return; }
+  }
+  const salt = randHex();
+  saveSession({ ...session, quick: { salt, hash: await slowHash(v.code, salt), cred, tries: 0 } });
+  closeSheet(); render(); toast(`Quick unlock is on ✓${cred ? ' Code and Face ID / fingerprint' : ''}`);
+}
+function quickOff() {
+  const { quick: _, ...rest } = session;
+  saveSession(rest); closeSheet(); render(); toast('Quick unlock is off');
+}
+
+/* ---------- staff: employees, salaries, advances, leaving ---------- */
+// An employee (kind W) earns their monthly wage on a 30-day month (calc.js). Every payment to them is an
+// ordinary expense that names them (worker, pay = salary | advance | settlement), so the cash and bank
+// balances stay right. The office manager's changes to an employee, marking someone as left and advances
+// above the monthly limit all wait for an admin.
+const ADVANCE_LIMIT_USD = 100; // ponytail: the owner's $100 a month; make it an admin setting when they want to change it
+const PAY_REASON = { salary: m => `Salary ${monthName(m)}`, advance: () => 'Salary advance', settlement: () => 'Final settlement' };
+const today = () => stamp().slice(0, 10);
+const workerOf = id => S.workers.find(w => w.id === id);
+const ledgerOf = (w, upTo = today(), extra = []) => workerLedger(w, [...S.expenses, ...extra], upTo);
+const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join('') || '?';
+// advances an admin approved that nobody has given yet
+const approvedAdvances = id => S.changes.filter(c => c.action === 'advance' && c.target === id && c.status === 'approved' && !live(S.expenses).some(e => e.approval === c.id));
+const owedLabel = l => (l.balance >= 0 ? 'to pay' : 'paid ahead');
+
+function viewStaff() {
+  const ws = live(S.workers).sort((a, b) => a.name.localeCompare(b.name));
+  const on = ws.filter(w => w.status !== 'left'), gone = ws.filter(w => w.status === 'left');
+  return `${approvalsBanner()}<div class="sec-head"><h2 class="sec">Staff</h2><button class="btn small primary" data-act="addWorker">＋ Add employee</button></div>
+    ${on.length ? `<div class="card list">${on.map(workerRow).join('')}</div>` : gone.length ? empty('Nobody working now', 'Everyone listed has left the company.') : empty('No employees yet', 'Add each person once: their wage, the day they started and the balance from the salary book.')}
+    ${gone.length ? `<details class="gone"><summary>Left the company (${gone.length})</summary><div class="card list">${gone.map(workerRow).join('')}</div></details>` : ''}`;
+}
+function workerRow(w) {
+  const l = ledgerOf(w);
+  return `<button class="row" data-act="openWorker" data-id="${esc(w.id)}">
+    <span class="dot avatar">${esc(initials(w.name))}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(w.name)}</span>${waitingFor(w.id).length ? '<i class="tag warn">Waiting</i>' : ''}</span>
+    <span class="s">${esc([w.job, w.site, `${money(w.wage, w.cur)} a month`].filter(Boolean).join(' · '))}</span></span>
+    <span class="amt${l.balance < 0 ? ' neg' : ''}">${money(l.balance, l.cur)}<small>${owedLabel(l)}</small></span></button>`;
+}
+
+function workerDetail(id) {
+  const w = workerOf(id);
+  if (!w || w.deleted) return false;
+  const l = ledgerOf(w), left = w.status === 'left';
+  const pays = live(S.expenses).filter(e => e.worker === id).sort((a, b) => byAt(b, a));
+  const facts = [['Job', w.job], ['Site', w.site], ['Phone', w.phone], ['Monthly wage', money(w.wage, w.cur)], ['Started', fmtDate(w.start)], ['Left on', w.left && fmtDate(w.left)],
+    ['ID number', w.idNo], ['From the salary book', w.openingAmount ? `${money(w.openingAmount, w.cur)}${w.openingNote ? ' · ' + w.openingNote : ''}` : '']];
+  const idPhoto = latestFile(id, 'idphoto');
+  openSheet(`${head(w.name, '', w.id)}
+    <div class="wtop"><span class="wphoto" id="wPhoto">${esc(initials(w.name))}</span>
+      <div><div class="dbig ${l.balance < 0 ? 'out' : ''}" style="margin:0">${money(l.balance, l.cur)}</div><small class="muted">${l.balance >= 0 ? `still to pay ${esc(w.name)}` : 'paid more than earned so far'}${left ? ' · has left' : ''}</small></div></div>
+    ${waitingNote(id)}
+    ${approvedAdvances(id).map(c => `<div class="banner new"><span>✅ Advance of ${money(+c.after.amount, c.after.cur)} approved by ${esc(c.decidedBy)}.</span><button class="btn small" data-act="payWorker" data-pay="advance" data-id="${esc(id)}" data-approval="${esc(c.id)}">Give it</button></div>`).join('')}
+    <div class="two">${left
+      ? `<button class="btn out" data-act="payWorker" data-pay="settlement" data-id="${esc(id)}">💵 Final settlement</button>`
+      : `<button class="btn out" data-act="payWorker" data-pay="salary" data-id="${esc(id)}">💵 Pay salary</button><button class="btn ghost" data-act="payWorker" data-pay="advance" data-id="${esc(id)}">➖ Advance</button>`}</div>
+    <dl class="facts" style="margin-top:16px">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
+    <div class="two">${canChange() ? `<button class="btn ghost" data-act="editWorker" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${left || !canChange() ? '' : `<button class="btn danger" data-act="markLeft" data-id="${esc(id)}">🚪 Has left 🔒</button>`}</div>
+    <div class="two" style="margin-top:10px">${attachButton(id, '🙂 Profile photo', 'profile', 'image/*')}${idPhoto ? `<button class="btn ghost" data-act="showFile" data-id="${esc(idPhoto.id)}">🪪 ID photo</button>` : attachButton(id, '🪪 Add ID photo', 'idphoto')}</div>
+    <h3 class="subh">Wage by month</h3>
+    <div class="card list inset">${[...l.months].reverse().slice(0, 12).map(m => `<div class="mrow"><span>${monthName(m.month)}</span><span class="muted">${m.days} days${m.daysOff ? ` − ${m.daysOff} not worked` : ''}</span><b>${money(m.earned, l.cur)}</b></div>`).join('') || '<p class="muted pad">Starts on ' + esc(fmtDate(w.start)) + '.</p>'}</div>
+    <p class="muted">Earned ${money(l.earned, l.cur)}${l.opening ? ` + ${money(l.opening, l.cur)} from the salary book` : ''} − paid ${money(l.paid, l.cur)} = ${money(l.balance, l.cur)}.${l.unconverted.length ? ` ⚠️ ${l.unconverted.length} payment(s) in another currency without a rate are not counted.` : ''}</p>
+    <h3 class="subh">Payments (${pays.length})</h3>
+    ${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">Nothing paid yet.</p>'}
+    ${filesBlock(id)}`);
+  comeBack(() => workerDetail(id));
+  const photo = latestFile(id, 'profile');
+  if (photo) fileBlob(photo.id).then(b => { const el = $('#wPhoto'); if (el) el.innerHTML = `<img src="${URL.createObjectURL(b)}" alt="">`; }).catch(() => {});
+}
+
+function workerForm(old) {
+  const d = old || { cur: 'USD', start: today(), wage: '', openingAmount: '' };
+  openSheet(`${head(old ? 'Edit employee' : 'New employee', '', old?.id)}
+    <form data-form="worker" data-id="${esc(old?.id || '')}">
+      ${textField('name', 'Full name', 'e.g. John Deng', d.name)}
+      ${textField('job', 'Job', 'e.g. Mason, driver, guard', d.job, false)}
+      ${textField('site', 'Site', 'Where they work', d.site, false)}
+      <label class="fld"><span>Phone <em>(optional)</em></span><input name="phone" type="tel" value="${esc(d.phone)}" autocomplete="off" maxlength="30"></label>
+      ${curChips(d.cur, 'Wage is paid in')}
+      ${amountField(d.wage, d.cur, 'wage', 'Monthly wage')}
+      <label class="fld"><span>Started work on</span><input type="date" name="start" value="${esc(d.start)}" required></label>
+      ${textField('idNo', 'National ID or passport number', '', d.idNo, false)}
+      <label class="fld"><span>Balance from the salary book <em>(optional — what the company still owed them on the day they started in the app; put − if they owed the company)</em></span><input name="openingAmount" inputmode="decimal" value="${esc(d.openingAmount || '')}" placeholder="0" autocomplete="off"></label>
+      ${textField('openingNote', 'Note about that balance', 'e.g. From the salary book, September', d.openingNote, false)}
+      ${old ? '' : `<label class="fld"><span>Profile photo <em>(optional)</em></span><input type="file" name="profile" accept="image/*" capture="environment"></label>
+      <label class="fld"><span>ID or passport photo <em>(optional — only admins and the office see it)</em></span><input type="file" name="idphoto" accept="image/*,application/pdf"></label>`}
+      ${byField()}${approvalNote(old)}
+      <p class="err"></p>
+      <button class="btn primary">${old ? saveLabel() : 'Add employee'}</button>
+    </form>${datalists()}`);
+}
+async function saveWorker(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const old = workerOf(f.dataset.id);
+  const wage = parseAmount(v.wage), opening = String(v.openingAmount || '').replace(/[,\s$]/g, '');
+  const rec = { name: clean(v.name), job: clean(v.job), site: clean(v.site), phone: clean(v.phone), wage, cur: formCur(f), start: v.start, idNo: clean(v.idNo), openingAmount: opening ? Math.round(Number(opening) * 100) / 100 : 0, openingNote: clean(v.openingNote) };
+  if (!rec.name) return formErr(f, 'name', 'Type their name');
+  if (wage === null) return formErr(f, 'wage', 'Type the monthly wage, like 300');
+  if (!DATE_RE.test(rec.start)) return formErr(f, 'start', 'Pick the day they started');
+  if (!Number.isFinite(rec.openingAmount)) return formErr(f, 'openingAmount', 'Type a number, like 150 or −50');
+  const by = clean(v.by);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    if (!can('edit')) return requestChange('W', old, rec, changes, by);
+    update({ workers: S.workers.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
+    closeSheet(); render(); return toast('Changes saved ✓');
+  }
+  const [[id], seq] = nextIds('W', 1, S.seq);
+  update({ workers: [...S.workers, { id, ...rec, status: 'active', by, createdAt: stampSec() }], seq, lastBy: by,
+    log: logWith([['Employee', id, `${rec.name} added · ${money(wage, rec.cur)} a month from ${fmtDate(rec.start)}`]], by) });
+  for (const type of ['profile', 'idphoto']) {
+    const file = f.elements[type].files[0];
+    if (!file) continue;
+    try { const p = await prepareFile(file); await keepFile({ for: id, type, name: p.name, mime: p.mime }, p.data); }
+    catch (e) { alert(`${FILE_NAME[type]}: ${e.message}`); }
+  }
+  render(); workerDetail(id); toast(`${rec.name} added ✓`);
+}
+
+// Someone leaves: an admin records it (the office manager asks), then their final settlement is paid.
+function leftForm(id) {
+  const w = workerOf(id);
+  openSheet(`${head(`${w.name} has left`, 'out', w.id)}
+    <form data-form="left" data-id="${esc(id)}">
+      <label class="fld"><span>Last day of work</span><input type="date" name="left" value="${today()}" required></label>
+      <p class="muted">Their wage is counted up to this day. Then pay the final settlement.</p>
+      ${byField()}${can('edit') ? '' : '<p class="note">An admin approves this first.</p>'}
+      <p class="err"></p>
+      <button class="btn out">${can('edit') ? 'Save' : 'Send for approval'}</button>
+    </form>${datalists()}`);
+}
+function saveLeft(f) {
+  const w = workerOf(f.dataset.id), left = f.elements.left.value, by = clean(f.elements.by.value);
+  if (!DATE_RE.test(left) || left < w.start) return formErr(f, 'left', 'Pick a day on or after they started');
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const rec = { status: 'left', left }, changes = [`Status: Working → Left on ${fmtDate(left)}`];
+  if (!can('edit')) return requestChange('W', w, rec, changes, by);
+  update({ workers: S.workers.map(x => x.id === w.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Left', w.id, `${w.name} left on ${fmtDate(left)}`]], by), lastBy: by });
+  render(); payForm(w.id, 'settlement');
+}
+
+/* paying an employee: salary for a month, an advance, or the final settlement */
+function monthsOf(w) {
+  const out = [], last = today().slice(0, 7);
+  for (let m = w.start.slice(0, 7); m <= last && out.length < 240; m = nextMonth(m)) out.push(m);
+  return out.reverse().slice(0, 24);
+}
+// the month most likely being paid: last month if it hasn't had a salary yet, otherwise this month
+function payMonth(w) {
+  const ms = monthsOf(w), paid = new Set(live(S.expenses).filter(e => e.worker === w.id && e.pay === 'salary').map(e => e.month));
+  return ms.find((m, i) => i === 1 && !paid.has(m)) || ms[0];
+}
+// what is still owed for work up to the end of that month, if this many days were not worked
+function owedFor(w, month, daysOff) {
+  const end = month ? [today(), `${month}-31`].sort()[0] : today();
+  const extra = month && daysOff ? [{ id: 'new', worker: w.id, pay: 'salary', month, daysOff, amount: 0, cur: w.cur, at: `${end}T00:00` }] : [];
+  return ledgerOf(w, end, extra);
+}
+function payInfo(f) {
+  const w = workerOf(f.dataset.id), pay = f.dataset.pay;
+  if (pay === 'advance') {
+    const used = advancesUsd(live(S.expenses).filter(e => e.worker === w.id), today().slice(0, 7));
+    return `Advances given to ${esc(w.name)} this month: <b>${money(used, 'USD')}</b> of the ${money(ADVANCE_LIMIT_USD, 'USD')} limit.`;
+  }
+  const month = f.elements.month ? f.elements.month.value : '', off = Math.max(0, Math.round(Number(f.elements.daysOff?.value || 0)));
+  const l = owedFor(w, month, off), m = l.months.find(x => x.month === month);
+  return `${m ? `${monthName(month)}: ${m.days - m.daysOff} days worked of ${m.days} → <b>${money(m.earned, l.cur)}</b><br>` : ''}Still to pay ${esc(w.name)}${month ? ` up to the end of ${monthName(month)}` : ''}: <b>${money(l.balance, l.cur)}</b>`;
+}
+function payForm(id, pay, approval) {
+  const w = workerOf(id), appr = approval && approvedAdvances(id).find(c => c.id === approval);
+  const month = pay === 'salary' ? payMonth(w) : '';
+  const suggested = appr ? +appr.after.amount : pay === 'advance' ? '' : Math.max(0, owedFor(w, month, 0).balance);
+  const cur = appr ? appr.after.cur : w.cur;
+  const title = { salary: 'Pay salary', advance: 'Give an advance', settlement: 'Final settlement' }[pay];
+  openSheet(`${head(title, 'out', w.name)}
+    <form data-form="pay" data-id="${esc(id)}" data-pay="${pay}" data-approval="${esc(appr ? appr.id : '')}">
+      ${pay === 'salary' ? `<label class="fld"><span>For the month of</span><select name="month">${monthsOf(w).map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select></label>
+      <label class="fld"><span>Days not worked that month <em>(${money(Math.round(w.wage / 30 * 100) / 100, w.cur)} a day comes off)</em></span><input name="daysOff" type="number" inputmode="numeric" min="0" max="30" step="1" value="0"></label>` : ''}
+      <p class="note payinfo"></p>
+      ${appr ? `<input type="hidden" name="cur" value="${esc(cur)}"><p class="muted">Approved by ${esc(appr.decidedBy)}: ${money(+appr.after.amount, cur)}</p>` : curChips(cur, 'Paid in')}
+      ${amountField(suggested, cur)}
+      ${rateField(cur)}
+      ${accountChips(S.lastMode || 'Cash', 'Paid from')}
+      ${byField()}
+      <p class="err"></p>
+      <button class="btn out">Save, then sign the slip</button>
+    </form>${datalists()}`);
+  const f = $('#sheet form');
+  $('.payinfo', f).innerHTML = payInfo(f);
+}
+function refreshPay(f, t) {
+  $('.payinfo', f).innerHTML = payInfo(f);
+  if (t && (t.name === 'month' || t.name === 'daysOff') && !f.dataset.typed) { // keep the suggested amount in step until they type their own
+    const w = workerOf(f.dataset.id), l = owedFor(w, f.elements.month.value, Math.max(0, Math.round(Number(f.elements.daysOff.value || 0))));
+    f.elements.amount.value = Math.max(0, l.balance) || '';
+    refreshAmount(f.elements.amount);
+  }
+}
+function savePay(f) {
+  const w = workerOf(f.dataset.id), pay = f.dataset.pay, v = Object.fromEntries(new FormData(f));
+  const amount = parseAmount(v.amount), cur = formCur(f), rate = rateFrom(f, cur);
+  if (amount === null) return formErr(f, 'amount', 'Type the amount paid, like 250');
+  if (rate === null) return formErr(f, 'rate', RATE_ERR);
+  const daysOff = pay === 'salary' ? Number(v.daysOff || 0) : 0;
+  if (!Number.isInteger(daysOff) || daysOff < 0 || daysOff > 30) return formErr(f, 'daysOff', 'Days not worked: a whole number from 0 to 30');
+  const by = clean(v.by);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const appr = f.dataset.approval && approvedAdvances(w.id).find(c => c.id === f.dataset.approval);
+  if (pay === 'advance' && !appr) {
+    const used = advancesUsd(live(S.expenses).filter(e => e.worker === w.id), today().slice(0, 7));
+    const usd = cur === 'USD' ? amount : amount / rate;
+    if (cents(used + usd) > cents(ADVANCE_LIMIT_USD)) {
+      if (!can('edit')) return askAdvance(w, amount, cur, by);
+      if (!confirm(`This is more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit (${money(used, 'USD')} given this month already).\n\nGive it anyway?`)) return;
+    }
+  }
+  if (appr && (cur !== appr.after.cur || amount > +appr.after.amount)) return formErr(f, 'amount', `The admin approved ${money(+appr.after.amount, appr.after.cur)} — not more.`);
+  const month = pay === 'salary' ? v.month : '';
+  const rec = { cur, amount, rate, paidTo: w.name, reason: PAY_REASON[pay](month), location: '', project: '', mode: v.mode || 'Cash', ...dateFrom({}),
+    worker: w.id, pay, ...(month ? { month } : {}), ...(daysOff ? { daysOff } : {}), ...(appr ? { approval: appr.id } : {}) };
+  const [[id], seq] = nextIds('E', 1, S.seq);
+  update({ expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq, lastBy: by, lastMode: rec.mode, ...(rate ? { lastRate: rate } : {}) });
+  render(); toast(`Saved ✓ ${money(amount, cur)} to ${w.name}`);
+  slipSheet('E', id);
+}
+// above the monthly limit, the office manager asks an admin first
+function askAdvance(w, amount, cur, by) {
+  const [[id], seq] = nextIds('C', 1, S.seq);
+  const text = `Advance of ${money(amount, cur)} to ${w.name} — more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit`;
+  update({
+    changes: [...S.changes, { id, kind: 'W', target: w.id, action: 'advance', before: {}, after: { amount, cur }, text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
+    log: logWith([['Advance asked', w.id, `${text} — waiting for an admin`]], by), lastBy: by,
+  });
+  closeSheet(); render(); toast('Sent to an admin ✓ You can give it once they approve.');
+}
+
+// what a salary slip shows, from the payment and the employee's account
+function payslipSpec(r) {
+  const w = workerOf(r.worker) || { name: r.paidTo, wage: 0, cur: r.cur, start: r.at.slice(0, 10) };
+  const after = ledgerOf(w);
+  const m = r.month && after.months.find(x => x.month === r.month);
+  const rows = [['Employee', w.name], ['Job', w.job], ['Employee no.', w.id]];
+  if (r.pay === 'salary') rows.push(['Month', monthName(r.month)], ['Monthly wage', `${money(w.wage, w.cur)} (30-day month)`],
+    ['Days worked', m ? `${m.days - m.daysOff} of ${m.days}${m.daysOff ? ` (${m.daysOff} not worked)` : ''}` : ''], ['Earned that month', m ? money(m.earned, w.cur) : '']);
+  if (r.pay === 'settlement') rows.push(['Last day of work', w.left ? fmtDate(w.left) : '']);
+  rows.push(['Paid from', accountOf(r.mode)], ...rateRow(r), [after.balance >= 0 ? 'Still to pay after this' : 'Paid ahead after this', money(Math.abs(after.balance), after.cur)]);
+  return { title: SLIP_TITLE[r.pay] || SLIP_TITLE.voucher, rows: rows.filter(x => x[1]), signLabel: 'Received by', signName: w.name };
 }
 
 /* ---------- import old entries (paste rows from a list or sheet) ---------- */
@@ -2061,13 +2897,34 @@ const ACTIONS = {
   approvals: () => approvalsSheet(),
   moveApp: () => moveApp(),
   decide: b => decide(b.dataset.id, !!b.dataset.ok),
+  askDelete: b => askDelete(b.dataset.kind, b.dataset.id),
+  slip: b => slipSheet(b.dataset.kind, b.dataset.id),
+  sigClear: b => sigPad($('canvas.sig', b.closest('.fld'))),
+  showFile: b => showFile(b.dataset.id),
+  shareShown: () => shareShown(),
+  letterhead: async () => { if (await unlock('Enter the password to change the letterhead.')) letterheadSheet(); },
+  quick: () => quickSheet(),
+  quickOff: () => quickOff(),
+  addWorker: () => workerForm(),
+  openWorker: b => workerDetail(b.dataset.id),
+  editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
+  markLeft: async b => { if (await unlock('Enter the password to record that this employee has left.')) leftForm(b.dataset.id); },
+  payWorker: b => payForm(b.dataset.id, b.dataset.pay, b.dataset.approval),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, quick: saveQuick };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
   input.closest('.fld').querySelector('.amt-preview').textContent = n === null ? '' : money(n, formCur(input.form));
+  refreshRate(input.form);
+}
+// "≈ $55.56" under the SSP rate, so a mistyped rate shows at once
+function refreshRate(f) {
+  const out = f && $('.rate-usd', f);
+  if (!out) return;
+  const rate = parseAmount(f.elements.rate.value), amt = f.elements.amount ? parseAmount(f.elements.amount.value) : null;
+  out.textContent = rate === null ? '' : amt === null ? `1 USD = ${plain(rate)} SSP` : `${money(amt, 'SSP')} is about ${money(Math.round(amt / rate * 100) / 100, 'USD')}`;
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
@@ -2084,6 +2941,8 @@ document.addEventListener('input', e => {
   t.classList.remove('bad');
   if (t.closest('.brows')) updateBulk(t.form);
   if (t.closest('.amt-in')) refreshAmount(t);
+  if (t.name === 'rate' && t.form) refreshRate(t.form);
+  if (t.form && t.form.dataset.form === 'pay') { if (t.name === 'amount') t.form.dataset.typed = '1'; refreshPay(t.form, t); }
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
   if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
@@ -2094,7 +2953,11 @@ document.addEventListener('change', e => {
     $$('.cur-sym', t.form).forEach(s => (s.textContent = SYM[t.value].trim()));
     $$('.amt-in input', t.form).forEach(refreshAmount);
     if ($('.brows', t.form)) updateBulk(t.form);
+    $$('.ratef', t.form).forEach(l => { l.hidden = t.value !== 'SSP'; $('input', l).required = !l.hidden; });
+    refreshRate(t.form);
   }
+  if (t.dataset.attach !== undefined) attachPicked(t);
+  if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }
@@ -2118,6 +2981,7 @@ setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
 setInterval(renderLock, 10000);
 
 if (S) { S = migrate(S); save(); repairImportedMoves(); }
+loadOutbox().then(() => { if (outbox.length) uploadFiles(); });
 if (S && location.hash) history.replaceState(null, '', location.pathname);
 if (location.search) history.replaceState(null, '', location.pathname + location.hash); // drop ?v= left by an update
 render();
