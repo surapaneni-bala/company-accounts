@@ -58,6 +58,6 @@ const cname = path.join(root, 'docs', 'CNAME');
 const home = fs.existsSync(cname) ? `https://${fs.readFileSync(cname, 'utf8').trim()}/${TEST ? 'test/' : ''}` : '';
 fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify(home ? { version, home } : { version }) + '\n'); // the app asks for this to spot updates
 fs.writeFileSync(path.join(out, 'manifest.webmanifest'), read('manifest.webmanifest'));
-for (const f of ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'logo-wide.png']) fs.copyFileSync(path.join(root, 'src', f), path.join(out, f));
+for (const f of ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'logo-wide.png', 'watermark.png']) fs.copyFileSync(path.join(root, 'src', f), path.join(out, f));
 fs.copyFileSync(path.join(root, 'apps-script', 'Code.gs'), path.join(out, 'sheet-script.txt')); // .txt so browsers show it, ready to copy
 console.log(`built ${path.relative(root, out)}/ — index.html ${(html.length / 1024).toFixed(0)} KB, version ${version}${TEST ? ' (TEST COPY)' : ''}`);

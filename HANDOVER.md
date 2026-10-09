@@ -192,13 +192,16 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
 - **Sections:** `tab = 'menu'` is the first page (Accounts / Employees tiles); `ACC_TABS` (home, hist, proj, sheet) show
   the bottom bar; `staff` is Employees. Without the `staff` right (store keeper) there is no menu. The header shows the
   section name and a round ‹ back button. `WELCOME` (core.js) is the title of the first screen.
-- **Slip pages are as tall as the slip** (A4 width): the form is drawn on a see-through layer, then put on the letterhead
-  in three parts (`drawLetterhead`): its header (top `LH_TOP` = 18 %) at the top, its address strip (bottom `LH_FOOT` =
-  10 %) at the foot, and the watermark band between them shrunk to fit (never larger than on A4, kept to the right
-  edge). `pdfPages` sizes each page from its picture.
+- **Slip pages are as tall as the slip** (A4 width): the form is drawn on a see-through layer, then put on the page by
+  `drawLetterhead`: the letterhead's header (top `LH_TOP` = 18 %) at the top; its address strip (bottom `LH_FOOT` = 10 %)
+  only on full A4 pages (statements) — vouchers and slips leave it off (the owner's choice, 9 Oct 2026); and the company's
+  "B" (`watermark.png`, cut from the letterhead by `tools/make-icons.py`) in the room below the header, as on the printed
+  letterhead on A4 (`WM`) and shrunk to fit a shorter page, kept to the right edge. The watermark is drawn even without a
+  letterhead. `pdfPages` sizes each page from its picture.
 - **Payment photo:** picked or taken, then framed by hand in a 3 : 2 box (drag, pinch, slider; `startFramer`,
-  `framedPhoto`); slips and statements print it in an exact 3 : 2 box (`photoInto`), so the framing is kept. The photo as
-  taken is also kept with the entry (F type `photo`), listed under its files.
+  `framedPhoto`). Zoom 1 fills the box; zooming out goes down to `min`, where the whole photo fits (the box's empty
+  parts are white on screen and see-through on the slip). Slips and statements print it in an exact 3 : 2 box
+  (`photoInto`), so the framing is kept. The photo as taken is also kept with the entry (F type `photo`), listed under its files.
 - **Logo:** `tools/make-icons.py` also writes `src/logo-wide.png` (the whole logo, from the private file) for the menu
   header, the welcome / sign-in / code screens and slips made before a letterhead is set. A letterhead with the
   original logo (in place of the edited "ENTERPRISES" one) is `private/brand/letterhead-original-logo.png`. Nothing is painted white over the letterhead, so its watermark shows (tints are see-through).
@@ -208,8 +211,7 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
   (white paper, a black square from an old JPEG, or none) before it is drawn.
 - **Slips** (files.js `renderSlip`) follow the company's paper voucher: ruled box with paid to | date, being payment
   for | amount in (SSP/USD boxes + amount), amount in words | paid from / rate, received by (signature) | photo, then
-  prepared / checked / approved. It measures first and sets a long slip tighter so it ends above the letterhead
-  footer (y ≤ 1570). The **company stamp** (F type `stamp`, for `settings`, admins only, sent to everyone like the
+  prepared / checked / approved. The page grows to fit what it holds. The **company stamp** (F type `stamp`, for `settings`, admins only, sent to everyone like the
   letterhead) is drawn at the right of "approved"; `inkCircle()` finds its ring from the ink, and the date is written
   letter by letter along the arc at `place = {a, r, s}` (angle, radius and size as parts of the ring's radius;
   defaults `STAMP_PLACE` measured on the owner's stamp), adjustable in Settings → Company stamp and saved on the F record.

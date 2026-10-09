@@ -1,8 +1,8 @@
 // Keeps a copy of the app on the phone/computer so it opens with no internet.
 // The test copy is built with its own prefix (tools/build.js --test), so the two never delete each other's saved copy.
 const PREFIX = 'test-accounts-';
-const CACHE = PREFIX + '0891b1a539';
-const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'logo-wide.png'];
+const CACHE = PREFIX + '79c40d8eb7';
+const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'logo-wide.png', 'watermark.png'];
 
 self.addEventListener('install', e => {
   // cache: 'reload' = straight from the internet, never a stored older copy of the page
