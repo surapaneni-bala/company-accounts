@@ -13,33 +13,61 @@
  * phones with the company code keep working exactly as before.
  */
 const SYNC_TAB = '_sync';
-const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log'];
+const FILES_TAB = '_files'; // every Drive file this script made, and which login uploaded it
+const FILE_COLS = ['fileId', 'uid'];
+// the first bytes of each kind of file allowed: a file must be what it says it is
+const MAGIC = { 'image/jpeg': [0xFF, 0xD8, 0xFF], 'image/png': [0x89, 0x50, 0x4E, 0x47], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
+const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pdf' };
+const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees'];
 // record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
-// Change request (an office manager's edit, waiting for an admin to approve it)
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C'];
+// Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
+// File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …),
+// Absence (one day an employee did not work: it comes off that month's wage)
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A'];
+const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement'];
+const BRAND_FILES = ['letterhead', 'stamp']; // the company's own: only admins set them, every login's slips carry them
+const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
+const MAX_FILE = 8 * 1024 * 1024; // bytes
 const ACCOUNTS = ['Cash', 'Bank'];
 // every id the app makes looks like E-K7Q-0001, L-K7Q-lq2x0 or settings; anything else could carry markup into the app's pages
 const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 const AT_RE = /^\d{4}-\d\d-\d\dT\d\d:\d\d$/;
+const DATE_RE = /^\d{4}-\d\d-\d\d$/;
 const CURS = ['USD', 'SSP'];
 // the fields an edit may change, per kind: an approved change request touches only these
 const EDITABLE = {
-  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate'],
-  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate'],
+  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate', 'rate'],
+  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate', 'rate'],
   T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
   P: ['name', 'value', 'valueCur'],
+  W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote', 'clearedTo'],
+  A: ['date', 'note'],
 };
 // The same checks the app makes before it shows a record. Anything else is refused: it would also break the tabs.
 const SHAPES = {
-  E: d => money_(d) && str_(d.paidTo) && str_(d.reason),
-  R: d => money_(d),
+  E: d => money_(d) && str_(d.paidTo) && str_(d.reason) && extras_(d),
+  R: d => money_(d) && extras_(d),
   T: d => money_(d) && ACCOUNTS.indexOf(d.from) >= 0 && ACCOUNTS.indexOf(d.to) >= 0 && d.from !== d.to,
   P: d => str_(d.name),
   L: d => str_(d.text) && str_(d.at),
   S: d => str_(d.company) && isObj_(d.pass) && str_(d.pass.salt) && str_(d.pass.hash),
+  // a change request: an edit (only editable fields), a delete, or an advance above the monthly limit
   C: d => !!EDITABLE[d.kind] && SAFE_ID.test(d.target) && isObj_(d.before) && isObj_(d.after) && str_(d.text) && AT_RE.test(d.at)
-    && ['waiting', 'approved', 'rejected'].indexOf(d.status) >= 0 && Object.keys(d.after).every(f => EDITABLE[d.kind].indexOf(f) >= 0),
+    && ['waiting', 'approved', 'rejected'].indexOf(d.status) >= 0
+    && (d.action === 'delete' ? !Object.keys(d.after).length
+      : d.action === 'advance' ? d.kind === 'W' && num_(d.after.amount) && d.after.amount > 0 && CURS.indexOf(d.after.cur) >= 0 && Object.keys(d.after).length === 2
+      : d.action === undefined && Object.keys(d.after).every(f => EDITABLE[d.kind].indexOf(f) >= 0)),
+  A: d => SAFE_ID.test(d.worker) && DATE_RE.test(d.date) && (d.note === undefined || str_(d.note)),
+  W: d => str_(d.name) && num_(d.wage) && d.wage >= 0 && CURS.indexOf(d.cur) >= 0 && DATE_RE.test(d.start)
+    && ['active', 'left'].indexOf(d.status || 'active') >= 0 && (!d.left || DATE_RE.test(d.left)) && (d.openingAmount === undefined || num_(d.openingAmount))
+    && (!d.clearedTo || DATE_RE.test(d.clearedTo)),
+  F: d => /^[A-Za-z0-9_-]{10,100}$/.test(d.fileId) && str_(d.name) && FILE_MIMES.indexOf(d.mime) >= 0 && SAFE_ID.test(d.for) && FILE_TYPES.indexOf(d.type) >= 0,
 };
+const num_ = v => typeof v === 'number' && isFinite(v);
+// optional fields on money records: the SSP rate of the day, and the employee a payment belongs to
+const extras_ = d => (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (d.worker === undefined || SAFE_ID.test(d.worker))
+  && (d.pay === undefined || ['salary', 'advance', 'settlement'].indexOf(d.pay) >= 0) && (d.month === undefined || /^\d{4}-\d\d$/.test(d.month))
+  && (d.daysOff === undefined || (num_(d.daysOff) && d.daysOff >= 0 && d.daysOff <= 31)) && (d.approval === undefined || SAFE_ID.test(d.approval));
 const str_ = v => typeof v === 'string';
 const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
@@ -47,7 +75,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 3; // shown when the web app link is opened in a browser
+const VERSION = 7; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -121,7 +149,9 @@ function sync_(req) {
   const ss = SpreadsheetApp.getActive();
   const sh = syncTab_(ss);
   const rows = readAll_(sh);
-  const result = merge_(rows, req.push, Number(req.since) || 0, user);
+  // once the company has logins, a phone with only the company code (an old invite link) gets no staff records or files
+  const codeOnly = !user && users_().length > 0;
+  const result = merge_(rows, req.push, Number(req.since) || 0, user, uploads_(), codeOnly);
   let warning = '';
   if (result.changed) {
     sh.getRange(2, 1, result.rows.length, 5).setValues(result.rows);
@@ -131,7 +161,7 @@ function sync_(req) {
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role === 'store' ? '' : ss.getUrl(), kinds: KINDS,
-    pull: result.pull.map(r => view_(user, r)).filter(Boolean), refused: result.refused, me: user ? public_(user) : null,
+    pull: result.pull.map(r => view_(user, r)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F'))), refused: result.refused, me: user ? public_(user) : null,
     logins: !!user || users_().length > 0, warning: warning,
   };
 }
@@ -154,20 +184,23 @@ function view_(user, rec) {
   if (!user || user.role === 'admin') return rec;
   if (rec.k === 'S') return { id: rec.id, k: rec.k, u: rec.u, d: { company: rec.d.company } };
   if (user.role === 'manager') return rec;
-  return (rec.k === 'E' || rec.k === 'L') && rec.d.uid === user.id ? rec : null;
+  if (rec.k === 'F' && BRAND_FILES.indexOf(rec.d.type) >= 0) return rec; // everyone's vouchers carry the letterhead and stamp
+  return (rec.k === 'E' || rec.k === 'L' || rec.k === 'F') && rec.d.uid === user.id ? rec : null;
 }
 // What each login may change. before = the stored copy (null for a new record).
 function allowed_(user, p, before) {
   if (!user || user.role === 'admin') return true;
   if (before) return false; // only admins change what is already there (an office manager's edit is a change request)
   if (p.d.uid !== user.id || p.d.deleted) return false; // a new record carries its sender's login and isn't born deleted
-  if (user.role === 'manager') return ['E', 'R', 'T', 'P', 'L', 'C'].indexOf(p.k) >= 0 && (p.k !== 'C' || p.d.status === 'waiting');
-  return p.k === 'E' || p.k === 'L'; // store keeper: own expenses and notes
+  if (p.k === 'F' && BRAND_FILES.indexOf(p.d.type) >= 0) return false; // the company letterhead and stamp: admins only
+  if (user.role === 'manager') return ['E', 'R', 'T', 'P', 'L', 'C', 'W', 'F', 'A'].indexOf(p.k) >= 0 && (p.k !== 'C' || p.d.status === 'waiting');
+  return p.k === 'E' || p.k === 'L' || p.k === 'F'; // store keeper: own expenses, notes and their receipts
 }
 
 // Pure merge: newest copy of each record wins. rows are [id, kind, u, seq, json].
 // user = the signed-in person (null = company code); records they may not change are refused.
-function merge_(rows, push, since, user) {
+// uploads = { fileId: uid of the login that uploaded it }; codeOnly = a company-code phone of a company with logins.
+function merge_(rows, push, since, user, uploads, codeOnly) {
   const out = rows.map(r => r.slice());
   const index = Object.create(null); // ids come from phones: no inherited names like "constructor"
   out.forEach((r, i) => { index[r[0]] = i; });
@@ -184,8 +217,20 @@ function merge_(rows, push, since, user) {
     const u = limited ? Math.min(p.u, now) : p.u; // a phone can't stamp its copy in the future and so block later edits
     if (i !== undefined && Number(out[i][2]) >= u) return; // already have this copy or a newer one (e.g. sent again after a lost reply)
     if (!allowed_(user || null, p, i === undefined ? null : JSON.parse(out[i][4]))) { refused.push(p.id); return; }
+    if (codeOnly && (p.k === 'W' || p.k === 'F')) { refused.push(p.id); return; }
     const t = p.k === 'C' ? index[p.d.target] : 0;
     if (t === undefined || (p.k === 'C' && out[t][1] !== p.d.kind)) { refused.push(p.id); return; } // a change request needs its entry
+    // an edit must leave its entry valid: approving it can never produce a record the sheet would refuse
+    if (p.k === 'C' && !p.d.action && !SHAPES[p.d.kind](Object.assign(JSON.parse(out[t][4]), p.d.after))) { refused.push(p.id); return; }
+    // a file record may only name a file this script uploaded (else it could fetch any file in the owner's Drive),
+    // and a non-admin only one they uploaded themselves
+    const up = p.k === 'F' ? (uploads || {})[p.d.fileId] : '';
+    if (up === undefined || (p.k === 'F' && limited && up !== user.id)) { refused.push(p.id); return; }
+    if (p.k === 'A' && limited && (index[p.d.worker] === undefined || out[index[p.d.worker]][1] !== 'W')) { refused.push(p.id); return; } // a day not worked belongs to an employee
+    if (p.k === 'F' && limited) { // a file belongs to a record the sender may see (a store keeper: their own)
+      const f = index[p.d.for];
+      if (f === undefined || (user.role === 'store' && JSON.parse(out[f][4]).uid !== user.id)) { refused.push(p.id); return; }
+    }
     const d = limited ? Object.assign({}, p.d, { by: user.name }) : p.d; // signed by the login that sent it
     seq += 1;
     changed = true;
@@ -214,6 +259,7 @@ const SIGNED_OUT = 'You have been signed out. Please sign in again.';
 const WRONG_LOGIN = 'Wrong username or password. After 5 wrong tries, wait 15 minutes.';
 
 function account_(req) {
+  if (req.op === 'upload' || req.op === 'file') return files_(req);
   if (req.op === 'login') return login_(req);
   if (req.op === 'setup') return setupLogins_(req);
   const me = req.token ? sessionUser_(String(req.token)) : null;
@@ -230,6 +276,48 @@ function account_(req) {
   return { ok: false, error: 'Unknown request' };
 }
 const required_ = () => PropertiesService.getScriptProperties().getProperty('REQUIRE_LOGIN') === '1';
+
+/* ---------- files: photos and PDFs kept in a private folder of the sheet owner's Google Drive ---------- */
+// Never shared by link: a file only leaves Drive through this script, to someone allowed to see its record.
+function files_(req) {
+  const who = who_(req);
+  if (who.error) return { ok: false, error: who.error, code: who.code };
+  if (!who.user && users_().length > 0) return { ok: false, error: 'Please sign in with your username and password to send or open files.', code: 'LOGIN' };
+  if (req.op === 'upload') {
+    if (FILE_MIMES.indexOf(req.mime) < 0) return { ok: false, error: 'Only photos (JPG, PNG) and PDFs can be kept.' };
+    const bytes = Utilities.base64Decode(String(req.data || ''));
+    if (!bytes.length || bytes.length > MAX_FILE) return { ok: false, error: 'The file is empty or bigger than 8 MB.' };
+    if (!MAGIC[req.mime].every((b, i) => ((bytes[i] + 256) % 256) === b)) return { ok: false, error: 'This file is not a real photo or PDF.' };
+    const name = (String(req.name || '').replace(/\.[^.]*$/, '').replace(/[^\w .()-]/g, '').slice(0, 80) || 'file') + EXT[req.mime];
+    const file = monthFolder_().createFile(Utilities.newBlob(bytes, req.mime, name));
+    saveRows_(FILES_TAB, FILE_COLS, rowsOf_(FILES_TAB, FILE_COLS).concat([{ fileId: file.getId(), uid: who.user ? who.user.id : '' }]));
+    return { ok: true, fileId: file.getId() };
+  }
+  const row = readAll_(syncTab_(SpreadsheetApp.getActive())).filter(r => r[0] === String(req.id) && r[1] === 'F')[0];
+  const rec = row && view_(who.user, toRec_(row));
+  if (!rec) return { ok: false, error: 'This file is not available to you.' };
+  const blob = DriveApp.getFileById(rec.d.fileId).getBlob();
+  return { ok: true, name: rec.d.name, mime: rec.d.mime, data: Utilities.base64Encode(blob.getBytes()) };
+}
+function uploads_() {
+  const map = Object.create(null);
+  rowsOf_(FILES_TAB, FILE_COLS).forEach(r => { map[String(r.fileId)] = String(r.uid); });
+  return map;
+}
+function monthFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  let root = null;
+  try { root = props.getProperty('FILES_FOLDER') ? DriveApp.getFolderById(props.getProperty('FILES_FOLDER')) : null; } catch (err) { root = null; }
+  if (!root) { root = DriveApp.createFolder('Company app files (do not share)'); props.setProperty('FILES_FOLDER', root.getId()); }
+  const month = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+  const found = root.getFoldersByName(month);
+  return found.hasNext() ? found.next() : root.createFolder(month);
+}
+// Run this once in the Apps Script editor after pasting version 4: Google then asks permission to use Drive.
+function allowFiles() {
+  DriveApp.getRootFolder();
+  Logger.log('Drive access is allowed. Now: Deploy → Manage deployments → ✏️ → New version → Deploy.');
+}
 
 // The very first login is the owner's. It needs the company code AND a one-time setup code that is written only
 // inside the Google Sheet ("Read me" tab), so only the person who owns the sheet can become the first admin.
@@ -410,15 +498,19 @@ function rebuild_(ss, all) {
   const projects = Object.create(null);
   of('P').forEach(p => { projects[p.id] = p; });
   const pname = id => (id ? (projects[id] ? projects[id].name : 'Unknown project') : 'General (no project)');
+  const workers = Object.create(null);
+  of('W').forEach(w => { workers[w.id] = w; });
+  const wname = id => (workers[id] ? workers[id].name : 'Unknown employee');
   const live = k => of(k).filter(x => !x.deleted && (k !== 'T' || (ACCOUNTS.indexOf(x.from) >= 0 && ACCOUNTS.indexOf(x.to) >= 0))).sort(byAt_);
   const settings = of('S')[0] || {};
-  const ctx = { E: live('E'), R: live('R'), T: live('T'), P: of('P').filter(x => !x.deleted), L: of('L').sort(byAt_), pname: pname, company: settings.company || 'Company' };
+  const ctx = { E: live('E'), R: live('R'), T: live('T'), P: of('P').filter(x => !x.deleted), L: of('L').sort(byAt_), pname: pname, wname: wname, company: settings.company || 'Company' };
   summary_(ss, ctx);
   expenses_(ss, ctx);
   received_(ss, ctx);
   moves_(ss, ctx);
   ledger_(ss, ctx);
   changeLog_(ss, ctx);
+  employees_(ss, ctx, of('W').filter(x => !x.deleted));
   // keep the tabs in a fixed order right after "Read me"
   VIEW_TABS.forEach((name, i) => {
     if (ss.getSheets()[i + 1].getName() !== name) { ss.setActiveSheet(ss.getSheetByName(name)); ss.moveActiveSheet(i + 2); }
@@ -568,15 +660,15 @@ function section_(sh, r, text) {
 }
 function expenses_(ss, c) {
   dataTab_(ss, c.company, 'Expenses', COLOR.out,
-    ['Entry no.', 'Date', 'Day', 'Time', 'Currency', 'Amount USD', 'Amount SSP', 'Paid to', 'Reason', 'Location', 'Project', 'Paid from', 'Entered by', 'Recorded', 'Remarks'],
-    c.E.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), x.cur, only_(x, 'USD'), only_(x, 'SSP'), x.paidTo, x.reason, x.location || '', c.pname(x.project), accountOf_(x.mode), x.by || '', when_(x.createdAt), remarks_(x)]),
-    ['', 'date', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 75, 120, 140, 170, 200, 130, 170, 100, 120, 150, 260], [5, 6]);
+    ['Entry no.', 'Date', 'Day', 'Time', 'Currency', 'Amount USD', 'Amount SSP', 'Paid to', 'Reason', 'Location', 'Project', 'Paid from', 'Entered by', 'Recorded', 'Remarks', 'SSP per USD', 'Employee'],
+    c.E.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), x.cur, only_(x, 'USD'), only_(x, 'SSP'), x.paidTo, x.reason, x.location || '', c.pname(x.project), accountOf_(x.mode), x.by || '', when_(x.createdAt), remarks_(x), x.rate || '', x.worker ? c.wname(x.worker) : '']),
+    ['', 'date', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 75, 120, 140, 170, 200, 130, 170, 100, 120, 150, 260, 110, 160], [5, 6]);
 }
 function received_(ss, c) {
   dataTab_(ss, c.company, 'Money Received', COLOR.in,
-    ['Entry no.', 'Date', 'Day', 'Time', 'Project', 'Currency', 'Amount USD', 'Amount SSP', 'Received into', 'Note', 'Entered by', 'Recorded', 'Remarks'],
-    c.R.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), c.pname(x.project), x.cur, only_(x, 'USD'), only_(x, 'SSP'), accountOf_(x.mode), x.note || '', x.by || '', when_(x.createdAt), remarks_(x)]),
-    ['', 'date', '', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 190, 75, 120, 140, 110, 200, 120, 150, 260], [6, 7]);
+    ['Entry no.', 'Date', 'Day', 'Time', 'Project', 'Currency', 'Amount USD', 'Amount SSP', 'Received into', 'Note', 'Entered by', 'Recorded', 'Remarks', 'SSP per USD'],
+    c.R.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), c.pname(x.project), x.cur, only_(x, 'USD'), only_(x, 'SSP'), accountOf_(x.mode), x.note || '', x.by || '', when_(x.createdAt), remarks_(x), x.rate || '']),
+    ['', 'date', '', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 190, 75, 120, 140, 110, 200, 120, 150, 260, 110], [6, 7]);
 }
 function moves_(ss, c) {
   dataTab_(ss, c.company, 'Cash & Bank moves', '#3b5bdb',
@@ -607,6 +699,15 @@ function ledger_(ss, c) {
   dataTab_(ss, c.company, 'Ledger', '#1d6f42',
     ['Date', 'Time', 'Entry no.', 'Details', 'Project', 'Cash / Bank', 'Currency', 'In', 'Out', 'Cash balance', 'Bank balance', 'Total balance', 'Entered by'],
     rows, ['date', '', '', '', '', '', '', 'num', 'num', 'num', 'num', 'num'], [105, 80, 110, 300, 170, 110, 75, 110, 110, 130, 130, 140, 120], null);
+}
+// Staff list with what each person has been paid (wages are worked out in the app).
+function employees_(ss, c, workers) {
+  const paid = Object.create(null);
+  c.E.filter(x => x.worker).forEach(x => { paid[x.worker + x.cur] = (cents_(paid[x.worker + x.cur]) + cents_(x.amount)) / 100; });
+  dataTab_(ss, c.company, 'Employees', '#7a1fa2',
+    ['Employee no.', 'Name', 'Job', 'Site', 'Phone', 'Monthly wage', 'Currency', 'Started', 'Status', 'Left on', 'Paid USD', 'Paid SSP', 'ID number'],
+    workers.map(w => [w.id, w.name, w.job || '', w.site || '', w.phone || '', w.wage, w.cur, w.start, w.status === 'left' ? 'Left' : 'Working', w.left || '', paid[w.id + 'USD'] || 0, paid[w.id + 'SSP'] || 0, w.idNo || '']),
+    ['', '', '', '', '', 'num', '', 'date', '', 'date', 'USD', 'SSP'], [110, 170, 130, 120, 120, 110, 80, 105, 90, 105, 110, 120, 130], [10, 11]);
 }
 function changeLog_(ss, c) {
   dataTab_(ss, c.company, 'Change Log', COLOR.muted, ['When', 'Action', 'Entry', 'By', 'Details'],

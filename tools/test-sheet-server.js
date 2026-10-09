@@ -14,7 +14,7 @@ const post = body => JSON.parse(gas.doPost({ postData: { contents: JSON.stringif
 const rows = name => { const sh = gas.ss.getSheetByName(name); return sh.getRange(1, 1, sh.getLastRow(), 16).getValues(); };
 
 // setup made the tabs, hid the master copy and put the code on "Read me"
-assert.deepStrictEqual(gas.ss.getSheets().map(s => s.getName()), ['Read me', 'Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', '_sync']);
+assert.deepStrictEqual(gas.ss.getSheets().map(s => s.getName()), ['Read me', 'Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', '_sync']);
 assert.ok(gas.ss.getSheetByName('_sync').hidden);
 assert.strictEqual(rows('Read me')[3][0], key);
 
@@ -37,7 +37,7 @@ assert.strictEqual(res.seq, 6);
 assert.strictEqual(res.pull.length, 6);
 assert.match(res.sheet, /^https:\/\/docs\.google\.com\//);
 assert.ok(res.kinds.includes('T'), 'this script stores cash/bank moves');
-assert.strictEqual(JSON.parse(gas.doGet().getContent()).version, 3, 'opening the link shows the script version');
+assert.strictEqual(JSON.parse(gas.doGet().getContent()).version, 7, 'opening the link shows the script version');
 
 // an older copy is ignored; a newer edit wins and is handed to the others
 res = post({ key, since: 6, push: [{ ...e1, u: 2, d: { ...e1.d, amount: 1 } }] });
@@ -80,7 +80,7 @@ assert.ok(!rows('Expenses').some(r => r[0] === 'E-BBB-0001'));
 
 // rebuilding many times is stable (filters are removed and recreated, tab order kept)
 for (let i = 0; i < 3; i++) post({ key, since: 0, push: [{ ...r1, u: 30 + i, d: { ...r1.d, note: 'n' + i } }] });
-assert.deepStrictEqual(gas.ss.getSheets().map(s => s.getName()), ['Read me', 'Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', '_sync']);
+assert.deepStrictEqual(gas.ss.getSheets().map(s => s.getName()), ['Read me', 'Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', '_sync']);
 
 // cash into the bank, then a steel payment and bank charges paid from the bank
 const move = { id: 'T-AAA-0001', k: 'T', u: 40, d: { id: 'T-AAA-0001', cur: 'USD', amount: 40000, from: 'Cash', to: 'Bank', note: 'Deposit', at: '2026-08-29T12:00', by: 'Bala', createdAt: '2026-10-06T20:00:00' } };

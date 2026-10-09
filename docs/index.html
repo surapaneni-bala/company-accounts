@@ -22,10 +22,11 @@
   --warn: #8A5A00; --warn-soft: #FFF3D6;
   --r-lg: 28px; --r-md: 20px; --r-sm: 14px;
   --shadow: 0 1px 0 rgba(27,34,50,.04), 0 10px 28px -16px rgba(27,34,50,.28);
-  --font: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; /* the phone's own plain font, not a rounded one */
   --ease: cubic-bezier(.16,1,.3,1);
 }
 * { box-sizing: border-box; }
+html { touch-action: manipulation; } /* no double-tap zoom on phones */
 html, body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
@@ -293,8 +294,84 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 .setup { max-width: 480px; margin: 6vh auto 0; }
 .setup h1 { margin: 10px 0 4px; font-size: 32px; letter-spacing: -.02em; }
 .setup > p { color: var(--muted); margin: 0 0 22px; }
-.logo { width: 64px; height: 64px; border-radius: 20px; background: var(--ink); display: grid; place-items: center; }
+.logo { display: block; width: 64px; height: 64px; border-radius: 18px; background: #fff; box-shadow: var(--shadow); }
 .center { text-align: center; }
+
+/* files, signatures, slips */
+label.btn { display: block; text-align: center; }
+.sig { display: block; width: 100%; height: 200px; touch-action: none; background: #fff; border: 2px dashed #CFC6B4; border-radius: var(--r-sm); }
+.viewimg { display: block; width: 100%; border-radius: var(--r-sm); margin-bottom: 14px; background: var(--paper); }
+.filebig { font-size: 64px; text-align: center; margin: 10px 0; }
+.stampprev { display: block; width: min(300px, 100%); aspect-ratio: 1; margin: 0 auto 6px; border-radius: var(--r-sm); background: #fff; box-shadow: var(--shadow); }
+.nudge { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 8px 0 14px; }
+.nudge button { border: 2px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 0; font-size: 18px; font-weight: 800; cursor: pointer; }
+.nudge button:active { background: var(--line); }
+.okbig { font-size: 30px; font-weight: 800; color: var(--in); text-align: center; margin: 4px 0 6px; }
+
+/* staff */
+.dot.avatar { background: #E8ECF6; color: var(--ink); font-size: 15px; overflow: hidden; border-radius: 50%; }
+.dot.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.amt small { display: block; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; text-align: right; }
+.amt.neg { color: var(--out); }
+.wtop { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.wphoto { width: 84px; height: 84px; flex: none; border-radius: 50%; background: #E8ECF6; display: grid; place-items: center; font-weight: 800; font-size: 26px; overflow: hidden; }
+.wphoto img { width: 100%; height: 100%; object-fit: cover; }
+.wtop > div { min-width: 0; }
+.wtop .dbig { white-space: nowrap; font-size: clamp(24px, 8vw, 44px); }
+.mrow { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; padding: 10px 14px; border-top: 1px solid var(--line); }
+.mrow:first-child { border-top: 0; }
+.mrow b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mrow .muted { font-size: 13px; text-align: right; }
+details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-weight: 800; color: var(--muted); padding: 8px 4px 12px; }
+.payinfo { line-height: 1.5; }
+.addoff { display: flex; gap: 8px; align-items: center; }
+.addoff input { flex: 1; min-width: 0; font: inherit; font-size: 17px; padding: 12px 14px; border: 2px solid var(--line); border-radius: var(--r-sm); background: var(--field); }
+
+/* header back to the menu */
+.top-l { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.backbtn { flex: none; width: 44px; height: 44px; border: 0; background: var(--card); box-shadow: var(--shadow); font-size: 30px; line-height: 1; padding: 0 0 4px; border-radius: 50%; cursor: pointer; }
+
+/* the menu after signing in */
+.launch { padding-top: 4px; }
+.launch h1 { font-size: clamp(26px, 7vw, 34px); letter-spacing: -.02em; margin: 0 4px 20px; line-height: 1.15; }
+.apps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.app-tile { position: relative; border: 0; cursor: pointer; text-align: left; border-radius: var(--r-lg); padding: 20px 18px 18px; min-height: 190px; display: flex; flex-direction: column; justify-content: space-between; color: #fff; box-shadow: 0 24px 50px -30px rgba(27,34,50,.9); transition: transform .2s var(--ease); overflow: hidden; }
+.app-tile:active { transform: scale(.97); }
+.app-tile.acc { background: var(--ink); background-image: repeating-linear-gradient(0deg, transparent 0 31px, rgba(255,255,255,.05) 31px 32px); }
+.app-tile.emp { background: var(--in); background-image: radial-gradient(circle at 110% -10%, rgba(255,255,255,.22), transparent 55%); }
+.app-tile .ai { width: 58px; height: 58px; border-radius: 18px; background: rgba(255,255,255,.16); display: grid; place-items: center; }
+.app-tile .ai svg { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.app-tile b { display: block; font-size: 22px; margin-top: 18px; letter-spacing: -.01em; }
+.app-tile small { display: block; opacity: .82; font-size: 14px; margin-top: 2px; }
+.app-tile .badge { position: absolute; top: 16px; right: 16px; background: #fff; color: var(--ink); font-weight: 800; font-size: 13px; padding: 4px 9px; border-radius: 999px; }
+@media (max-width: 360px) { .apps { grid-template-columns: 1fr; } .app-tile { min-height: 150px; } }
+
+/* hidden balances */
+.mask { letter-spacing: .12em; opacity: .85; }
+.eye { position: absolute; top: 18px; right: 18px; z-index: 2; border: 0; cursor: pointer; background: rgba(255,255,255,.14); color: #fff; font-weight: 800; font-size: 14px; padding: 8px 12px; border-radius: 999px; }
+
+/* the code pad */
+dialog.lockbox { border: 0; padding: 0; margin: 0; width: 100%; max-width: 100%; height: 100%; max-height: 100%; background: var(--paper); color: var(--ink); }
+dialog.lockbox::backdrop { background: var(--paper); }
+.lk { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px calc(24px + env(safe-area-inset-bottom)); text-align: center; }
+.lk .logo { margin-bottom: 14px; }
+.lk h2 { margin: 0 0 6px; font-size: 24px; }
+.lk-why { color: var(--muted); margin: 0 0 22px; max-width: 320px; }
+.dots { display: flex; gap: 18px; margin-bottom: 8px; }
+.dots i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--ink); }
+.dots i.on { background: var(--ink); }
+.lk .err { min-height: 1.4em; }
+.keypad { display: grid; grid-template-columns: repeat(3, 76px); gap: 14px 22px; margin: 6px 0 16px; }
+.keypad button { width: 76px; height: 76px; border-radius: 50%; border: 0; background: var(--card); box-shadow: var(--shadow); font-size: 30px; font-weight: 700; cursor: pointer; }
+.keypad button:active { background: var(--line); }
+.keypad .ghostkey { background: transparent; box-shadow: none; font-size: 26px; }
+.lk-foot { display: flex; gap: 18px; justify-content: center; }
+@media (max-height: 700px) {
+  .lk .logo { width: 48px; height: 48px; margin-bottom: 8px; } .lk-why { margin-bottom: 12px; }
+  .keypad { grid-template-columns: repeat(3, 64px); gap: 10px 22px; } .keypad button { width: 64px; height: 64px; font-size: 26px; }
+}
+.lk form { width: min(340px, 100%); }
+.lk #lkPw { width: 100%; font: inherit; font-size: 20px; padding: 14px 16px; border: 2px solid var(--line); border-radius: var(--r-sm); background: var(--field); text-align: center; margin-bottom: 8px; }
 
 .toast { position: fixed; left: 50%; bottom: 100px; transform: translate(-50%, 20px); background: var(--ink); color: #fff; font-weight: 800; padding: 14px 20px; border-radius: 16px; opacity: 0; pointer-events: none; transition: .3s var(--ease); z-index: 10; max-width: calc(100% - 32px); text-align: center; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -303,7 +380,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 <body>
 <div class="app">
   <header class="top" id="hdr" hidden>
-    <div><div class="co" id="coName"></div><div class="today-date" id="todayDate"></div></div>
+    <div class="top-l"><button class="backbtn" id="menuBtn" data-act="tab" data-tab="menu" hidden aria-label="Back to the menu" title="Menu">‹</button><div><div class="co" id="coName"></div><div class="today-date" id="todayDate"></div></div></div>
     <div class="top-r"><button class="chip who" id="whoChip" data-act="account" hidden></button><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
   </header>
   <main id="main"></main>
@@ -332,11 +409,14 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
   </form>
 </dialog>
 
+<!-- the code pad: opening the app, showing balances, unlocking edits -->
+<dialog id="lock" class="lockbox" aria-label="Code"><div class="lk" id="lockIn"></div></dialog>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 'use strict';
-const APP_VERSION = '186414e5b5'; // filled in by tools/build.js
+const APP_VERSION = 'c4014f2231'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -356,7 +436,10 @@ const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const AT_RE = /^\d{4}-\d\d-\d\dT\d\d:\d\d$/;
 
 let S = load();
-let tab = 'home', histKind = 'E', histQuery = '', histMonth = '';
+// 'menu' = the first page after signing in (Accounts, Employees); the bottom bar belongs to Accounts
+let tab = 'menu', histKind = 'E', histQuery = '', histMonth = '';
+const ACC_TABS = ['home', 'hist', 'proj', 'sheet'];
+const WELCOME = 'Welcome to Brookfield';
 let unlockedUntil = 0;
 
 /* ---------- storage ---------- */
@@ -367,7 +450,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // A new record made by a signed-in person also carries their login (uid); edits keep the original one.
 function update(patch) {
@@ -441,8 +524,14 @@ function nextIds(prefix, n, seq) {
 }
 const logWith = (entries, by = S.lastBy || '') => [...S.log, ...entries.map(([action, id, text], i) => ({ lid: `L-${S.dev}-${Date.now().toString(36)}${i}`, at: stampSec(), action, id, text, by }))];
 
-const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved' };
-function showVal(k, r) { const v = r[k]; return k === 'amount' ? money(+v, r.cur) : k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : k === 'mode' ? accountOf(v) : k === 'from' ? `${v} → ${v === 'Cash' ? 'Bank' : 'Cash'}` : (v || '(empty)'); }
+const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved', rate: 'SSP for 1 USD',
+  to: 'Moved to', manualDate: 'Date set by hand', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
+function showVal(k, r) {
+  const v = r[k];
+  if (['amount', 'wage', 'openingAmount'].includes(k)) return v === undefined || v === '' ? '(empty)' : money(+v, r.cur);
+  if (['start', 'left', 'clearedTo'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  return k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : k === 'mode' ? accountOf(v) : k === 'from' ? `${v} → ${v === 'Cash' ? 'Bank' : 'Cash'}` : k === 'rate' ? (v ? plain(+v) : '(empty)') : k === 'status' ? (v === 'left' ? 'Left' : 'Working') : k === 'manualDate' ? (v ? 'yes' : 'no') : (v || '(empty)');
+}
 function diff(a, b) { return Object.keys(LABELS).filter(k => k in b && String(a[k] ?? '') !== String(b[k] ?? '')).map(k => `${LABELS[k]}: ${showVal(k, a)} → ${showVal(k, b)}`); }
 function describe(k, r) {
   if (k === 'T') return `${money(r.amount, r.cur)} moved from ${r.from} to ${r.to}${r.note ? ' · ' + r.note : ''} · dated ${fmtAbs(r.at)}`;
@@ -466,12 +555,14 @@ async function hashPw(pw, salt) {
   return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 const isUnlocked = () => Date.now() < unlockedUntil;
-function unlock(why) {
-  if (isUnlocked()) return Promise.resolve(true);
+// fresh = ask for the password itself even if unlocked a moment ago (e.g. before choosing a new code).
+// Signed in with a code: the code pad (or Face ID); otherwise your password, or the company password before logins.
+function unlock(why, fresh) {
+  if (isUnlocked() && !fresh) return Promise.resolve(true);
+  const opened = () => { unlockedUntil = Date.now() + UNLOCK_MS; renderLock(); return true; };
+  if (!fresh && quick()) return pinPrompt({ why: why.replace('Enter the password', 'Enter your code') }).then(ok => ok && opened());
   return new Promise(resolve => {
-    const d = $('#pw');
-    // signed in: your own password; otherwise the company password, as before logins
-    const pass = signedIn() ? session.check : S.pass;
+    const d = $('#pw'), pass = signedIn() ? session.check : S.pass;
     $('#pwWhy').textContent = signedIn() ? why.replace('the password', 'your password') : why;
     $('#pwIn').value = ''; $('#pwErr').textContent = ''; $('#pwIn').placeholder = signedIn() ? 'Your password' : 'Password';
     d.returnValue = '';
@@ -479,9 +570,8 @@ function unlock(why) {
     $('#pwCancel').onclick = () => d.close();
     $('#pwForm').onsubmit = async e => {
       e.preventDefault();
-      if (pass && await (signedIn() ? slowHash : hashPw)($('#pwIn').value, pass.salt) === pass.hash) {
-        unlockedUntil = Date.now() + UNLOCK_MS; d.close('ok'); renderLock(); resolve(true);
-      } else {
+      if (pass && await (signedIn() ? slowHash : hashPw)($('#pwIn').value, pass.salt) === pass.hash) { d.close('ok'); resolve(opened()); }
+      else {
         $('#pwErr').textContent = 'Wrong password. Try again.';
         $('#pwIn').select(); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake');
       }
@@ -493,13 +583,25 @@ function renderLock() { const p = $('#lockPill'); if (p) p.hidden = !isUnlocked(
 
 /* ---------- ui bits ---------- */
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2600); }
+// here = how to redraw the sheet on screen (after a file is added); back = the sheet to return to when the one
+// on top closes: an entry opened from a project or an employee goes back there after it is edited or closed.
+let here = null, back = null;
 function openSheet(html) {
   const d = $('#sheet'); $('#sheetIn').innerHTML = html;
-  if (!d.open) d.showModal();
+  if (!d.open) { back = null; d.showModal(); }
+  here = null;
   d.scrollTop = 0;
   ($('[autofocus]', d) || $('.close', d))?.focus();
 }
-const closeSheet = () => $('#sheet').close();
+// a sheet others can return to: call right after drawing it
+function comeBack(fn) { here = back = fn; }
+function closeSheet() {
+  const to = back;
+  if (to && to !== here && $('#sheet').open && to() !== false) return;
+  closeAll();
+}
+function closeAll() { back = here = null; $('#sheet').close(); }
+const reopenHere = () => { if (here && $('#sheet').open) here(); };
 const head = (title, tone = '', sub = '') => `<div class="sh-head ${tone ? 'tone-' + tone : ''}"><div><h2>${esc(title)}</h2>${sub ? `<small>${esc(sub)}</small>` : ''}</div><button type="button" class="close" data-act="close" aria-label="Close">×</button></div>`;
 const empty = (title, text) => `<div class="card empty"><strong>${title}</strong>${text}</div>`;
 const curLines = (vals, curs = CURS) => curs.map(c => `<b>${money(vals[c], c)}</b>`).join('');
@@ -523,6 +625,11 @@ const datalists = () => ['paidTo', 'reason', 'location', 'by'].map(f => `<datali
 const textField = (name, label, ph, val, req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input name="${name}" placeholder="${ph}" value="${esc(val)}" ${['paidTo', 'reason', 'location'].includes(name) ? `list="dl-${name}"` : ''} autocomplete="off" maxlength="160" ${req ? 'required' : ''}></label>`;
 const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${esc(c)}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
 const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${esc(val || '')}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
+// Every SSP entry states that day's rate (SSP for 1 US dollar), so its dollar value is known later.
+const rateField = (cur, rate) => `<label class="fld ratef" ${cur === 'SSP' ? '' : 'hidden'}><span>SSP for 1 USD <em>(today's rate)</em></span><input name="rate" inputmode="decimal" placeholder="e.g. 4500" value="${esc(rate || S.lastRate || '')}" autocomplete="off" ${cur === 'SSP' ? 'required' : ''}><small class="amt-preview rate-usd"></small></label>`;
+// the rate typed in a form: undefined for USD, null when SSP and missing or wrong
+const rateFrom = (f, cur) => (cur === 'SSP' ? parseAmount(f.elements.rate && f.elements.rate.value) : undefined);
+const RATE_ERR = 'Type how many SSP make 1 US dollar today, like 4500';
 const byField = () => (signedIn()
   ? `<input type="hidden" name="by" value="${esc(myName())}"><p class="muted">Entered by <b>${esc(myName())}</b></p>`
   : `<label class="fld"><span>Your name <em>(who is entering this)</em></span><input name="by" placeholder="Type your name" value="${esc(S.lastBy || '')}" list="dl-by" autocomplete="off" maxlength="60" required></label>`);
@@ -555,40 +662,32 @@ function render() {
   $('#hdr').hidden = $('#tabs').hidden = !ready;
   if (!ready) { main.innerHTML = viewSetup(); $('[autofocus]', main)?.focus(); return; }
   if (mustSignIn()) { $('#hdr').hidden = $('#tabs').hidden = true; main.innerHTML = viewSignIn(); $('[autofocus]', main)?.focus(); return; }
-  if (tab === 'proj' && !can('projects')) tab = 'home';
+  if ((tab === 'proj' && !can('projects')) || ((tab === 'staff' || tab === 'menu') && !can('staff'))) tab = 'home'; // one section only: no menu
+  $('#tabs').hidden = !ACC_TABS.includes(tab);
+  $('#menuBtn').hidden = tab === 'menu' || !can('staff');
   $('#tabs [data-tab=proj]').hidden = !can('projects');
   $('#whoChip').hidden = !signedIn();
   $('#whoChip').textContent = signedIn() ? `👤 ${session.user.name.split(' ')[0]}` : '';
-  $('#coName').textContent = S.company;
+  $('#coName').textContent = tab === 'menu' || !can('staff') ? S.company : tab === 'staff' ? 'Employees' : 'Accounts'; // inside a section: its name
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
-  main.innerHTML = { home: viewHome, hist: viewHistory, proj: viewProjects, sheet: viewSheet }[tab]();
+  const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were
+  main.innerHTML = { menu: viewMenu, home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet }[tab]();
+  if (y) scrollTo(0, y);
+  if (tab === 'staff') loadThumbs();
+  render.tab = tab;
   renderLock(); paintSync();
 }
 
 let setupMode = ''; // '' = decide when drawn: an invite link in the address opens 'join'
 const isPhone = () => matchMedia('(pointer: coarse)').matches;
 const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-const APP_LOGO = `<div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>`;
+const APP_LOGO = `<img class="logo" src="icon-192.png" alt="" width="64" height="64">`; // the company's mark (tools/make-icons.py)
 function viewSetup() {
-  const mode = setupMode || (inviteFromHash() ? 'join' : 'choose');
+  const mode = setupMode || 'join';
   const logo = APP_LOGO;
   const tip = isPhone() && !isInstalled() ? `<p class="note">📲 <b>First install the app:</b> iPhone — in Safari tap <b>Share → Add to Home Screen</b>. Android — in Chrome tap <b>⋮ → Add to Home screen</b>. Then open <b>Accounts</b> from your home screen.</p>` : '';
-  const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="choose">← Back</button></p>`;
-  if (mode === 'join') return `<section class="setup card pad">${logo}
-    <h1>Join my company</h1>
-    <p>Paste the invite link you were sent. Joining needs internet once — after that the app works offline.</p>${tip}
-    <form data-form="join">
-      <label class="fld"><span>Invite link</span><input name="invite" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" autofocus></label>
-      <p class="invite-hint"></p>
-      <div class="loginfields" hidden>${signInFields(false)}</div>
-      <details class="manual"><summary>Join with the web app link and code instead</summary>
-        <label class="fld"><span>Web app link</span><input name="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
-        <label class="fld"><span>Company code</span><input name="key" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab"></label>
-      </details>
-      <p class="err"></p>
-      <button class="btn in">Join</button>
-    </form>${back}</section>`;
+  const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="join">← Back</button></p>`;
   if (mode === 'new') return `<section class="setup card pad">${logo}
     <h1>New company</h1>
     <p>Set up your company accounts. It takes 30 seconds.</p>
@@ -601,15 +700,39 @@ function viewSetup() {
       <button class="btn primary">Start</button>
     </form>${back}</section>`;
   return `<section class="setup card pad">${logo}
-    <h1>Welcome!</h1>
-    <p>Company accounts in USD and SSP. Works without internet.</p>${tip}
-    <div class="stack">
-      <button class="btn primary" data-act="setupMode" data-mode="new">Start a new company</button>
-      <button class="btn ghost" data-act="setupMode" data-mode="join">Join my company<small class="sub">I have an invite link</small></button>
-    </div>
-    <p class="center"><button class="link" data-act="restore">Have a backup file? Restore it</button></p>
+    <h1>${WELCOME}</h1>
+    <p>Open the invite link you were sent, or paste it below. Then sign in with the username and password your admin gave you.</p>${tip}
+    <form data-form="join">
+      <label class="fld"><span>Invite link</span><input name="invite" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste the link here" value="${esc(inviteFromHash() ? location.href : '')}" ${inviteFromHash() ? '' : 'autofocus'}></label>
+      <p class="invite-hint"></p>
+      <div class="loginfields">${signInFields(!!inviteFromHash())}</div>
+      <details class="manual"><summary>Join with the web app link and code instead</summary>
+        <label class="fld"><span>Web app link</span><input name="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec"></label>
+        <label class="fld"><span>Company code</span><input name="key" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="From the “Read me” tab"></label>
+      </details>
+      <p class="err"></p>
+      <button class="btn primary">Sign in</button>
+    </form>
+    <details class="manual other"><summary>Other options</summary>
+      <div class="stack"><button class="btn ghost" data-act="restore">Restore a backup file</button><button class="btn ghost" data-act="setupMode" data-mode="new">Start a new company</button></div>
+    </details>
     <input type="file" id="restoreFile" accept=".json,application/json" hidden>
   </section>`;
+}
+
+// The first page after signing in: one big button per part of the company app.
+function viewMenu() {
+  const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const who = signedIn() ? session.user.name.split(' ')[0] : '';
+  const staffWaiting = waiting().filter(c => c.kind === 'W').length;
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}
+    <section class="launch">
+      <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
+      <div class="apps">
+        <button class="app-tile acc" data-act="tab" data-tab="home"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><span><b>Accounts</b><small>Cash, bank and projects</small></span></button>
+        <button class="app-tile emp" data-act="tab" data-tab="staff">${staffWaiting ? `<span class="badge">${staffWaiting} waiting</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg></span><span><b>Employees</b><small>Salaries, advances and slips</small></span></button>
+      </div>
+    </section>`;
 }
 
 // Cash and bank balance for each currency. A move between them changes both, never the total.
@@ -627,15 +750,20 @@ function viewHome() {
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
   const seeMoney = can('money');
+  // like a banking app: the figures stay hidden until the code (or Face ID) is given; phones without logins show them
+  const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
+  const fig = n => (hide ? M : plain(n));
+  const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
   return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">Your expenses — only you and the office see them.</p>`}
-  <section class="balance ${CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
+  <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
+    ${signedIn() ? `<button class="eye" data-act="${hide ? 'reveal' : 'conceal'}">${hide ? '👁 Show' : '🙈 Hide'}</button>` : ''}
     ${CURS.map(c => `<div class="balrow">
-      <div class="balhead"><span class="cur-tag">${c}</span><span class="baltot${bal[c].Total < 0 ? ' neg' : ''}">${plain(bal[c].Total)}</span><small>total</small></div>
-      <div class="balparts">${ACCOUNTS.map(a => `<span>${ACCOUNT_ICON[a]} ${a} <b class="${bal[c][a] < 0 ? 'neg' : ''}">${plain(bal[c][a])}</b></span>`).join('')}</div>
+      <div class="balhead"><span class="cur-tag">${c}</span><span class="baltot${!hide && bal[c].Total < 0 ? ' neg' : ''}">${fig(bal[c].Total)}</span><small>total</small></div>
+      <div class="balparts">${ACCOUNTS.map(a => `<span>${ACCOUNT_ICON[a]} ${a} <b class="${!hide && bal[c][a] < 0 ? 'neg' : ''}">${fig(bal[c][a])}</b></span>`).join('')}</div>
     </div>`).join('')}
-    <div class="split"><div class="i"><small>Money received</small>${curLines(recv)}</div><div class="o"><small>Money spent</small>${curLines(spent)}</div></div>
+    <div class="split"><div class="i"><small>Money received</small>${lines(recv)}</div><div class="o"><small>Money spent</small>${lines(spent)}</div></div>
   </section>
   <div class="actions">
     <button class="tile out" data-act="addExpense"><span class="ic">−</span><span><b>Add expense</b><small>Money paid out</small></span></button>
@@ -644,8 +772,8 @@ function viewHome() {
     <button class="tile bulk move" data-act="addMove" ${seeMoney ? '' : 'hidden'}><span class="ic">⇄</span><span><b>Move money</b><small>Cash into the bank, or bank to cash — not spending</small></span></button>
   </div>
   <div class="minis">
-    <div class="mini"><small>Spent today</small>${curLines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
-    <div class="mini"><small>Spent this month</small>${curLines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
+    <div class="mini"><small>Spent today</small>${lines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
+    <div class="mini"><small>Spent this month</small>${lines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
   </div>
   <div class="sec-head" style="margin-top:22px"><h2 class="sec">Recent</h2><button class="btn small ghost" data-act="tab" data-tab="hist">See all →</button></div>
   ${recent.length ? `<div class="card list">${recent.map(([x, k]) => itemRow(x, k, true)).join('')}</div>` : empty('Nothing here yet', 'Tap <b>Add expense</b> or <b>Money received</b> to start.')}`;
@@ -737,6 +865,8 @@ function viewSheet() {
       <section class="card pad">
         <h3>⚙️ Settings</h3>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : 'Not set'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : 'Not set — slips get a plain heading'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
       </section>
@@ -750,6 +880,7 @@ function expenseForm(old) {
     <form data-form="expense" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
+      ${rateField(d.cur, d.rate)}
       ${textField('paidTo', 'Paid to', 'Who did you pay?', d.paidTo)}
       ${textField('reason', 'Reason', 'What was it for?', d.reason)}
       ${textField('location', 'Location', 'Where?', d.location, false)}
@@ -757,6 +888,7 @@ function expenseForm(old) {
       ${accountChips(d.mode, 'Paid from')}
       ${whenField(old?.at, !!old)}
       ${byField()}${approvalNote(old)}
+      ${old ? '' : `<label class="fld check"><input type="checkbox" name="sign"> ✍️ Get their signature now (payment voucher)</label>`}
       <p class="err"></p>
       <button class="btn out">${old ? saveLabel() : 'Save expense'}</button>
     </form>${datalists()}`);
@@ -767,11 +899,13 @@ function creditForm(old, presetProject) {
     <form data-form="credit" data-id="${esc(old?.id || '')}">
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
+      ${rateField(d.cur, d.rate)}
       ${projectSelect(d.project, false)}
       ${accountChips(d.mode, 'Received into')}
       ${textField('note', 'Note', 'e.g. 2nd installment', d.note, false)}
       ${whenField(old?.at, !!old)}
       ${byField()}${approvalNote(old)}
+      ${old ? '' : `<label class="fld check"><input type="checkbox" name="sign"> 🧾 Make a receipt now</label>`}
       <p class="err"></p>
       <button class="btn in">${old ? saveLabel() : 'Save money received'}</button>
     </form>${datalists()}`);
@@ -800,6 +934,7 @@ function bulkForm() {
     <p class="hint">One line for each payment. Empty lines are skipped.</p>
     <form data-form="bulk">
       ${curChips(defCur(), 'Money type (for every line)')}
+      ${rateField(defCur())}
       <div class="brows">${bulkRow().repeat(4)}</div>
       <button type="button" class="btn small ghost" data-act="addRow">＋ Add another line</button>
       <div class="shared"><h3>Same for every line</h3>
@@ -848,8 +983,8 @@ function detail(k, id) {
   if (!r) return;
   const common = [['Date', fmtAbs(r.at)], ['Entered by', r.by], ['Recorded', fmtAbs(r.createdAt)], ['Last edited', r.editedAt && fmtAbs(r.editedAt)], ['Edited by', r.editedBy]];
   const facts = {
-    E: () => [['Money type', CUR_NAME[r.cur]], ['Paid to', r.paidTo], ['Reason', r.reason], ['Location', r.location], ['Project', projName(r.project)], ['Paid from', `${ACCOUNT_ICON[accountOf(r.mode)]} ${accountOf(r.mode)}`], ['Bulk group', r.batch], ...common],
-    R: () => [['Money type', CUR_NAME[r.cur]], ['Project', projName(r.project)], ['Received into', `${ACCOUNT_ICON[accountOf(r.mode)]} ${accountOf(r.mode)}`], ['Note', r.note], ...common],
+    E: () => [['Money type', CUR_NAME[r.cur]], ...rateFact(r), ['Paid to', r.paidTo], ['Reason', r.reason], ['Location', r.location], ['Project', projName(r.project)], ['Paid from', `${ACCOUNT_ICON[accountOf(r.mode)]} ${accountOf(r.mode)}`], ['Bulk group', r.batch], ...common],
+    R: () => [['Money type', CUR_NAME[r.cur]], ...rateFact(r), ['Project', projName(r.project)], ['Received into', `${ACCOUNT_ICON[accountOf(r.mode)]} ${accountOf(r.mode)}`], ['Note', r.note], ...common],
     T: () => [['Money type', CUR_NAME[r.cur]], ['From', `${ACCOUNT_ICON[r.from]} ${r.from}`], ['To', `${ACCOUNT_ICON[r.to]} ${r.to}`], ['Note', r.note], ...common],
   }[k]();
   const look = { E: ['Expense', 'out', '−'], R: ['Money received', 'in', '+'], T: ['Money moved', '', ''] }[k];
@@ -857,11 +992,16 @@ function detail(k, id) {
     <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
     ${waitingNote(id)}
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
-    <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : ''}</div>
-    ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}`);
+    ${k === 'T' || r.deleted ? '' : `<div class="two" style="margin-bottom:10px"><button class="btn ${k === 'E' ? 'out' : 'in'}" data-act="slip" data-kind="${k}" data-id="${esc(id)}">🧾 ${k === 'E' ? (r.pay ? 'Slip' : 'Voucher') : 'Receipt'}</button>${attachButton(id, '📎 Attach')}</div>`}
+    <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="${k}" data-id="${esc(id)}">🗑 Ask to delete 🔒</button>` : ''}</div>
+    ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}
+    ${k === 'E' && r.paidTo ? `<button class="btn ghost" data-act="payeeStatement" data-name="${esc(r.paidTo)}" style="margin-top:10px">📄 All payments to ${esc(r.paidTo)}</button>` : ''}
+    ${filesBlock(id)}`);
+  here = () => detail(k, id);
 }
+const rateFact = r => (usdOf(r) === null ? [] : [['SSP for 1 USD', `${plain(r.rate)} · about ${money(usdOf(r), 'USD')}`]]);
 function projectDetail(id) {
-  const p = S.projects.find(x => x.id === id); if (!p) return;
+  const p = S.projects.find(x => x.id === id); if (!p || p.deleted) return false;
   const s = projStats(id);
   const R = live(S.credits).filter(c => c.project === id).sort((a, b) => byAt(b, a));
   const E = live(S.expenses).filter(e => e.project === id).sort((a, b) => byAt(b, a));
@@ -870,11 +1010,14 @@ function projectDetail(id) {
     <div style="margin-bottom:16px">${projStatsGrid(s)}</div>
     ${waitingNote(id)}
     <div class="two"><button class="btn in" data-act="addCredit" data-project="${esc(id)}">＋ Money received</button>${canChange() ? `<button class="btn ghost" data-act="editProject" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}</div>
+    <button class="btn ghost" data-act="projectStatement" data-id="${esc(id)}" style="margin-top:10px">📄 Statement of money received</button>
     ${can('edit') ? `<button class="btn ghost" data-act="assignPick" data-id="${esc(id)}" style="margin-top:10px">＋ Add existing expenses 🔒</button>` : ''}
+    ${filesList(R.flatMap(r => filesFor(r.id, 'receipt')), 'Receipts')}
     <h3 class="subh">Money received (${R.length})</h3>
     ${R.length ? `<div class="card list inset">${R.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}
     <h3 class="subh">Spent on this project (${E.length})</h3>
     ${E.length ? `<div class="card list inset">${E.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">No expenses linked to this project yet.</p>'}`);
+  comeBack(() => projectDetail(id));
 }
 
 /* ---------- saving ---------- */
@@ -888,7 +1031,9 @@ function saveExpense(f) {
   const old = S.expenses.find(x => x.id === f.dataset.id);
   const amount = parseAmount(v.amount);
   if (amount === null) return formErr(f, 'amount', 'Type a correct amount, like 500');
-  const rec = { cur: formCur(f), amount, paidTo: clean(v.paidTo), reason: clean(v.reason), location: clean(v.location), project: v.project || '', mode: v.mode || 'Cash', ...dateFrom(v, old) };
+  const cur = formCur(f), rate = rateFrom(f, cur);
+  if (rate === null) return formErr(f, 'rate', RATE_ERR);
+  const rec = { cur, amount, rate, paidTo: clean(v.paidTo), reason: clean(v.reason), location: clean(v.location), project: v.project || '', mode: v.mode || 'Cash', ...dateFrom(v, old) };
   if (!rec.paidTo) return formErr(f, 'paidTo', 'Who did you pay?');
   if (!rec.reason) return formErr(f, 'reason', 'What was it for?');
   const by = clean(v.by);
@@ -904,9 +1049,10 @@ function saveExpense(f) {
     update({
       expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq,
       log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('E', rec)}`]], by) : S.log,
-      lastLoc: rec.location, lastMode: rec.mode, lastExpProject: rec.project, lastBy: by, lastCur: rec.cur,
+      lastLoc: rec.location, lastMode: rec.mode, lastExpProject: rec.project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
     });
     toast(`Saved ✓ ${money(amount, rec.cur)} to ${rec.paidTo}`);
+    if (v.sign) { render(); return slipSheet('E', id); }
   }
   closeSheet(); render();
 }
@@ -993,7 +1139,9 @@ function saveCredit(f) {
   const [project, projects, seq0] = projectFromForm(v);
   if (!project) return formErr(f, 'newProject', 'Type the new project name');
   if (!by) return formErr(f, 'by', 'Type your name');
-  const rec = { cur: formCur(f), amount, project, mode: v.mode || 'Bank', note: clean(v.note), ...dateFrom(v, old) };
+  const cur = formCur(f), rate = rateFrom(f, cur);
+  if (rate === null) return formErr(f, 'rate', RATE_ERR);
+  const rec = { cur, amount, rate, project, mode: v.mode || 'Bank', note: clean(v.note), ...dateFrom(v, old) };
   if (projects !== S.projects) update({ projects, seq: seq0 }); // a new project must exist before describe()/log
   if (old) {
     const changes = diff(old, rec);
@@ -1004,10 +1152,11 @@ function saveCredit(f) {
   } else {
     const [[id], seq] = nextIds('R', 1, S.seq);
     update({
-      credits: [...S.credits, { id, ...rec, by, createdAt: stampSec() }], seq, lastProject: project, lastBy: by, lastCur: rec.cur,
+      credits: [...S.credits, { id, ...rec, by, createdAt: stampSec() }], seq, lastProject: project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
       log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('R', rec)}`]], by) : S.log,
     });
     toast(`Saved ✓ ${money(amount, rec.cur)} received`);
+    if (v.sign) { render(); return slipSheet('R', id); }
   }
   closeSheet(); render();
 }
@@ -1034,15 +1183,17 @@ function saveBulk(f) {
   const by = clean(f.elements.by.value);
   if (!by) return formErr(f, 'by', 'Type your name');
   const v = { cur: formCur(f), location: clean(f.elements.location.value), project: f.elements.project.value, mode: f.elements.mode.value || 'Cash', at: f.elements.at?.value };
+  const rate = rateFrom(f, v.cur);
+  if (rate === null) return formErr(f, 'rate', RATE_ERR);
   const { at, manualDate } = dateFrom(v);
   let seq = S.seq, batch, ids;
   [[batch], seq] = nextIds('B', 1, seq);
   [ids, seq] = nextIds('E', rows.length, seq);
-  const recs = rows.map((r, i) => ({ id: ids[i], cur: v.cur, amount: parseAmount(r.amount), paidTo: r.paidTo, reason: r.reason, location: v.location, project: v.project, mode: v.mode, at, manualDate, by, createdAt: stampSec(), batch }));
+  const recs = rows.map((r, i) => ({ id: ids[i], cur: v.cur, amount: parseAmount(r.amount), rate, paidTo: r.paidTo, reason: r.reason, location: v.location, project: v.project, mode: v.mode, at, manualDate, by, createdAt: stampSec(), batch }));
   update({
     expenses: [...S.expenses, ...recs], seq,
     log: manualDate ? logWith([['Old date', batch, `${recs.length} expenses (${ids[0]} to ${ids[ids.length - 1]}) added with date ${fmtAbs(at)} (password used), total ${money(total(recs), v.cur)}`]], by) : S.log,
-    lastLoc: v.location, lastMode: v.mode, lastExpProject: v.project, lastBy: by, lastCur: v.cur,
+    lastLoc: v.location, lastMode: v.mode, lastExpProject: v.project, lastBy: by, lastCur: v.cur, ...(rate ? { lastRate: rate } : {}),
   });
   closeSheet(); render();
   toast(`Saved ✓ ${recs.length} payments · ${money(total(recs), v.cur)}`);
@@ -1087,7 +1238,7 @@ async function doSetup(f) {
   const v = Object.fromEntries(new FormData(f));
   if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
   const salt = randHex();
-  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
+  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
   save();
   navigator.storage?.persist?.();
   render(); scrollTo(0, 0); toast('All set! Add your first entry.');
@@ -1095,11 +1246,11 @@ async function doSetup(f) {
 
 async function deleteRecord(k, id) {
   if (!await unlock('Enter the password to delete this entry.')) return;
-  const key = COLL[k];
+  const key = KIND_KEY[k];
   const r = S[key].find(x => x.id === id);
-  const by = confirmBy(`Delete ${id} — ${money(r.amount, r.cur)}?\n\nIt will be removed from all totals. A record stays in the Change Log.`);
+  const by = confirmBy(`Delete ${k === 'A' ? whatIs(k, r) : `${id} — ${money(r.amount, r.cur)}`}?\n\nIt will be removed from all totals. A record stays in the Change Log.`);
   if (!by) return;
-  update({ [key]: S[key].map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, describe(k, r)]], by), lastBy: by });
+  update({ [key]: S[key].map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, whatIs(k, r)]], by), lastBy: by });
   closeSheet(); render(); toast('Deleted');
 }
 async function deleteProject(id) {
@@ -1150,8 +1301,763 @@ async function doRestore(file) {
   const fresh = migrate({ ...data, seq: {}, dev: newDev(), dirty: [] });
   S = { ...fresh, dirty: fresh.link ? allIds(fresh) : [] };
   update({ log: logWith([['Restored', '—', `Data restored from backup file "${file.name}"`]]) });
-  unlockedUntil = 0; tab = 'home';
-  closeSheet(); render(); scheduleSync(0); toast('Backup restored ✓ — use the password from the backup');
+  unlockedUntil = 0; tab = 'menu';
+  closeAll(); render(); scheduleSync(0); toast('Backup restored ✓ — use the password from the backup');
+}
+
+/* ---------- pay maths, amounts in words, one-page PDF ---------- */
+// No screen code here: tools/test-calc.js checks all of it in Node.
+
+// Days paid in a month, on a 30-day month (the owner's rule): joining and leaving days both count, and the
+// 31st counts as the 30th. start/end are 'YYYY-MM-DD'; end is the leaving day, or today.
+function payDays(month, start, end) {
+  if (start.slice(0, 7) > month || end.slice(0, 7) < month) return 0;
+  const first = start.slice(0, 7) === month ? Math.min(+start.slice(8, 10), 30) : 1;
+  const last = end.slice(0, 7) === month ? Math.min(+end.slice(8, 10), 30) : 30;
+  return Math.max(0, last - first + 1);
+}
+const nextMonth = m => { const y = +m.slice(0, 4), mo = +m.slice(5, 7); return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`; };
+
+// A payment in the wage's currency, in cents; null when it can't be converted (another currency, no rate).
+// rate = SSP for 1 USD, saved on every SSP entry.
+function inWage(p, cur) {
+  if (p.cur === cur) return Math.round(p.amount * 100);
+  if (!(p.rate > 0)) return null;
+  return Math.round((cur === 'USD' ? p.amount / p.rate : p.amount * p.rate) * 100);
+}
+
+const dayAfter = d => { const [y, m, dd] = d.split('-').map(Number), t = new Date(Date.UTC(y, m - 1, dd + 1)); return t.toISOString().slice(0, 10); };
+
+// An employee's account: wage earned month by month (less days not worked: the dated ones recorded for them, plus
+// the number older salary payments carried),
+// minus everything paid to them (salary, advances, final settlement), plus the balance from before the app
+// (openingAmount: owed to them, or negative = already paid). clearedTo = salary already settled up to that day.
+function workerLedger(w, pays, today, absences = []) {
+  const end = w.status === 'left' && w.left && w.left < today ? w.left : today;
+  const from = w.clearedTo && w.clearedTo >= w.start ? dayAfter(w.clearedTo) : w.start;
+  const mine = pays.filter(p => p.worker === w.id && !p.deleted);
+  const off = {};
+  mine.forEach(p => { if (p.pay === 'salary' && p.month && p.daysOff) off[p.month] = (off[p.month] || 0) + p.daysOff; });
+  absences.forEach(a => { if (a.worker === w.id && !a.deleted && a.date >= from && a.date <= end) off[a.date.slice(0, 7)] = (off[a.date.slice(0, 7)] || 0) + 1; });
+  const months = [];
+  let earned = 0;
+  if (from <= end) {
+    for (let m = from.slice(0, 7); m <= end.slice(0, 7); m = nextMonth(m)) {
+      const days = payDays(m, from, end), daysOff = Math.min(off[m] || 0, days);
+      const cents = Math.round(w.wage * 100 * (days - daysOff) / 30);
+      months.push({ month: m, days, daysOff, earned: cents / 100 });
+      earned += cents;
+    }
+  }
+  let paid = 0;
+  const unconverted = [];
+  mine.forEach(p => { const c = inWage(p, w.cur); if (c === null) unconverted.push(p.id); else paid += c; });
+  const opening = Math.round((w.openingAmount || 0) * 100);
+  return { cur: w.cur, months, earned: earned / 100, paid: paid / 100, opening: opening / 100, balance: (opening + earned - paid) / 100, unconverted };
+}
+
+// Advances given in a month, in US dollars (the monthly limit is in dollars).
+function advancesUsd(pays, month) {
+  const cents = pays.filter(p => p.pay === 'advance' && !p.deleted && p.at.slice(0, 7) === month)
+    .reduce((t, p) => t + (p.cur === 'USD' ? Math.round(p.amount * 100) : p.rate > 0 ? Math.round(p.amount / p.rate * 100) : 0), 0);
+  return cents / 100;
+}
+
+// "Two hundred fifty US dollars only" — printed on every slip so a figure can't be quietly changed.
+const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const BIG = [[1e12, 'trillion'], [1e9, 'billion'], [1e6, 'million'], [1e3, 'thousand']];
+const UNITS = { USD: ['US dollar', 'US dollars', 'cent', 'cents'], SSP: ['South Sudanese pound', 'South Sudanese pounds', 'piaster', 'piasters'] };
+function words(n) {
+  if (n < 20) return ONES[n];
+  if (n < 100) return TENS[Math.floor(n / 10)] + (n % 10 ? '-' + ONES[n % 10] : '');
+  if (n < 1000) return ONES[Math.floor(n / 100)] + ' hundred' + (n % 100 ? ' ' + words(n % 100) : '');
+  const [size, name] = BIG.find(([s]) => n >= s);
+  return words(Math.floor(n / size)) + ' ' + name + (n % size ? ' ' + words(n % size) : '');
+}
+function amountInWords(amount, cur) {
+  const c = Math.round(amount * 100), whole = Math.floor(c / 100), part = c % 100;
+  const [one, many, sub, subs] = UNITS[cur];
+  const s = `${words(whole)} ${whole === 1 ? one : many}${part ? ` and ${words(part)} ${part === 1 ? sub : subs}` : ''} only`;
+  return s[0].toUpperCase() + s.slice(1);
+}
+
+// An A4 PDF with one JPEG per page (slips and statements are drawn as pictures): no PDF library needed.
+// pages = [{ data: JPEG bytes, w, h }]; each page is objects 3+3i (page), 4+3i (drawing), 5+3i (picture).
+function pdfPages(pages) {
+  const enc = new TextEncoder(), parts = [], offsets = [];
+  let size = 0;
+  const add = x => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); size += b.length; };
+  const obj = (n, body) => { offsets[n] = size; add(`${n} 0 obj\n${body}\nendobj\n`); };
+  const W = 595.28; // A4 width in points; each page is as tall as its picture (an A4 page, or a slip as tall as it needs)
+  add('%PDF-1.4\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + 3 * i} 0 R`).join(' ')}] /Count ${pages.length} >>`);
+  pages.forEach((p, i) => {
+    const n = 3 + 3 * i, H = Math.round(W * p.h / p.w * 100) / 100, draw = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+    obj(n, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${n + 2} 0 R >> >> /Contents ${n + 1} 0 R >>`);
+    obj(n + 1, `<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`);
+    offsets[n + 2] = size;
+    add(`${n + 2} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.data.length} >>\nstream\n`);
+    add(p.data);
+    add('\nendstream\nendobj\n');
+  });
+  const count = 3 + 3 * pages.length, xref = size;
+  add(`xref\n0 ${count}\n0000000000 65535 f \n${offsets.slice(1).map(o => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  const out = new Uint8Array(size);
+  let at = 0;
+  parts.forEach(b => { out.set(b, at); at += b.length; });
+  return out;
+}
+const jpegToPdf = (jpeg, w, h) => pdfPages([{ data: jpeg, w, h }]);
+
+/* ---------- files: photos, PDFs, signatures and slips ---------- */
+// A file is kept on this phone first (IndexedDB: localStorage is far too small), then uploaded to the company
+// Google Drive through the sheet script. Its record (kind F) is made only once the upload worked, so the sheet
+// never holds a record whose file it can't give back. Uploaded files stay on the phone as an offline copy.
+const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
+const MAX_FILE = 8 * 1024 * 1024; // the sheet script refuses bigger files
+const PHOTO_SIDE = 1600; // photos are shrunk on the phone: quicker to upload, still sharp on a slip
+const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑' };
+const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement' };
+let outbox = [];          // files waiting to upload (their details; the bytes stay in IndexedDB)
+let uploading = false, uploadErr = '';
+let shown = null;         // the file on screen, kept in memory so "Send" opens the share sheet straight from the tap
+
+/* IndexedDB: one store per app copy (the test copy has its own KEY) */
+function idb(mode, fn) {
+  return new Promise((ok, no) => {
+    const open = indexedDB.open(KEY + '-files', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore('files', { keyPath: 'id' });
+    open.onerror = () => no(open.error);
+    open.onsuccess = () => {
+      const db = open.result, tx = db.transaction('files', mode), req = fn(tx.objectStore('files'));
+      tx.oncomplete = () => { db.close(); ok(req.result); };
+      tx.onerror = tx.onabort = () => { db.close(); no(tx.error || new Error('Could not keep the file on this phone')); };
+    };
+  });
+}
+const fileGet = id => idb('readonly', s => s.get(id));
+const filePut = rec => idb('readwrite', s => s.put(rec));
+const fileAll = () => idb('readonly', s => s.getAll());
+async function loadOutbox() {
+  try { outbox = (await fileAll()).filter(f => f.pending).map(({ data, ...meta }) => meta); }
+  catch { outbox = []; } // storage blocked (private browsing): nothing can be waiting
+}
+// a phone that lost access keeps only what it hasn't uploaded yet
+async function dropFileCopies() {
+  try { await idb('readwrite', s => { const req = s.openCursor(); req.onsuccess = () => { const c = req.result; if (!c) return; if (!c.value.pending) c.delete(); c.continue(); }; return req; }); }
+  catch { /* nothing kept */ }
+}
+
+const toB64 = buf => { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
+const fromB64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const imgFrom = blob => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('This picture could not be read.')); i.src = URL.createObjectURL(blob); });
+const canvasJpeg = (c, q) => new Promise(ok => c.toBlob(ok, 'image/jpeg', q));
+
+// A picked or photographed file → { data, mime, name }: photos become a smaller JPEG, PDFs pass as they are.
+async function prepareFile(file, side = PHOTO_SIDE, quality = 0.82, png = false) {
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if (isPdf) {
+    if (file.size > MAX_FILE) throw new Error('This PDF is bigger than 8 MB.');
+    return { data: await file.arrayBuffer(), mime: 'application/pdf', name: file.name };
+  }
+  if (!/^image\//.test(file.type) && !/\.(jpe?g|png|heic|webp)$/i.test(file.name)) throw new Error('Only photos and PDF files can be added.');
+  const img = await imgFrom(file);
+  const k = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+  const g = c.getContext('2d');
+  if (png) { g.drawImage(img, 0, 0, c.width, c.height); const b = await new Promise(ok => c.toBlob(ok, 'image/png')); return { data: await b.arrayBuffer(), mime: 'image/png', name: (file.name || 'stamp').replace(/\.\w+$/, '') + '.png' }; }
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); // a see-through part turns white, not black
+  g.drawImage(img, 0, 0, c.width, c.height);
+  const blob = await canvasJpeg(c, quality);
+  return { data: await blob.arrayBuffer(), mime: 'image/jpeg', name: (file.name || 'photo').replace(/\.\w+$/, '') + '.jpg' };
+}
+
+// Keep a file for a record ('for' = its id, or 'settings' for the letterhead). Returns the file's id.
+async function keepFile(meta, data) {
+  const [[id], seq] = nextIds('F', 1, S.seq);
+  const rec = { id, ...meta, by: myName() || S.lastBy || '', createdAt: stampSec() };
+  await filePut({ ...rec, data, pending: true });
+  update({ seq });
+  outbox = [...outbox, rec];
+  uploadFiles();
+  return id;
+}
+
+// Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
+// ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
+async function uploadFiles() {
+  if (uploading || !S || !S.link || mustSignIn() || !outbox.length || (S.link.v || 2) < 4) return;
+  uploading = true;
+  try {
+    for (const meta of outbox) {
+      const rec = await fileGet(meta.id);
+      if (!rec || !rec.pending) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
+      let res;
+      try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
+      catch (e) { uploadErr = e.offline || e.code === 'LOGIN' ? '' : `A file could not be uploaded: ${e.message}`; break; }
+      const { data, pending, ...d } = rec;
+      update({ files: [...S.files, { ...d, fileId: res.fileId }] });
+      await filePut({ ...rec, fileId: res.fileId, pending: false });
+      outbox = outbox.filter(x => x.id !== meta.id);
+      uploadErr = '';
+    }
+  } catch (e) { uploadErr = e.message; } finally { uploading = false; paintSync(); }
+}
+
+// The file's bytes: the copy on this phone, or fetched from the company Drive (and kept for next time).
+async function fileBlob(id) {
+  const hit = await fileGet(id).catch(() => null);
+  if (hit) return new Blob([hit.data], { type: hit.mime });
+  const rec = S.files.find(f => f.id === id);
+  if (!rec || !S.link) throw new Error('This file is not on this phone.');
+  const res = await callServer(S.link, { op: 'file', id });
+  const data = fromB64(res.data).buffer;
+  filePut({ ...rec, data, pending: false }).catch(() => {});
+  return new Blob([data], { type: res.mime });
+}
+const fileMeta = id => S.files.find(f => f.id === id) || outbox.find(f => f.id === id);
+const filesFor = (id, type) => [...live(S.files), ...outbox.map(f => ({ ...f, pending: true }))]
+  .filter(f => f.for === id && (!type || f.type === type)).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+const latestFile = (id, type) => filesFor(id, type).pop();
+const filesBlock = id => filesList(filesFor(id).filter(f => f.type !== 'profile'));
+function filesList(list, title = 'Files') {
+  if (!list.length) return '';
+  return `<h3 class="subh">${esc(title)} (${list.length})</h3><div class="card list inset">${list.map(f => `<button class="row" data-act="showFile" data-id="${esc(f.id)}">
+    <span class="dot">${FILE_ICON[f.type] || '📎'}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(f.no || FILE_NAME[f.type] || f.name)}</span>${f.pending ? '<i class="tag warn">Not uploaded yet</i>' : ''}</span>
+    <span class="s">${esc([f.name, fmtAbs(String(f.createdAt).slice(0, 16)), f.by && 'by ' + f.by].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>`;
+}
+// an "attach" button: a file box styled as a button (data-type says what it is)
+const attachButton = (id, label = '📎 Attach photo/PDF', type = 'attachment', accept = 'image/*,application/pdf') =>
+  `<label class="btn ghost">${label}<input type="file" hidden accept="${accept}" data-attach="${esc(id)}" data-type="${esc(type)}"></label>`;
+async function attachPicked(input) {
+  const file = input.files[0], forId = input.dataset.attach, type = input.dataset.type;
+  input.value = '';
+  if (!file) return;
+  try {
+    const p = type === 'stamp' ? await prepareFile(file, 900, 0.92, true) : type === 'letterhead' ? await prepareFile(file, SLIP_H, 0.92) : await prepareFile(file);
+    if (type === 'stamp') stampPrev = null;
+    await keepFile({ for: forId, type, name: p.name, mime: p.mime }, p.data);
+  } catch (e) { return alert(e.message); }
+  toast(`${FILE_NAME[type] || 'File'} added ✓`);
+  reopenHere();
+}
+
+async function showFile(id) {
+  const f = fileMeta(id);
+  if (!f) return;
+  let blob;
+  try { blob = await fileBlob(id); } catch (e) { return toast(e.offline ? 'No internet — this file is not on this phone yet.' : e.message); }
+  shown = { blob, name: f.name };
+  const title = f.no || FILE_NAME[f.type] || 'File';
+  openSheet(`${head(title, '', f.name)}
+    ${f.mime === 'application/pdf' ? '<p class="filebig">📄</p>' : `<img class="viewimg" src="${URL.createObjectURL(blob)}" alt="${esc(title)}">`}
+    <button class="btn in" data-act="shareShown">📤 Send or save</button>
+    ${f.pending ? '<p class="muted center">Kept on this phone. It uploads to the company Drive when the internet is on.</p>' : ''}`);
+}
+const shareShown = () => shown && download(shown.blob, shown.name);
+
+/* ---------- signature pad ---------- */
+function sigPad(cv) {
+  const box = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  cv.width = Math.round(box.width * dpr); cv.height = Math.round(box.height * dpr);
+  const g = cv.getContext('2d');
+  g.scale(dpr, dpr); g.lineWidth = 3; g.lineCap = g.lineJoin = 'round'; g.strokeStyle = g.fillStyle = '#1B2232';
+  delete cv.dataset.ink;
+  let last = null;
+  const at = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  cv.onpointerdown = e => { cv.setPointerCapture(e.pointerId); last = at(e); g.beginPath(); g.arc(last[0], last[1], 1.5, 0, 7); g.fill(); cv.dataset.ink = '1'; };
+  cv.onpointermove = e => { if (!last) return; const p = at(e); g.beginPath(); g.moveTo(last[0], last[1]); g.lineTo(p[0], p[1]); g.stroke(); last = p; };
+  cv.onpointerup = cv.onpointercancel = () => { last = null; };
+}
+const sigField = who => `<div class="fld"><span>Signature of ${esc(who)} <em>(sign with a finger)</em></span><canvas class="sig"></canvas><button type="button" class="link" data-act="sigClear">Clear and sign again</button></div>`;
+const photoField = who => `<label class="fld"><span>Photo of ${esc(who)} with the money <em>(optional)</em></span><input type="file" name="photo" accept="image/*" capture="environment"></label>`;
+
+/* ---------- slips: an A4 page drawn on a canvas, saved as a one-page PDF ---------- */
+// Laid out like the company's paper voucher (paid to | date, being payment for | amount, amount in words,
+// received by, prepared / checked / approved), printed on the letterhead, with the company stamp and its date.
+const SLIP_W = 1240, SLIP_H = 1754; // A4 at 150 dots per inch
+// one plain corporate family everywhere (Helvetica on iPhones and Macs, Arial or Roboto elsewhere); no heavy weights
+const SANS = '"Helvetica Neue", Helvetica, Arial, Roboto, sans-serif';
+const SLIP_C = { navy: '#26306B', accent: '#C8501E', ink: '#1B2232', label: '#6B7190', rule: '#C9CDDD', tint: 'rgba(38,48,107,.05)', stripe: 'rgba(38,48,107,.025)', stampInk: '#1D3FC4' };
+const SLIP_TITLE = { voucher: 'PAYMENT VOUCHER', receipt: 'RECEIPT', salary: 'SALARY SLIP', advance: 'ADVANCE VOUCHER', settlement: 'FINAL SETTLEMENT' };
+const STAMP_PLACE = { a: 72, r: 0.76, s: 0.12 }; // the date on the stamp: angle of the dotted line's middle (0 = right, 90 = down), its distance and letter size as parts of the stamp's radius
+const slipMoney = (n, cur) => `${cur} ${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function wrapText(g, text, width) {
+  const lines = [];
+  let line = '';
+  for (const w of String(text).split(/\s+/)) {
+    const t = line ? `${line} ${w}` : w;
+    if (line && g.measureText(t).width > width) { lines.push(line); line = w; } else line = t;
+  }
+  return line ? [...lines, line] : lines;
+}
+function fitInto(g, img, x, y, w, h, cover) {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const k = cover ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih), dw = iw * k, dh = ih * k;
+  g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
+  g.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  g.restore();
+}
+// the signature pad cut down to the ink, so it can be set on the signature line at a proper size
+function inkOnly(cv) {
+  const w = cv.width, h = cv.height, px = cv.getContext('2d').getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 20) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) return null;
+  const c = document.createElement('canvas'), m = 4;
+  c.width = x1 - x0 + 1 + 2 * m; c.height = y1 - y0 + 1 + 2 * m;
+  c.getContext('2d').drawImage(cv, x0 - m, y0 - m, c.width, c.height, 0, 0, c.width, c.height);
+  return c;
+}
+// set on the line at (x, lineY): as big as fits in maxW × maxH, its bottom just above the line — but never blown up so
+// far that the pen line turns thick (the pad draws 3 screen points wide, i.e. 3 × the screen's pixel density)
+function placeSignature(g, sig, x, lineY, maxW, maxH) {
+  const ink = sig && inkOnly(sig);
+  if (!ink) return;
+  const k = Math.min(maxW / ink.width, Math.min(maxH, 130) / ink.height, 1.4 / (devicePixelRatio || 1));
+  g.drawImage(ink, x, lineY - 4 - ink.height * k, ink.width * k, ink.height * k);
+}
+const boxPath = (g, x, y, w, h, r = 14) => { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); };
+// letter-spaced text, drawn one letter at a time (works on every phone); align 'left' | 'right' | 'center'
+function spaced(g, text, x, y, gap, align = 'left') {
+  const ws = [...text].map(ch => g.measureText(ch).width), total = ws.reduce((a, b) => a + b, 0) + gap * (ws.length - 1);
+  let at = align === 'right' ? x - total : align === 'center' ? x - total / 2 : x;
+  const was = g.textAlign;
+  g.textAlign = 'left';
+  [...text].forEach((ch, i) => { g.fillText(ch, at, y); at += ws[i] + gap; });
+  g.textAlign = was;
+}
+const slipLabel = (g, text, x, y) => { g.fillStyle = SLIP_C.label; g.font = `600 18px ${SANS}`; spaced(g, text.toUpperCase(), x, y, 1.6); };
+async function brandImage(type) {
+  const f = latestFile('settings', type);
+  if (!f) return null;
+  try { return Object.assign(await imgFrom(await fileBlob(f.id)), { place: f.place }); } catch { return null; } // offline and never fetched: left out
+}
+const letterheadImage = () => brandImage('letterhead');
+// keep the letterhead and stamp on the phone, so slips made offline still carry them
+function warmLetterhead() { ['letterhead', 'stamp'].forEach(t => { const f = latestFile('settings', t); if (f && !f.pending) fileBlob(f.id).catch(() => {}); }); }
+
+// The stamp's ink alone: the background colour (read from the corners: white paper, a black square, or already
+// see-through) is made see-through, with soft edges, so the stamp sits on the page like real ink.
+function cleanStamp(img) {
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height, c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, w, h), px = d.data;
+  const at = (x, y) => (y * w + x) * 4, corners = [at(2, 2), at(w - 3, 2), at(2, h - 3), at(w - 3, h - 3)];
+  if (corners.every(i => px[i + 3] < 20)) return c; // already see-through
+  const bg = [0, 1, 2].map(k => corners.reduce((t, i) => t + px[i + k], 0) / 4);
+  for (let i = 0; i < px.length; i += 4) {
+    const dist = Math.max(Math.abs(px[i] - bg[0]), Math.abs(px[i + 1] - bg[1]), Math.abs(px[i + 2] - bg[2]));
+    px[i + 3] = Math.round(px[i + 3] * Math.min(1, Math.max(0, (dist - 40) / 70)));
+  }
+  g.putImageData(d, 0, 0);
+  return c;
+}
+// The stamp's ring: the box around its ink, so any photo or scan of it lines up.
+function inkCircle(img) {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const n = 240, k = n / Math.max(iw, ih), w = Math.round(iw * k), h = Math.round(ih * k);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+  const px = g.getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = 0, y1 = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    if (px[i + 3] > 60 && px[i] + px[i + 1] + px[i + 2] < 600) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  }
+  if (x1 <= x0) return { cx: iw / 2, cy: ih / 2, R: Math.min(iw, ih) / 2 };
+  return { cx: (x0 + x1 + 1) / 2 / k, cy: (y0 + y1 + 1) / 2 / k, R: Math.max(x1 - x0 + 1, y1 - y0 + 1) / 2 / k };
+}
+// The stamp, its ring `size` across and centred on (x, y), with the date written along its dotted line.
+function drawStamp(g, img, x, y, size, dateText, place) {
+  const ink = img.ink || (img.ink = cleanStamp(img)), c = img.circle || (img.circle = inkCircle(ink)), k = size / (2 * c.R), p = { ...STAMP_PLACE, ...(place || {}) };
+  g.save();
+  g.globalCompositeOperation = 'multiply'; // like real ink: the printing under it still shows
+  g.drawImage(ink, x - c.cx * k, y - c.cy * k, ink.width * k, ink.height * k);
+  g.globalCompositeOperation = 'source-over';
+  const R = size / 2, r = p.r * R, fs = Math.max(8, p.s * R);
+  g.font = `700 ${fs}px ${SANS}`; g.fillStyle = SLIP_C.stampInk; g.textAlign = 'center';
+  const chars = [...dateText], ws = chars.map(ch => g.measureText(ch).width), gap = fs * 0.06;
+  let ang = p.a * Math.PI / 180 + (ws.reduce((a, b) => a + b, 0) + gap * (chars.length - 1)) / 2 / r; // from the left end, going round
+  chars.forEach((ch, i) => {
+    ang -= ws[i] / 2 / r;
+    g.save(); g.translate(x + r * Math.cos(ang), y + r * Math.sin(ang)); g.rotate(ang - Math.PI / 2); g.fillText(ch, 0, 0); g.restore();
+    ang -= (ws[i] / 2 + gap) / r;
+  });
+  g.restore();
+}
+
+/* s = { title, no, stampDate, party: [label, value], when: [label, value], forLabel, lines: [{ t, v, strong, muted }],
+         amount, cur, extra: [[label, value]], signLabel, signName, sig: canvas, photo: image|null, preparedBy, ref } */
+// A slip is as tall as what it holds (A4 width): the letterhead's header at the top, the form, then the letterhead's
+// address strip (its bottom tenth) at the foot — no empty half page.
+const LH_FOOT = 0.1;
+async function renderSlip(s) {
+  const C = SLIP_C, L = 90, R = SLIP_W - 90, CX = L + 660;
+  const [lh, stampImg] = await Promise.all([letterheadImage(), brandImage('stamp')]);
+  const c = document.createElement('canvas'); // the form, on a see-through layer as tall as it needs
+  c.width = SLIP_W; c.height = 2600;
+  const g = c.getContext('2d');
+  let y = lh ? 268 : 200;
+  if (!lh) { g.fillStyle = C.navy; g.font = `700 46px ${SANS}`; g.fillText(S.company || 'Company', L, 120); g.fillStyle = C.accent; g.fillRect(L, 142, 90, 5); }
+  // title and number
+  g.fillStyle = C.navy; g.font = `700 46px ${SANS}`; spaced(g, s.title, L, y + 46, 4);
+  g.fillStyle = C.accent; g.fillRect(L, y + 66, 90, 5);
+  g.font = `600 18px ${SANS}`; g.fillStyle = C.label; spaced(g, 'NO.', R, y + 16, 1.6, 'right');
+  g.fillStyle = C.accent; g.font = `700 36px ${SANS}`; g.textAlign = 'right'; g.fillText(s.no, R, y + 52); g.textAlign = 'left';
+  y += 110;
+  const lineFont = 28, lineH = 46, h4 = 270;
+  const lineFontOf = l => `${l.strong ? 700 : 500} ${l.muted ? lineFont - 4 : lineFont}px ${SANS}`;
+  // each pay line wraps only where its own amount leaves no room
+  const lines = s.lines.flatMap(l => { g.font = lineFontOf(l); const room = CX - L - 48 - (l.v ? g.measureText(l.v).width + 28 : 0); return wrapText(g, l.t, room).map((t, i) => ({ ...l, t, v: i ? '' : l.v })); });
+  g.font = `700 32px ${SANS}`; const party = wrapText(g, s.party[1] || '—', CX - L - 50), h1 = 76 + party.length * 40;
+  const h2 = Math.max(250, 70 + lines.length * lineH + 20);
+  g.font = `italic 28px ${SANS}`; const words = wrapText(g, amountInWords(s.amount, s.cur), CX - L - 50);
+  const h3 = Math.max(76 + words.length * 38, 70 + s.extra.length * 64);
+  const top = y, cells = [];
+  const row = (h, draw) => { cells.push([y, h]); draw(y, h); y += h; };
+  // row 1: paid to | date
+  row(h1, t => {
+    slipLabel(g, s.party[0], L + 24, t + 34);
+    g.fillStyle = C.ink; g.font = `700 32px ${SANS}`; party.forEach((p, i) => g.fillText(p, L + 24, t + 78 + i * 40));
+    slipLabel(g, s.when[0], CX + 24, t + 34);
+    g.fillStyle = C.ink; g.font = `700 30px ${SANS}`; wrapText(g, s.when[1], R - CX - 48).forEach((p, i) => g.fillText(p, CX + 24, t + 78 + i * 36));
+  });
+  // row 2: being payment for | amount in
+  row(h2, t => {
+    slipLabel(g, s.forLabel || 'Being payment for', L + 24, t + 34);
+    lines.forEach((l, i) => {
+      const ly = t + 82 + i * lineH;
+      g.fillStyle = l.muted ? C.label : C.ink; g.font = lineFontOf(l);
+      g.fillText(l.t, L + 24, ly);
+      if (l.v) { g.textAlign = 'right'; g.fillText(l.v, CX - 24, ly); g.textAlign = 'left'; }
+      if (l.strong) { g.fillStyle = C.rule; g.fillRect(L + 24, ly - 36, CX - L - 48, 1); }
+    });
+    slipLabel(g, 'Amount in', CX + 24, t + 34);
+    ['SSP', 'USD'].forEach((cur, i) => {
+      const bx = CX + 24 + i * 130, by = t + 52;
+      g.strokeStyle = C.navy; g.lineWidth = 2; g.strokeRect(bx, by, 28, 28);
+      if (cur === s.cur) { g.beginPath(); g.moveTo(bx + 6, by + 15); g.lineTo(bx + 12, by + 22); g.lineTo(bx + 23, by + 6); g.lineWidth = 4; g.stroke(); }
+      g.fillStyle = C.ink; g.font = `700 24px ${SANS}`; g.fillText(cur, bx + 38, by + 24);
+    });
+    const ax = CX + 24, aw = R - CX - 48, ay = t + 104, ah = Math.min(140, Math.max(96, h2 - 130));
+    boxPath(g, ax, ay, aw, ah); g.fillStyle = C.tint; g.fill(); g.strokeStyle = C.navy; g.lineWidth = 2.5; g.stroke();
+    const text = slipMoney(s.amount, s.cur);
+    let fs = 44; g.font = `700 ${fs}px ${SANS}`;
+    while (g.measureText(text).width > aw - 36 && fs > 22) { fs -= 2; g.font = `700 ${fs}px ${SANS}`; }
+    g.fillStyle = C.ink; g.textAlign = 'right'; g.fillText(text, ax + aw - 18, ay + ah / 2 + fs * 0.36); g.textAlign = 'left';
+  });
+  // row 3: amount in words | paid from (and the day's rate)
+  row(h3, t => {
+    slipLabel(g, 'Amount in words', L + 24, t + 34);
+    g.fillStyle = C.ink; g.font = `italic 28px ${SANS}`; words.forEach((w, i) => g.fillText(w, L + 24, t + 76 + i * 38));
+    s.extra.forEach(([lab, val], i) => {
+      slipLabel(g, lab, CX + 24, t + 34 + i * 64);
+      g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; g.fillText(val, CX + 24, t + 64 + i * 64);
+    });
+  });
+  // row 4: received by (signature on its line, the name under it) | photo
+  const split = s.photo ? CX : R;
+  row(h4, t => {
+    const lineY = t + h4 - 52, lineW = Math.min(520, split - L - 48);
+    slipLabel(g, s.signLabel, L + 24, t + 34);
+    placeSignature(g, s.sig, L + 24, lineY, lineW, lineY - t - 52);
+    g.fillStyle = C.ink; g.fillRect(L + 24, lineY, lineW, 1.5);
+    g.font = `600 24px ${SANS}`; g.fillText(s.signName || '', L + 24, lineY + 30);
+    g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText('Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
+    if (s.photo) fitInto(g, s.photo, CX + 14, t + 14, R - CX - 28, h4 - 28, true);
+  });
+  // the ruling: outer box, the column line and the lines between rows (see-through: the watermark shows behind)
+  g.strokeStyle = C.navy; g.lineWidth = 2.5; g.strokeRect(L, top, R - L, y - top);
+  g.fillStyle = C.navy;
+  cells.slice(1).forEach(([cy]) => g.fillRect(L, cy - 0.75, R - L, 1.5));
+  cells.forEach(([cy, ch], i) => { if (i < 3 || s.photo) g.fillRect(CX - 0.75, cy, 1.5, ch); });
+  // prepared / checked / approved; the company stamp goes over "approved", the way it is stamped on paper
+  y += 200;
+  const colW = (R - L) / 3;
+  if (stampImg) drawStamp(g, stampImg, R - 112, y - 82, 216, s.stampDate, stampImg.place);
+  [['Prepared by', s.preparedBy || ''], ['Checked by', ''], ['Approved by', '']].forEach(([lab, name], i) => {
+    const x = L + i * colW;
+    g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
+    g.fillRect(x, y, colW - 40, 1.5);
+    slipLabel(g, lab, x, y + 30); // drawn after the stamp, so the words stay readable
+  });
+  g.fillStyle = C.label; g.font = `400 18px ${SANS}`;
+  g.fillText(`Ref ${s.ref} · made in the company app on ${fmtAbs(stamp())}`, L, y + 76);
+  // the page: exactly as tall as the slip, on the letterhead (its header and watermark above, its address strip at the foot)
+  const footH = lh ? Math.round(SLIP_H * LH_FOOT) : 0, H = y + 104 + footH;
+  const page = document.createElement('canvas');
+  page.width = SLIP_W; page.height = H;
+  const p = page.getContext('2d');
+  p.fillStyle = '#fff'; p.fillRect(0, 0, SLIP_W, H);
+  if (lh) {
+    const iw = lh.naturalWidth, ih = lh.naturalHeight, k = SLIP_W / iw, body = Math.min(H - footH, ih * k - footH);
+    p.drawImage(lh, 0, 0, iw, body / k, 0, 0, SLIP_W, body);
+    p.drawImage(lh, 0, ih - footH / k, iw, footH / k, 0, H - footH, SLIP_W, footH);
+  }
+  p.drawImage(c, 0, 0);
+  const jpeg = new Uint8Array(await (await canvasJpeg(page, 0.9)).arrayBuffer());
+  return new Blob([jpegToPdf(jpeg, SLIP_W, H)], { type: 'application/pdf' });
+}
+
+/* ---------- statements: every entry for one person or project, on as many pages as it takes ---------- */
+/* st = { title, no, date, info: [[label, value]], sections: [{ title, cols: [{ h, w, right }], rows: [[cell]], total: [label, value] }],
+          summary: [[label, value, strong]], verdict: { text, good } | null, sign: { label, name, sig, photo } | null, preparedBy, ref } */
+const fitText = (g, t, w) => { t = String(t ?? ''); if (g.measureText(t).width <= w) return t; while (t && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; };
+async function renderStatement(st) {
+  const [lh, stampImg] = await Promise.all([letterheadImage(), st.sign ? brandImage('stamp') : null]);
+  const C = SLIP_C, L = 90, R = SLIP_W - 90, W = R - L, top = lh ? 268 : 200, limit = lh ? 1560 : SLIP_H - 80, pages = [];
+  let g, y;
+  const page = () => {
+    const c = document.createElement('canvas');
+    c.width = SLIP_W; c.height = SLIP_H; pages.push(c);
+    g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, SLIP_W, SLIP_H);
+    if (lh) g.drawImage(lh, 0, 0, SLIP_W, SLIP_H);
+    else { g.fillStyle = C.navy; g.font = `700 46px ${SANS}`; g.fillText(S.company || 'Company', L, 120); g.fillStyle = C.accent; g.fillRect(L, 142, 90, 5); }
+    y = top;
+    if (pages.length > 1) { g.fillStyle = C.navy; g.font = `700 28px ${SANS}`; spaced(g, `${st.title} — CONTINUED`, L, y + 30, 2); g.fillStyle = C.label; g.font = `600 22px ${SANS}`; g.textAlign = 'right'; g.fillText(st.no, R, y + 30); g.textAlign = 'left'; y += 64; }
+  };
+  page();
+  g.fillStyle = C.navy; g.font = `700 44px ${SANS}`; spaced(g, st.title, L, y + 46, 3);
+  g.fillStyle = C.accent; g.fillRect(L, y + 66, 90, 5);
+  g.font = `600 18px ${SANS}`; g.fillStyle = C.label; spaced(g, 'NO.', R, y + 16, 1.6, 'right');
+  g.fillStyle = C.accent; g.font = `700 34px ${SANS}`; g.textAlign = 'right'; g.fillText(st.no, R, y + 52);
+  g.fillStyle = C.ink; g.font = `500 22px ${SANS}`; g.fillText(st.date, R, y + 84); g.textAlign = 'left';
+  y += 112;
+  // who it is about: a ruled box of label / value pairs, two to a row
+  const rowsN = Math.ceil(st.info.length / 2), ih = 70;
+  g.strokeStyle = C.navy; g.lineWidth = 2; g.strokeRect(L, y, W, rowsN * ih);
+  st.info.forEach(([lab, val], i) => {
+    const x = L + (i % 2) * (W / 2), ry = y + Math.floor(i / 2) * ih;
+    if (i % 2) { g.fillStyle = C.rule; g.fillRect(x, ry, 1.5, ih); }
+    if (i >= 2 && i % 2 === 0) { g.fillStyle = C.rule; g.fillRect(L, ry, W, 1.5); }
+    slipLabel(g, lab, x + 20, ry + 28);
+    g.fillStyle = C.ink; g.font = `700 26px ${SANS}`; g.fillText(fitText(g, val, W / 2 - 40), x + 20, ry + 58);
+  });
+  y += rowsN * ih + 30;
+  // tables: a header band, rows with a light stripe, a total line; they carry on to the next page when full
+  const colX = cols => { let x = L; return cols.map(c => { const at = x; x += c.w; return at; }); };
+  for (const sec of st.sections) {
+    const xs = colX(sec.cols);
+    const headRow = () => {
+      g.fillStyle = C.tint; g.fillRect(L, y, W, 44); g.fillStyle = C.navy; g.fillRect(L, y + 43, W, 1.5);
+      sec.cols.forEach((c, i) => { g.fillStyle = C.label; g.font = `700 17px ${SANS}`; spaced(g, c.h.toUpperCase(), c.right ? xs[i] + c.w - 14 : xs[i] + 14, y + 28, 1.2, c.right ? 'right' : 'left'); });
+      y += 44;
+    };
+    if (y + 170 > limit) page();
+    g.fillStyle = C.navy; g.font = `700 24px ${SANS}`; g.fillText(sec.title, L, y + 24); y += 40;
+    headRow();
+    if (!sec.rows.length) { g.fillStyle = C.label; g.font = `italic 22px ${SANS}`; g.fillText('Nothing yet.', L + 14, y + 30); y += 44; }
+    sec.rows.forEach((row, ri) => {
+      if (y + 40 > limit - 60) { page(); headRow(); }
+      if (ri % 2) { g.fillStyle = C.stripe; g.fillRect(L, y, W, 40); }
+      row.forEach((cell, i) => {
+        const c = sec.cols[i];
+        g.fillStyle = C.ink; g.font = `${c.right ? 600 : 500} 22px ${SANS}`;
+        const t = fitText(g, cell, c.w - 28);
+        if (c.right) { g.textAlign = 'right'; g.fillText(t, xs[i] + c.w - 14, y + 27); g.textAlign = 'left'; } else g.fillText(t, xs[i] + 14, y + 27);
+      });
+      y += 40;
+    });
+    if (sec.total) {
+      g.fillStyle = C.navy; g.fillRect(L, y, W, 1.5);
+      g.fillStyle = C.ink; g.font = `700 24px ${SANS}`; g.fillText(sec.total[0], L + 14, y + 34);
+      g.textAlign = 'right'; g.fillText(sec.total[1], R - 14, y + 34); g.textAlign = 'left';
+      y += 50;
+    }
+    y += 24;
+  }
+  // the totals and the verdict stay together; the signature block follows (on the next page only if it must)
+  if (y + st.summary.length * 44 + 24 + (st.verdict ? 100 : 0) > limit) page();
+  const sx = L + W / 2 - 20, sw = R - sx;
+  st.summary.forEach(([lab, val, strong], i) => {
+    const ry = y + i * 44;
+    if (strong) { g.fillStyle = C.navy; g.fillRect(sx, ry, sw, 1.5); }
+    g.fillStyle = strong ? C.ink : C.label; g.font = `${strong ? 700 : 500} ${strong ? 26 : 24}px ${SANS}`; g.fillText(lab, sx + 10, ry + 33);
+    g.fillStyle = C.ink; g.textAlign = 'right'; g.fillText(val, R - 10, ry + 33); g.textAlign = 'left';
+  });
+  y += st.summary.length * 44 + 20;
+  if (st.verdict) {
+    const tone = st.verdict.good ? '#0E7C57' : C.accent;
+    boxPath(g, L, y, W, 76); g.fillStyle = st.verdict.good ? 'rgba(14,124,87,.08)' : 'rgba(200,80,30,.08)'; g.fill(); g.strokeStyle = tone; g.lineWidth = 3; g.stroke();
+    g.fillStyle = tone; g.font = `700 30px ${SANS}`; spaced(g, st.verdict.text, L + W / 2, y + 49, 2, 'center');
+    y += 100;
+  }
+  if (st.sign && y + 200 + 120 + 40 > limit) page();
+  if (st.sign) {
+    const s = st.sign, h = 200, split = s.photo ? L + 660 : R;
+    g.strokeStyle = C.navy; g.lineWidth = 2.5; g.strokeRect(L, y, W, h);
+    if (s.photo) { g.fillStyle = C.navy; g.fillRect(split, y, 1.5, h); fitInto(g, s.photo, split + 14, y + 14, R - split - 28, h - 28, true); }
+    const lineY = y + h - 50, lineW = Math.min(520, split - L - 48);
+    slipLabel(g, s.label, L + 24, y + 34);
+    placeSignature(g, s.sig, L + 24, lineY, lineW, lineY - y - 50);
+    g.fillStyle = C.ink; g.fillRect(L + 24, lineY, lineW, 1.5);
+    g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; g.fillText(s.name, L + 24, lineY + 30);
+    g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText('Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
+    y += h + 120;
+    const colW = W / 3;
+    if (stampImg) drawStamp(g, stampImg, R - 104, y - 45, 180, st.stampDate, stampImg.place); // clear of the page number below
+    [['Prepared by', st.preparedBy || ''], ['Checked by', ''], ['Approved by', '']].forEach(([lab, name], i) => {
+      const x = L + i * colW;
+      g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
+      g.fillRect(x, y, colW - 40, 1.5);
+      slipLabel(g, lab, x, y + 30);
+    });
+    y += 40;
+  }
+  // on every page's bottom edge: where it came from (left) and the page number (right)
+  const made = `${st.ref ? `Ref ${st.ref} · ` : ''}made in the company app on ${fmtAbs(stamp())}`;
+  pages.forEach((c, i) => {
+    const p = c.getContext('2d'); p.fillStyle = C.label; p.font = `500 18px ${SANS}`;
+    p.fillText(made, L, limit + 20); p.textAlign = 'right'; p.fillText(`Page ${i + 1} of ${pages.length}`, R, limit + 20);
+  });
+  const jpegs = await Promise.all(pages.map(async c => ({ data: new Uint8Array(await (await canvasJpeg(c, 0.88)).arrayBuffer()), w: SLIP_W, h: SLIP_H })));
+  return new Blob([pdfPages(jpegs)], { type: 'application/pdf' });
+}
+// the voucher or receipt number made for an entry, if any
+const docNo = id => (filesFor(id).filter(f => f.no).pop() || {}).no || '';
+const sumByCur = items => CURS.filter(c => items.some(x => x.cur === c)).map(c => slipMoney(total(items.filter(x => x.cur === c)), c));
+// a statement that isn't kept: made, then offered for sending (it can be made again any time)
+async function shareStatement(st, fileName) {
+  toast('Making the statement…');
+  try { const blob = await renderStatement(st); readySheet(st.title, st.no, blob, fileName); }
+  catch (e) { alert(`The statement could not be made: ${e.message}`); }
+}
+const statementNo = () => { const [[no], seq] = nextIds('ST', 1, S.seq); update({ seq }); return no; };
+// all money received for a project (for its client), with the receipt numbers
+function projectStatement(pid) {
+  const p = S.projects.find(x => x.id === pid), list = live(S.credits).filter(c => c.project === pid).sort(byAt), s = projStats(pid);
+  const st = { title: 'STATEMENT OF PAYMENTS', no: statementNo(), date: fmtDate(stamp().slice(0, 10)),
+    info: [['Project', p.name], ['Project value', p.value ? slipMoney(p.value, p.valueCur || 'USD') : '—'], ['Payments', String(list.length)], ['Period', list.length ? `${fmtDate(list[0].at.slice(0, 10))} – ${fmtDate(list[list.length - 1].at.slice(0, 10))}` : '—']],
+    sections: [{ title: 'Money received', cols: [{ h: 'Date', w: 190 }, { h: 'Receipt / ref', w: 210 }, { h: 'Note', w: 410 }, { h: 'Amount', w: 250, right: true }],
+      rows: list.map(c => [fmtDate(c.at.slice(0, 10)), docNo(c.id) || c.id, c.note || `Into ${accountOf(c.mode)}`, slipMoney(c.amount, c.cur)]) }],
+    summary: sumByCur(list).map(t => ['Total received', t, true]),
+    verdict: p.value ? (s.pending ? { text: `STILL TO RECEIVE ${slipMoney(s.pending, s.vc)}`, good: false } : { text: 'FULLY PAID', good: true }) : null, sign: null };
+  shareStatement(st, `${st.no} ${fileSafe(p.name)}.pdf`);
+}
+// all payments to one name ("Paid to"), with the voucher numbers
+function payeeStatement(name) {
+  const key = clean(name).toLowerCase(), list = live(S.expenses).filter(e => clean(e.paidTo).toLowerCase() === key).sort(byAt);
+  const st = { title: 'STATEMENT OF PAYMENTS', no: statementNo(), date: fmtDate(stamp().slice(0, 10)),
+    info: [['Paid to', name], ['Payments', String(list.length)], ['From', list.length ? fmtDate(list[0].at.slice(0, 10)) : '—'], ['To', list.length ? fmtDate(list[list.length - 1].at.slice(0, 10)) : '—']],
+    sections: [{ title: 'Payments', cols: [{ h: 'Date', w: 190 }, { h: 'Voucher / ref', w: 210 }, { h: 'For', w: 410 }, { h: 'Amount', w: 250, right: true }],
+      rows: list.map(e => [fmtDate(e.at.slice(0, 10)), docNo(e.id) || e.id, e.reason, slipMoney(e.amount, e.cur)]) }],
+    summary: sumByCur(list).map(t => ['Total paid', t, true]), verdict: null, sign: null };
+  shareStatement(st, `${st.no} ${fileSafe(name)}.pdf`);
+}
+
+// the day's rate for an SSP entry, and what it was worth in dollars
+const usdOf = r => (r.cur === 'SSP' && r.rate > 0 ? Math.round(r.amount / r.rate * 100) / 100 : null);
+const rateRow = r => (usdOf(r) === null ? [] : [['Rate', `1 USD = ${plain(r.rate)} SSP · ≈ ${money(usdOf(r), 'USD')}`]]);
+const slipDay = r => { const [y, m, d] = r.at.slice(0, 10).split('-').map(Number); return `${DAYS[new Date(y, m - 1, d).getDay()]}, ${fmtDate(r.at.slice(0, 10))}`; };
+const stampDate = r => r.at.slice(0, 10).split('-').reverse().join('-'); // 09-10-2026, as written on the paper vouchers
+function voucherSpec(r) {
+  return { title: SLIP_TITLE.voucher, party: ['Paid to', r.paidTo], when: ['Date', slipDay(r)], forLabel: 'Being payment for',
+    lines: [{ t: r.reason, v: slipMoney(r.amount, r.cur) }, r.project && { t: `Project: ${projName(r.project)}`, muted: true }, r.location && { t: `Location: ${r.location}`, muted: true }].filter(Boolean),
+    extra: [['Paid from', accountOf(r.mode)], ...rateRow(r)], signLabel: 'Received by', signName: r.paidTo };
+}
+function receiptSpec(r, party) {
+  return { title: SLIP_TITLE.receipt, party: ['Received from', party || '—'], when: ['Date', slipDay(r)], forLabel: 'Being payment for',
+    lines: [{ t: projName(r.project), v: slipMoney(r.amount, r.cur) }, r.note && { t: r.note, muted: true }].filter(Boolean),
+    extra: [['Received into', accountOf(r.mode)], ...rateRow(r)], signLabel: 'Received by (for the company)', signName: myName() || r.by };
+}
+
+// Make a voucher (expense), receipt (money received) or salary slip (a payment to an employee) for an entry.
+function slipSheet(k, id) {
+  const r = S[COLL[k]].find(x => x.id === id);
+  if (!r) return;
+  const isR = k === 'R', who = isR ? (myName() || r.by || 'the person receiving') : r.paidTo;
+  const title = isR ? 'Receipt' : r.pay ? { salary: 'Salary slip', advance: 'Advance voucher', settlement: 'Final settlement' }[r.pay] : 'Payment voucher';
+  openSheet(`${head(title, isR ? 'in' : 'out', r.id)}
+    <p class="hint">${esc(money(r.amount, r.cur))} · ${esc(isR ? projName(r.project) : `${r.paidTo} — ${r.reason}`)}</p>
+    <form data-form="slip" data-kind="${k}" data-id="${esc(id)}">
+      ${isR ? textField('party', 'Received from', 'Who paid the money?', '', false) : ''}
+      ${sigField(who)}
+      ${isR ? '' : photoField(who)}
+      <p class="err"></p>
+      <button class="btn ${isR ? 'in' : 'out'}">Make the ${title.toLowerCase()} (PDF)</button>
+    </form>`);
+  sigPad($('#sheet canvas.sig'));
+}
+async function saveSlip(f) {
+  const k = f.dataset.kind, r = S[COLL[k]].find(x => x.id === f.dataset.id), cv = $('canvas.sig', f);
+  if (!cv.dataset.ink) return formErr(f, null, 'Please sign in the box first.');
+  const btn = $('button.btn', f);
+  btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
+  try {
+    const p = f.elements.photo && f.elements.photo.files[0];
+    const photo = p ? await imgFrom(new Blob([(await prepareFile(p)).data], { type: 'image/jpeg' })) : null;
+    const type = k === 'R' ? 'receipt' : r.pay ? 'slip' : 'voucher';
+    const [[no], seq] = nextIds(k === 'R' ? 'RC' : 'PV', 1, S.seq);
+    update({ seq });
+    // a final settlement payment: its slip is the whole statement (every wage and payment), signed as fully settled
+    const w = r.pay === 'settlement' && workerOf(r.worker);
+    const spec = w ? workerStatementSpec(w, { final: true, no, sig: cv, photo, date: r.at.slice(0, 10), docs: { [r.id]: no } })
+      : k === 'R' ? receiptSpec(r, clean(f.elements.party.value)) : r.pay ? payslipSpec(r) : voucherSpec(r);
+    if (w) spec.signName = w.name;
+    const blob = w ? await renderStatement(spec) : await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, preparedBy: r.by, ref: r.id });
+    const name = `${no} ${fileSafe(spec.signName || '')}.pdf`;
+    await keepFile({ for: r.id, type, no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
+    readySheet(spec.title, no, blob, name);
+  } catch (e) { btn.disabled = false; formErr(f, null, e.message); }
+}
+function readySheet(title, no, blob, name) {
+  shown = { blob, name };
+  openSheet(`${head(title[0] + title.slice(1).toLowerCase(), 'in', no)}
+    <p class="okbig">✓ Ready</p>
+    <p class="hint center">Kept with the entry${S.link ? ' and saved to the company Google Drive' : ''}. Send it on WhatsApp now, or open it later from the entry.</p>
+    <button class="btn in" data-act="shareShown">📤 Send on WhatsApp or save</button>
+    <button class="btn ghost" data-act="close" style="margin-top:10px">Done</button>`);
+}
+
+/* ---------- the company letterhead (admins, Settings) ---------- */
+function letterheadSheet() {
+  const f = latestFile('settings', 'letterhead');
+  openSheet(`${head('Letterhead')}
+    <p class="hint">Vouchers, receipts and salary slips are printed on this. Use a picture of the whole A4 page (PNG or JPG), with empty space in the middle.</p>
+    ${f ? `<p class="muted">Now: <b>${esc(f.name)}</b>${f.pending ? ' (not uploaded yet)' : ''}</p><button class="btn ghost" data-act="showFile" data-id="${esc(f.id)}" style="margin-bottom:10px">See the letterhead</button>` : '<p class="muted">No letterhead yet — slips get a plain heading with the company name.</p>'}
+    ${attachButton('settings', f ? 'Choose a new letterhead' : 'Choose the letterhead', 'letterhead', 'image/png,image/jpeg')}`);
+  here = letterheadSheet;
+}
+
+/* ---------- the company stamp (admins, Settings): its picture, and where the date goes on it ---------- */
+let stampEdit = null, stampPrev = null; // the position being adjusted, and the stamp picture shown while adjusting
+function stampSheet() {
+  const f = latestFile('settings', 'stamp');
+  openSheet(`${head('Company stamp')}
+    <p class="hint">Printed on every voucher, receipt and salary slip, with the slip's date written on its dotted line. Use a clear picture of the stamp on white paper (PNG or JPG).</p>
+    ${f ? `<canvas id="stampPrev" class="stampprev" width="600" height="600"></canvas>
+      <p class="muted center">Move the date until it sits on the dotted line</p>
+      <div class="nudge"><button type="button" data-act="nudge" data-k="a" data-d="3" aria-label="Move left">◀</button><button type="button" data-act="nudge" data-k="a" data-d="-3" aria-label="Move right">▶</button><button type="button" data-act="nudge" data-k="r" data-d="-0.012" aria-label="Move up">▲</button><button type="button" data-act="nudge" data-k="r" data-d="0.012" aria-label="Move down">▼</button><button type="button" data-act="nudge" data-k="s" data-d="-0.008" aria-label="Smaller">A−</button><button type="button" data-act="nudge" data-k="s" data-d="0.008" aria-label="Bigger">A+</button></div>
+      <button class="btn primary" data-act="stampSave" style="margin-bottom:10px">Save the position</button>` : '<p class="muted">No stamp yet — slips have empty "Approved by" lines.</p>'}
+    ${attachButton('settings', f ? 'Choose a new stamp picture' : 'Choose the stamp picture', 'stamp', 'image/png,image/jpeg')}`);
+  here = stampSheet;
+  if (f) { stampEdit = { ...STAMP_PLACE, ...(f.place || {}) }; drawStampPreview(); }
+}
+async function drawStampPreview() {
+  const cv = $('#stampPrev');
+  if (!cv) return;
+  stampPrev = stampPrev || await brandImage('stamp');
+  const g = cv.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+  if (stampPrev) drawStamp(g, stampPrev, 300, 300, 560, stampDate({ at: stamp() }), stampEdit);
+  else { g.fillStyle = SLIP_C.label; g.font = `600 26px ${SANS}`; g.textAlign = 'center'; g.fillText('Connect to the internet to see it', 300, 300); }
+}
+function nudgeStamp(k, d) { stampEdit = { ...stampEdit, [k]: Math.round((stampEdit[k] + Number(d)) * 1000) / 1000 }; drawStampPreview(); }
+async function saveStampPlace() {
+  const f = latestFile('settings', 'stamp'), place = stampEdit;
+  if (f.pending) { // not uploaded yet: the position goes up with it
+    const rec = await fileGet(f.id);
+    if (rec) await filePut({ ...rec, place });
+    outbox = outbox.map(x => (x.id === f.id ? { ...x, place } : x));
+  } else update({ files: S.files.map(x => (x.id === f.id ? { ...x, place } : x)) });
+  toast('Stamp position saved ✓');
 }
 
 /* ---------- google sheet sync ---------- */
@@ -1162,23 +2068,31 @@ const SYNC_DELAY_MS = 2000;
 const SYNC_EVERY_MS = 2 * 60 * 1000;
 const SYNC_TIMEOUT_MS = 45000;
 const APP_URL = 'https://app.b-e-p-l.com/';
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers', C: 'changes' };
+// the order is the order records are sent in: an employee before a change request about them, files last
+// (the sheet only takes a file record whose entry it already has)
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
-const KINDS_SEEN = 2; // 2 = change requests (C)
+const KINDS_SEEN = 4; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A)
 const VALID = {
-  E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string',
-  R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur),
+  E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string' && okRate(d),
+  R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && okRate(d),
   P: d => typeof d.id === 'string' && typeof d.name === 'string',
   L: d => typeof d.lid === 'string' && typeof d.text === 'string' && typeof d.at === 'string',
   T: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && ACCOUNTS.includes(d.from) && ACCOUNTS.includes(d.to) && d.from !== d.to,
-  C: d => typeof d.id === 'string' && SAFE_ID.test(d.target) && ['E', 'R', 'T', 'P'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string' && AT_RE.test(d.at),
+  C: d => typeof d.id === 'string' && SAFE_ID.test(d.target) && ['E', 'R', 'T', 'P', 'W', 'A'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string' && AT_RE.test(d.at),
+  A: d => typeof d.id === 'string' && SAFE_ID.test(d.worker) && DATE_RE.test(d.date),
+  W: d => typeof d.id === 'string' && typeof d.name === 'string' && Number.isFinite(d.wage) && CURS.includes(d.cur) && DATE_RE.test(d.start),
+  F: d => typeof d.id === 'string' && /^[\w-]{10,100}$/.test(d.fileId) && typeof d.name === 'string' && FILE_MIMES.includes(d.mime) && SAFE_ID.test(d.for) && typeof d.type === 'string',
 };
+const DATE_RE = /^\d{4}-\d\d-\d\d$/;
+const okRate = d => d.rate === undefined || (Number.isFinite(d.rate) && d.rate > 0);
 // ids end up inside the app's pages: only plain ones are ever accepted (the sheet checks this too)
 const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
-const OUTDATED_MSG = 'The Google Sheet script needs updating before cash ↔ bank moves can reach the sheet. Everything else is syncing; the moves are kept safe on this device.';
+const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
+const NEWEST_SCRIPT = 7; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 const notAllowedMsg = n => `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
 const SCRIPT_URL = 'https://app.b-e-p-l.com/sheet-script.txt'; // the sheet script, published next to the app
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error
@@ -1229,7 +2143,7 @@ function inviteHint(f) {
   const needLogin = !!link && !link.k;
   if (needLogin) $('.loginfields', f).hidden = false;
   box.className = 'invite-hint ' + (!v ? '' : link ? 'good' : 'bad');
-  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Join.' : '✓ Invite link OK — tap Join.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${appUrl()}#join=`;
+  box.textContent = !v ? '' : link ? (needLogin ? '✓ Invite link OK — type your username and password, then tap Sign in.' : '✓ Invite link OK — tap Sign in.') : /join=/.test(v) ? '✗ This link is cut off or changed. Copy it again from the message, or use the web app link and code below.' : `✗ This is not an invite link. It starts with ${appUrl()}#join=`;
 }
 
 // Every request says who is asking: this phone's sign-in, or (no sign-in yet) the company code.
@@ -1349,6 +2263,7 @@ async function syncNow() {
   } finally {
     syncBusy = false; paintSync();
     if (syncAgain) { syncAgain = false; scheduleSync(); }
+    if (sync.state === 'ok' || sync.state === 'error') { uploadFiles(); warmLetterhead(); }
   }
 }
 const typing = () => { const a = document.activeElement; return !!a && $('#main').contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName); };
@@ -1378,8 +2293,10 @@ function syncCard() {
     <p class="muted">Connect your company Google Sheet so phones and computers share the same records. The app keeps working offline and syncs when the internet is on.</p>
     <button class="btn in" data-act="connect">Connect to Google Sheet 🔒</button></section>`;
   return `<section class="card pad" id="syncCard"><h3>📊 Company Google Sheet</h3>
-    <p class="muted">${esc(syncText())}</p>
-    ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>' : ''}
+    <p class="muted">${esc(syncText())}${outbox.length ? ` ${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload.` : ''}</p>
+    ${uploadErr ? `<p class="note">⚠️ ${esc(uploadErr)}</p>` : ''}
+    ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>'
+      : (S.link.v || 2) < NEWEST_SCRIPT && can('settings') ? `<p class="note">A newer Google Sheet script is ready (version ${NEWEST_SCRIPT}; this sheet runs ${S.link.v || 2}). It is needed for employees, files, vouchers and days not worked. <button class="link" data-act="howUpdate">Show me how</button></p>` : ''}
     ${S.link.sheet ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
     <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="syncNow">Sync now</button>${can('phones') ? '<button class="btn ghost" data-act="invite">📲 Add a phone 🔒</button>' : ''}</div>
     ${signedIn() ? '' : '<p class="center"><button class="link" data-act="disconnect">Disconnect this device 🔒</button></p>'}</section>`;
@@ -1393,10 +2310,11 @@ function howUpdateSheet() {
       <li>Open the new script: <a href="${SCRIPT_URL}" target="_blank" rel="noopener">new Code.gs</a>. Select all (<b>Ctrl+A</b>, Mac <b>Cmd+A</b>) and copy (<b>Ctrl+C</b> / <b>Cmd+C</b>).</li>
       <li>In Apps Script click inside the code, select all, press <b>Delete</b>, then paste (<b>Ctrl+V</b> / <b>Cmd+V</b>). Click <b>💾 Save</b>.</li>
       <li>Click the blue <b>Deploy</b> button → <b>Manage deployments</b> → the ✏️ <b>pencil</b>.</li>
+      <li><b>Only the first time you update to version 4 or newer:</b> in the list at the top of Apps Script choose <b>allowFiles</b> and click <b>▶ Run</b>. Google asks for permission to use your Drive: <b>Review permissions</b> → the company account → <b>Advanced → Go to … (unsafe)</b> → <b>Allow</b> (it is your own script). This lets the app keep receipts, vouchers and photos in a private Drive folder.</li>
       <li>Under <b>Version</b> choose <b>New version</b>. Leave “Execute as: Me” and “Who has access: Anyone”. Click <b>Deploy</b>.<br><em>Not “New deployment” — that makes a different link.</em></li>
       <li>Come back here and tap <b>Sync now</b>.</li>
     </ol>
-    <p class="note">Check: open your web app link (ends in /exec) in a browser. After the update it shows <b>"version":3</b>.</p>
+    <p class="note">Check: open your web app link (ends in /exec) in a browser. After the update it shows <b>"version":${NEWEST_SCRIPT}</b>.</p>
     <button class="btn in" data-act="syncNow">Sync now</button>`);
 }
 function connectForm() {
@@ -1441,14 +2359,14 @@ async function doJoin(f) {
     return formErr(f, null, /^No internet/.test(e.message) ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
   }
   if (!(res.pull || []).some(p => p.k === 'S')) return formErr(f, null, 'That Google Sheet has no company yet. Connect the main computer first.');
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
+  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
   applyPull(res.pull);
   S = { ...S, link: { ...S.link, since: res.seq } };
   save(); navigator.storage?.persist?.();
   repairImportedMoves();
   history.replaceState(null, '', location.pathname);
   sync = { state: 'ok', at: stampSec(), err: '' };
-  tab = 'home'; render(); toast(`Joined ${S.company} ✓`);
+  tab = 'menu'; render(); toast(`Joined ${S.company} ✓`);
 }
 // a new phone joining a company that has logins: sign in, then load what this person may see
 async function joinSignedIn(f, link, username, password) {
@@ -1462,13 +2380,14 @@ async function joinSignedIn(f, link, username, password) {
     const offline = /^No internet/.test(e.message);
     return formErr(f, offline ? null : 'password', offline ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
   }
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], kindsSeen: KINDS_SEEN, seq: {}, dev, dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { u: link.u, k: '', since: 0, sheet: '', logins: true } };
+  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev, dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { u: link.u, k: '', since: 0, sheet: '', logins: true } };
   await signedInAs(res, password);
   navigator.storage?.persist?.();
   history.replaceState(null, '', location.pathname);
-  tab = 'home';
+  tab = 'menu';
   await syncNow();
   render(); toast(`Welcome, ${res.me.name} ✓`);
+  lockApp(); // a new sign-in chooses its 4-digit code first
 }
 async function inviteSheet() {
   if (!await unlock('Enter the password to add a phone. The invite link gives access to the company records.')) return;
@@ -1494,7 +2413,7 @@ async function disconnect() {
 function migrate(s) {
   const dev = s.dev || newDev();
   const relearn = s.link && (s.kindsSeen || 1) < KINDS_SEEN;
-  return { ...s, dev, transfers: s.transfers || [], changes: s.changes || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, kindsSeen: KINDS_SEEN,
+  return { ...s, dev, transfers: s.transfers || [], changes: s.changes || [], workers: s.workers || [], absences: s.absences || [], files: s.files || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, kindsSeen: KINDS_SEEN,
     link: relearn ? { ...s.link, since: 0 } : (s.link || null), log: s.log.map((l, i) => l.lid ? l : { ...l, lid: `L-${dev}-old${i}` }) };
 }
 
@@ -1507,11 +2426,11 @@ const SESSION_KEY = KEY + '-login';
 const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper' };
 const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Sees everything · adds entries · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
 const RIGHTS = {
-  admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones'],
-  manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup'], // suggest = edits wait for an admin's approval
+  admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones', 'staff'],
+  manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval
   store: ['add'],
 };
-const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [] };
+const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [] };
 
 // { token, user: { id, name, username, role }, check: { salt, hash } } — or { out: true, why } once signed out
 let session = loadSession();
@@ -1545,6 +2464,7 @@ async function signedInAs(res, password) {
   // reload the company settings as this person may see them (only admins get the company password);
   // a store keeper sees only their own entries: drop everything else this phone held (it's all on the sheet)
   const clear = { settingsU: 0, ...(res.me.role === 'admin' ? {} : { pass: null }), ...(res.me.role === 'store' ? onlyUnsent() : {}) };
+  if (res.me.role === 'store') dropFileCopies();
   S = { ...S, ...clear, link: { ...S.link, k: '', since: 0, logins: true }, lastBy: res.me.name };
   save();
 }
@@ -1552,16 +2472,17 @@ async function signedInAs(res, password) {
 function signedOutByServer(why) {
   saveSession({ out: true, why });
   // nothing stays on a phone that lost access — except changes it hasn't sent yet
-  S = { ...S, ...(S.dirty.length ? {} : NOTHING_SEEN), link: { ...S.link, since: 0 } };
-  save(); closeSheet(); render();
+  S = { ...S, ...onlyUnsent(), pass: null, link: { ...S.link, since: 0 } }; // signing in again brings back what this login may see
+  dropFileCopies();
+  save(); closeAll(); render();
 }
 async function signOut() {
-  const n = S.dirty.length;
-  if (n) return alert(`This phone has ${n} change${n === 1 ? '' : 's'} not sent to the Google Sheet yet.\n\nConnect to the internet and wait until it says "Up to date", then sign out.`);
+  const n = S.dirty.length + outbox.length;
+  if (n) return alert(`This phone has ${n} change${n === 1 ? '' : 's'} or file${n === 1 ? '' : 's'} not sent to the Google Sheet yet.\n\nConnect to the internet and wait until it says "Up to date", then sign out.`);
   if (!confirm('Sign out of this phone?\n\nThe company records leave this phone. They come back when someone signs in.')) return;
   const token = session.token;
   saveSession({ out: true }); // the sign-in screen shows at once, so nothing new can be added meanwhile
-  closeSheet(); render();
+  closeAll(); render(); dropFileCopies();
   try { await callServer(S.link, { op: 'logout', token }); } catch { /* already signed out on the sheet: fine */ }
   if (!S.dirty.length) { S = { ...S, ...NOTHING_SEEN, link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
   render();
@@ -1597,8 +2518,8 @@ async function doSignIn(f) {
   catch (e) { return formErr(f, e.offline ? null : 'password', e.offline ? 'No internet. Signing in needs internet.' : e.message); }
   await signedInAs(res, v.password);
   update({ log: logWith([['Signed in', '—', `${res.me.name} signed in on this phone (${S.dev})`]], res.me.name) });
-  closeSheet(); tab = 'home'; render(); toast(`Welcome, ${res.me.name} ✓`);
-  syncNow();
+  closeSheet(); tab = 'menu'; render(); toast(`Welcome, ${res.me.name} ✓`);
+  syncNow(); lockApp();
 }
 
 /* the owner's first login, proven with a one-time setup code that only appears inside the Google Sheet */
@@ -1627,7 +2548,7 @@ async function doSetupLogins(f) {
   update({ log: logWith([['Logins', '—', `Logins set up. ${res.me.name} (${res.me.username}) is the first admin.`]], res.me.name) });
   render(); toast('Logins are ready ✓ Now give the others theirs.');
   syncNow();
-  usersSheet();
+  usersSheet(); lockApp();
 }
 
 /* admins: give, change and close logins */
@@ -1689,10 +2610,13 @@ async function requireLogins(on) {
 
 /* my login */
 function accountSheet() {
-  const u = session.user;
+  const u = session.user, q = session.quick;
   openSheet(`${head(u.name, '', `${u.username} · ${ROLES[u.role]}`)}
+    <h3 class="subh" style="margin-top:0">Opening the app</h3>
+    <div class="setrow"><span>4-digit code<br><span class="muted">${q ? 'Asked every time you open the app' : 'Not set yet'}</span></span><button class="btn small ghost" data-act="changeCode">${q ? 'Change' : 'Set'}</button></div>
+    <div class="setrow" id="bioRow"><span>Face ID / Touch ID<br><span class="muted">${q && q.cred ? 'On — opens the app with your face or finger' : 'Checking this phone…'}</span></span><span></span></div>
     <form data-form="password">
-      <h3 class="subh" style="margin-top:0">Change my password</h3>
+      <h3 class="subh">Change my password</h3>
       <label class="fld"><span>Current password</span><input type="password" name="old" required autocomplete="current-password"></label>
       <label class="fld"><span>New password</span><input type="password" name="pw" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
       <label class="fld"><span>New password again</span><input type="password" name="pw2" required minlength="8" autocomplete="new-password"></label>
@@ -1700,6 +2624,13 @@ function accountSheet() {
       <button class="btn primary">Change password</button>
     </form>
     <button class="btn ghost" data-act="signOut" style="margin-top:14px">Sign out of this phone</button>`);
+  here = accountSheet;
+  bioAvailable().then(ok => {
+    const row = $('#bioRow');
+    if (!row) return;
+    const on = !!(session.quick && session.quick.cred);
+    row.outerHTML = `<div class="setrow" id="bioRow"><span>Face ID / Touch ID<br><span class="muted">${on ? 'On — opens the app with your face or finger' : ok ? 'Off' : 'This phone does not offer it to apps'}</span></span>${ok && session.quick ? `<button class="btn small ${on ? 'ghost' : 'primary'}" data-act="${on ? 'bioOff' : 'bioOn'}">${on ? 'Turn off' : 'Turn on'}</button>` : ''}</div>`;
+  });
 }
 async function doChangePassword(f) {
   const v = Object.fromEntries(new FormData(f));
@@ -1717,7 +2648,7 @@ function loginsCard() {
   if (signedIn()) {
     return `<section class="card pad"><h3>👤 ${esc(session.user.name)}</h3>
       <p class="muted">Signed in as <b>${esc(session.user.username)}</b> · ${ROLES[session.user.role]}</p>
-      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">My password · Sign out</button></div></section>`;
+      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">Code, Face ID, password</button></div></section>`;
   }
   if (S.link.logins) {
     return `<section class="card pad"><h3>👥 Logins</h3><p class="muted">Everyone can have their own username and password. Sign in with yours.</p>
@@ -1739,19 +2670,25 @@ const saveLabel = () => (can('edit') ? 'Save changes' : 'Send for approval');
 const approvalNote = old => (old && !can('edit') ? '<p class="note">An admin approves this change first. Until then the entry and the totals stay as they are.</p>' : '');
 const waiting = () => (S.changes || []).filter(c => c.status === 'waiting');
 const waitingFor = id => waiting().filter(c => c.target === id);
-const recordsOf = kind => S[kind === 'P' ? 'projects' : COLL[kind]] || [];
+const recordsOf = kind => S[KIND_KEY[kind]] || [];
 const targetOf = c => recordsOf(c.kind).find(x => x.id === c.target);
 // the fields an edit may change, per kind (the Google Sheet checks the same list)
 const EDITABLE = {
-  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate'],
-  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate'],
+  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate', 'rate'],
+  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate', 'rate'],
   T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
   P: ['name', 'value', 'valueCur'],
+  W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote', 'clearedTo'],
+  A: ['date', 'note'],
 };
-const editPart = c => Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f)));
+const editPart = c => (c.action ? {} : Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f))));
+const whatIs = (kind, r) => (kind === 'P' ? `Project "${r.name}"` : kind === 'W' ? `Employee ${r.name}`
+  : kind === 'A' ? `Day not worked: ${(workerOf(r.worker) || {}).name || r.worker}, ${fmtDate(r.date)}${r.note ? ` (${r.note})` : ''}` : describe(kind, r));
 // what approving would really change, worked out from the entry itself — never from the text sent with the request
 function changeLines(c, r) {
   if (!r) return [];
+  if (c.action === 'delete') return [`Delete it: ${whatIs(c.kind, r)}`];
+  if (c.action === 'advance') return [`Give an advance of ${money(+c.after.amount, c.after.cur)} — more than the $${ADVANCE_LIMIT_USD} a month limit`];
   const next = { ...r, ...editPart(c) };
   if (c.kind !== 'P') return diff(r, next);
   const vc = x => x.valueCur || 'USD';
@@ -1787,7 +2724,7 @@ function changeCard(c) {
   // the entry was changed by someone else after this request: show it so the admin looks first
   const moved = r && Object.keys(c.before || {}).some(f => String(r[f] ?? '') !== String(c.before[f] ?? ''));
   return `<section class="card pad" style="margin-bottom:12px">
-    <p style="margin:0 0 6px"><b>${esc(r ? (c.kind === 'P' ? `Project "${r.name}"` : describe(c.kind, r)) : c.target)}</b></p>
+    <p style="margin:0 0 6px"><b>${esc(r ? whatIs(c.kind, r) : c.target)}</b></p>
     <ul style="margin:0 0 8px;padding-left:20px">${(lines.length ? lines : ['No real change — reject it']).map(t => `<li>${esc(t)}</li>`).join('')}</ul>
     <p class="muted" style="margin:0 0 10px">Asked by ${esc(c.by)} · ${esc(fmtAbs(c.at))}</p>
     ${gone ? '<p class="note">This entry was deleted — the change can only be rejected.</p>' : moved ? '<p class="note">⚠️ This entry was changed after the request. Check it before approving.</p>' : ''}
@@ -1798,17 +2735,605 @@ async function decide(id, ok) {
   if (!await unlock('Enter the password to approve or reject changes.')) return;
   const c = S.changes.find(x => x.id === id);
   if (!c || c.status !== 'waiting') return approvalsSheet();
-  const me = myName() || S.lastBy || 'Admin', key = c.kind === 'P' ? 'projects' : COLL[c.kind];
+  const me = myName() || S.lastBy || 'Admin', key = KIND_KEY[c.kind];
   const r = targetOf(c), next = r && { ...r, ...editPart(c) };
   if (ok && (!r || r.deleted || !VALID[c.kind](next))) return alert("This change can't be applied: the entry is gone or the new values aren't valid. Reject it instead.");
+  if (ok && c.action === 'delete' && c.kind === 'P' && [...live(S.expenses), ...live(S.credits)].some(x => x.project === c.target)) return alert('This project still has entries. Move or delete them first, or reject this.');
   const what = changeLines(c, r).join(' ; ') || 'no real change';
   const patch = {
     changes: S.changes.map(x => (x.id === id ? { ...x, status: ok ? 'approved' : 'rejected', decidedBy: me, decidedAt: stampSec() } : x)),
     log: logWith([[ok ? 'Approved' : 'Rejected', c.target, `${what} — asked by ${c.by}`]], me),
   };
-  if (ok) patch[key] = S[key].map(x => (x.id === c.target ? { ...next, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
+  // an approved advance changes nothing yet: whoever hands over the money then records it against this approval
+  if (ok && c.action === 'delete') patch[key] = S[key].map(x => (x.id === c.target ? { ...x, deleted: stampSec(), deletedBy: `${c.by} (approved by ${me})` } : x));
+  if (ok && !c.action) patch[key] = S[key].map(x => (x.id === c.target ? { ...next, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
   update(patch);
-  render(); approvalsSheet(); toast(ok ? 'Approved ✓ The entry is changed' : 'Rejected — the entry stays as it was');
+  render(); approvalsSheet(); toast(!ok ? 'Rejected — the entry stays as it was' : c.action === 'delete' ? 'Approved ✓ The entry is deleted' : c.action === 'advance' ? 'Approved ✓ The advance can be given now' : 'Approved ✓ The entry is changed');
+}
+// An office manager's delete waits for an admin, like her edits.
+async function askDelete(k, id) {
+  if (!await unlock('Enter the password to ask for this entry to be deleted.')) return;
+  const r = S[KIND_KEY[k]].find(x => x.id === id);
+  if (!confirm(`Ask an admin to delete this?\n\n${whatIs(k, r)}\n\nIt stays as it is until an admin approves.`)) return;
+  const by = myName() || S.lastBy || '';
+  const [[cid], seq] = nextIds('C', 1, S.seq), text = `Delete: ${whatIs(k, r)}`;
+  update({
+    changes: [...S.changes, { id: cid, kind: k, target: id, action: 'delete', before: {}, after: {}, text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
+    log: logWith([['Delete asked', id, `${text} — waiting for an admin`]], by),
+  });
+  closeSheet(); render(); toast('Sent for approval ✓ It is deleted when an admin approves.');
+}
+
+/* ---------- the 4-digit code: opening the app, showing balances, unlocking edits ---------- */
+// The code and the Face ID key live only in this phone's sign-in slot (never in backups). The code is checked like
+// the password (slow hash); after 5 wrong codes only the password works. Face ID is a key made on this phone for this
+// address; the phone's own check (the "user verified" flag) is what counts. iPhone home-screen apps sometimes fumble
+// Face ID, so the code always works too.
+const PIN_LEN = 4, QUICK_TRIES = 5;
+const quick = () => (signedIn() && session.quick && session.quick.len === PIN_LEN && session.quick.tries < QUICK_TRIES ? session.quick : null);
+const rndBytes = n => crypto.getRandomValues(new Uint8Array(n));
+const bytesB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64uBytes = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function bioAvailable() {
+  try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch { return false; }
+}
+async function bioCheck() {
+  const q = session && session.quick;
+  if (!q || !q.cred) return false;
+  try {
+    const a = await navigator.credentials.get({ publicKey: { challenge: rndBytes(32), allowCredentials: [{ type: 'public-key', id: b64uBytes(q.cred) }], userVerification: 'required', timeout: 60000 } });
+    return !!(new Uint8Array(a.response.authenticatorData)[32] & 4); // the phone checked the face or finger, not just a tap
+  } catch { return false; }
+}
+// Face ID is turned on from a tap (phones only allow it then); some phones never answer, so give up after a minute.
+async function bioOn() {
+  try {
+    const make = navigator.credentials.create({ publicKey: {
+      challenge: rndBytes(32), rp: { name: 'Company Accounts' }, user: { id: rndBytes(16), name: session.user.username, displayName: session.user.name },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
+    const c = await Promise.race([make, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 65000))]);
+    saveSession({ ...session, quick: { ...session.quick, cred: bytesB64u(c.rawId) } });
+    toast('Face ID / Touch ID is on ✓');
+  } catch { alert('Face ID / Touch ID could not be turned on. Your 4-digit code still works.'); }
+  reopenHere();
+}
+function bioOff() { saveSession({ ...session, quick: { ...session.quick, cred: null } }); toast('Face ID / Touch ID is off'); reopenHere(); }
+
+// The pad. mode: 'check' (type the code), 'new' then 'confirm' (choose a code), 'pass' (the password instead).
+// mandatory = it can't be closed (opening the app). Resolves true once unlocked or a code is chosen.
+let pin = null;
+function pinPrompt({ why, mode = 'check', mandatory = false }) {
+  if (pin) pin.resolve(false); // a newer prompt replaces an older one
+  return new Promise(resolve => {
+    pin = { why, mode: mode === 'check' && !quick() ? 'pass' : mode, mandatory, typed: '', first: '', err: '', busy: false, resolve };
+    const d = $('#lock');
+    pinDraw();
+    if (!d.open) d.showModal();
+    if (pin.mode === 'check' && quick().cred) bioTry(false); // straight to Face ID; the pad is right there if it fails
+  });
+}
+function pinDraw() {
+  const p = pin, q = quick();
+  const title = { check: 'Enter your code', new: 'Choose a 4-digit code', confirm: 'Type the code again', pass: 'Enter your password' }[p.mode];
+  const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" data-pin="${n}">${n}</button>`).join('');
+  $('#lockIn').innerHTML = `${APP_LOGO}<h2>${title}</h2><p class="lk-why">${esc(p.why)}</p>
+    ${p.mode === 'pass' ? `<form id="lkPwForm"><input type="password" id="lkPw" autocomplete="current-password" placeholder="Your password" required><p class="err">${esc(p.err)}</p><button class="btn primary">Unlock</button></form>`
+      : `<div class="dots${p.err ? ' shake' : ''}">${Array.from({ length: PIN_LEN }, (_, i) => `<i class="${i < p.typed.length ? 'on' : ''}"></i>`).join('')}</div>
+      <p class="err">${esc(p.busy ? 'Checking…' : p.err)}</p>
+      <div class="keypad">${keys}${p.mode === 'check' && q && q.cred ? '<button type="button" class="ghostkey" data-pin="bio" aria-label="Use Face ID">🙂</button>' : '<span></span>'}<button type="button" data-pin="0">0</button><button type="button" class="ghostkey" data-pin="del" aria-label="Delete">⌫</button></div>`}
+    <div class="lk-foot">${p.mode === 'check' ? '<button type="button" class="link" data-pin="pass">Use my password</button>' : ''}${p.mode === 'pass' && q ? '<button type="button" class="link" data-pin="code">Use my code</button>' : ''}${p.mandatory ? '' : '<button type="button" class="link" data-pin="cancel">Cancel</button>'}</div>`;
+  if (p.mode === 'pass') $('#lkPw').focus();
+}
+function pinDone(ok) {
+  const p = pin;
+  pin = null;
+  if (ok && session.quick && session.quick.tries) saveSession({ ...session, quick: { ...session.quick, tries: 0 } });
+  $('#lock').close();
+  p.resolve(ok);
+}
+async function bioTry(say) {
+  if (await bioCheck()) { if (pin) pinDone(true); }
+  else if (say && pin) { pin.err = 'Face ID did not work. Type your code.'; pinDraw(); }
+}
+async function pinKey(k) {
+  const p = pin;
+  if (!p || p.busy) return;
+  if (k === 'cancel') return pinDone(false);
+  if (k === 'bio') return bioTry(true);
+  if (k === 'pass' || k === 'code') { p.mode = k === 'pass' ? 'pass' : 'check'; p.err = ''; p.typed = ''; return pinDraw(); }
+  if (k === 'del') { p.typed = p.typed.slice(0, -1); return pinDraw(); }
+  if (p.typed.length >= PIN_LEN) return;
+  p.typed += k; p.err = '';
+  pinDraw();
+  if (p.typed.length < PIN_LEN) return;
+  if (p.mode === 'new') { p.first = p.typed; p.typed = ''; p.mode = 'confirm'; return pinDraw(); }
+  if (p.mode === 'confirm') {
+    if (p.typed !== p.first) { p.mode = 'new'; p.typed = ''; p.err = "The two codes didn't match. Choose again."; return pinDraw(); }
+    p.busy = true; pinDraw();
+    const salt = randHex();
+    saveSession({ ...session, quick: { salt, hash: await slowHash(p.typed, salt), len: PIN_LEN, cred: (session.quick && session.quick.cred) || null, tries: 0 } });
+    return pinDone(true);
+  }
+  // check: let the dots fill, then the slow check
+  p.busy = true; pinDraw();
+  const q = session.quick, good = await slowHash(p.typed, q.salt) === q.hash;
+  p.busy = false;
+  if (good) return pinDone(true);
+  const tries = (q.tries || 0) + 1;
+  saveSession({ ...session, quick: { ...q, tries } });
+  p.typed = '';
+  if (tries >= QUICK_TRIES) { p.mode = 'pass'; p.err = 'Too many wrong codes. Type your password.'; }
+  else p.err = `Wrong code. ${QUICK_TRIES - tries} ${QUICK_TRIES - tries === 1 ? 'try' : 'tries'} left.`;
+  pinDraw();
+}
+async function pinPassword(e) {
+  e.preventDefault();
+  const p = pin, pw = $('#lkPw').value;
+  if (!p) return;
+  if (await slowHash(pw, session.check.salt) === session.check.hash) return pinDone(true);
+  p.err = 'Wrong password. Try again.'; pinDraw();
+}
+
+// Every time the app is opened or comes back, it asks for the code (or Face ID). A new sign-in chooses the code first.
+let showMoney = false; // the balances on Accounts home, shown after the code was given; hidden again when the app locks
+function lockApp() {
+  if (!signedIn() || mustSignIn() || (pin && pin.mandatory)) return;
+  showMoney = false; unlockedUntil = 0;
+  if (!quick() && !(session.quick && session.quick.len === PIN_LEN)) {
+    return pinPrompt({ mode: 'new', mandatory: true, why: 'You type it (or use Face ID) every time you open the app.' }).then(() => { render(); offerBio(); });
+  }
+  pinPrompt({ mandatory: true, why: `${S.company || 'Company accounts'} · ${session.user.name}` }).then(() => render());
+}
+async function offerBio() {
+  if (!(await bioAvailable()) || session.quick.cred) return;
+  openSheet(`${head('Face ID / Touch ID')}
+    <p class="hint">Open the app with your face or finger instead of typing the code. The code still works.</p>
+    <button class="btn primary" data-act="bioOn">Turn on Face ID / Touch ID</button>
+    <button class="btn ghost" data-act="close" style="margin-top:10px">Not now</button>`);
+}
+async function changeCode() {
+  const ok = quick() ? await pinPrompt({ why: 'First your current code' }) : await unlock('Enter your password to choose a new code.', true);
+  if (ok && await pinPrompt({ mode: 'new', why: 'You type it (or use Face ID) every time you open the app.' })) { toast('New code saved ✓'); reopenHere(); }
+}
+
+/* ---------- staff: employees, salaries, advances, leaving ---------- */
+// An employee (kind W) earns their monthly wage on a 30-day month (calc.js). Every payment to them is an
+// ordinary expense that names them (worker, pay = salary | advance | settlement), so the cash and bank
+// balances stay right. The office manager's changes to an employee, marking someone as left and advances
+// above the monthly limit all wait for an admin.
+const ADVANCE_LIMIT_USD = 100; // ponytail: the owner's $100 a month; make it an admin setting when they want to change it
+const PAY_REASON = { salary: m => `Salary ${monthName(m)}`, advance: () => 'Salary advance', settlement: () => 'Final settlement' };
+const today = () => stamp().slice(0, 10);
+const workerOf = id => S.workers.find(w => w.id === id);
+const ledgerOf = (w, upTo = today(), extra = []) => workerLedger(w, [...S.expenses, ...extra], upTo, S.absences);
+// the days someone did not work (recorded one by one, with their dates), newest first
+const absencesOf = (id, month) => live(S.absences).filter(a => a.worker === id && (!month || a.date.startsWith(month))).sort((a, b) => b.date.localeCompare(a.date));
+// "3, 7, 8 Oct" — the days of one month
+const dayList = list => { const ds = list.map(a => a.date).sort(); return ds.length ? `${ds.map(d => +d.slice(8, 10)).join(', ')} ${MON[+ds[0].slice(5, 7) - 1]}` : ''; };
+const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join('') || '?';
+// advances an admin approved that nobody has given yet
+const approvedAdvances = id => S.changes.filter(c => c.action === 'advance' && c.target === id && c.status === 'approved' && !live(S.expenses).some(e => e.approval === c.id));
+const owedLabel = l => (l.balance >= 0 ? 'to pay' : 'paid ahead');
+const dayBefore = d => { const [y, m, dd] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, dd - 1)).toISOString().slice(0, 10); };
+const lastMonthEnd = () => dayBefore(today().slice(0, 8) + '01');
+// what was there before the app: owed to them (+) or already paid (−)
+const beforeText = (n, cur) => (n > 0 ? `${money(n, cur)} owed from before the app` : `${money(-n, cur)} paid before the app`);
+// profile photos in the list: fetched once, then kept
+const thumbs = new Map();
+function loadThumbs() {
+  $$('[data-photo]').forEach(async el => {
+    const id = el.dataset.photo;
+    try { if (!thumbs.has(id)) thumbs.set(id, URL.createObjectURL(await fileBlob(id))); el.innerHTML = `<img src="${thumbs.get(id)}" alt="">`; } catch { /* offline: the initials stay */ }
+  });
+}
+
+function viewStaff() {
+  const ws = live(S.workers).sort((a, b) => a.name.localeCompare(b.name));
+  const on = ws.filter(w => w.status !== 'left'), gone = ws.filter(w => w.status === 'left');
+  return `${approvalsBanner()}<div class="sec-head"><h2 class="sec">Staff</h2><button class="btn small primary" data-act="addWorker">＋ Add employee</button></div>
+    ${on.length ? `<div class="card list">${on.map(workerRow).join('')}</div>` : gone.length ? empty('Nobody working now', 'Everyone listed has left the company.') : empty('No employees yet', 'Add each person once: their job, wage, the day they started and a photo of their ID.')}
+    ${gone.length ? `<details class="gone"><summary>Left the company (${gone.length})</summary><div class="card list">${gone.map(workerRow).join('')}</div></details>` : ''}`;
+}
+function workerRow(w) {
+  const l = ledgerOf(w), photo = latestFile(w.id, 'profile');
+  return `<button class="row" data-act="openWorker" data-id="${esc(w.id)}">
+    <span class="dot avatar" ${photo ? `data-photo="${esc(photo.id)}"` : ''}>${photo && thumbs.has(photo.id) ? `<img src="${thumbs.get(photo.id)}" alt="">` : esc(initials(w.name))}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(w.name)}</span>${waitingFor(w.id).length ? '<i class="tag warn">Waiting</i>' : ''}</span>
+    <span class="s">${esc([w.job, `${money(w.wage, w.cur)} a month`].filter(Boolean).join(' · '))}</span></span>
+    <span class="amt${l.balance < 0 ? ' neg' : ''}">${money(l.balance, l.cur)}<small>${owedLabel(l)}</small></span></button>`;
+}
+
+function workerDetail(id) {
+  const w = workerOf(id);
+  if (!w || w.deleted) return false;
+  const l = ledgerOf(w), left = w.status === 'left';
+  const pays = live(S.expenses).filter(e => e.worker === id).sort((a, b) => byAt(b, a));
+  const facts = [['Job', w.job], ['Phone', w.phone], ['Monthly wage', money(w.wage, w.cur)], ['Started', fmtDate(w.start)], ['Salary cleared up to', w.clearedTo && fmtDate(w.clearedTo)], ['Left on', w.left && fmtDate(w.left)],
+    ['ID number', w.idNo], ['Before the app', w.openingAmount ? beforeText(w.openingAmount, w.cur) : '']];
+  const idPhoto = latestFile(id, 'idphoto');
+  // every voucher and slip given to them, and their signed statements
+  const payIds = new Set(pays.map(e => e.id));
+  const docs = [...live(S.files), ...outbox.map(f => ({ ...f, pending: true }))].filter(f => (payIds.has(f.for) && ['voucher', 'slip'].includes(f.type)) || (f.for === id && f.type === 'statement'))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  openSheet(`${head(w.name, '', w.id)}
+    <div class="wtop"><span class="wphoto" id="wPhoto">${esc(initials(w.name))}</span>
+      <div><div class="dbig ${l.balance < 0 ? 'out' : ''}" style="margin:0">${money(l.balance, l.cur)}</div><small class="muted">${l.balance >= 0 ? `still to pay ${esc(w.name)}` : 'paid more than earned so far'}${left ? ' · has left' : ''}</small></div></div>
+    ${waitingNote(id)}
+    ${approvedAdvances(id).map(c => `<div class="banner new"><span>✅ Advance of ${money(+c.after.amount, c.after.cur)} approved by ${esc(c.decidedBy)}.</span><button class="btn small" data-act="payWorker" data-pay="advance" data-id="${esc(id)}" data-approval="${esc(c.id)}">Give it</button></div>`).join('')}
+    <div class="two">${left
+      ? `<button class="btn out" data-act="settle" data-id="${esc(id)}">${l.balance > 0.004 ? '💵 Pay final settlement' : '📑 Final settlement statement'}</button>`
+      : `<button class="btn out" data-act="payWorker" data-pay="salary" data-id="${esc(id)}">💵 Pay salary</button><button class="btn ghost" data-act="payWorker" data-pay="advance" data-id="${esc(id)}">➖ Advance</button>`}<button class="btn ghost" data-act="workerStatement" data-id="${esc(id)}">📄 Statement</button></div>
+    <dl class="facts" style="margin-top:16px">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
+    <div class="two">${canChange() ? `<button class="btn ghost" data-act="editWorker" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${left || !canChange() ? '' : `<button class="btn danger" data-act="markLeft" data-id="${esc(id)}">🚪 Has left 🔒</button>`}</div>
+    <div class="two" style="margin-top:10px">${attachButton(id, '🙂 Profile photo', 'profile', 'image/*')}${idPhoto ? `<button class="btn ghost" data-act="showFile" data-id="${esc(idPhoto.id)}">🪪 ID photo</button>` : attachButton(id, '🪪 Add ID photo', 'idphoto')}</div>
+    <h3 class="subh">Wage by month</h3>
+    <div class="card list inset">${[...l.months].reverse().slice(0, 12).map(m => `<div class="mrow"><span>${monthName(m.month)}</span><span class="muted">${m.days} days${m.daysOff ? ` − ${m.daysOff} not worked` : ''}</span><b>${money(m.earned, l.cur)}</b></div>`).join('') || '<p class="muted pad">Starts on ' + esc(fmtDate(w.start)) + '.</p>'}</div>
+    <p class="muted">Earned ${money(l.earned, l.cur)}${l.opening > 0 ? ` + ${money(l.opening, l.cur)} owed from before the app` : l.opening < 0 ? ` − ${money(-l.opening, l.cur)} paid before the app` : ''} − paid ${money(l.paid, l.cur)} = ${money(l.balance, l.cur)}.${l.unconverted.length ? ` ⚠️ ${l.unconverted.length} payment(s) in another currency without a rate are not counted.` : ''}</p>
+    <h3 class="subh">Days not worked (${absencesOf(id).length})</h3>
+    ${absencesOf(id).length ? `<div class="card list inset">${absencesOf(id).slice(0, 40).map(a => `<button class="row" data-act="openAbsence" data-id="${esc(a.id)}"><span class="dot">📅</span><span class="main"><span class="t"><span class="tt">${esc(fmtDay(a.date))}</span>${waitingFor(a.id).length ? '<i class="tag warn">Delete asked</i>' : ''}</span><span class="s">${esc([a.note, a.by && 'recorded by ' + a.by].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">None recorded.</p>'}
+    ${left ? '' : `<button class="btn ghost" data-act="addAbsence" data-id="${esc(id)}" style="margin-top:10px">📅 Record days not worked</button>`}
+    ${filesList(docs, 'Slips and statements')}
+    <h3 class="subh">Payments (${pays.length})</h3>
+    ${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">Nothing paid yet.</p>'}
+    ${filesBlock(id)}`);
+  comeBack(() => workerDetail(id));
+  const photo = latestFile(id, 'profile');
+  if (photo) { $('#wPhoto').dataset.photo = photo.id; loadThumbs(); }
+}
+
+function workerForm(old) {
+  const d = old || { cur: 'USD', start: today(), wage: '' };
+  openSheet(`${head(old ? 'Edit employee' : 'New employee', '', old?.id)}
+    <form data-form="worker" data-id="${esc(old?.id || '')}">
+      ${textField('name', 'Full name', 'e.g. John Deng', d.name)}
+      ${textField('job', 'Job', 'e.g. Mason, driver, guard', d.job)}
+      <label class="fld"><span>Phone <em>(optional)</em></span><input name="phone" type="tel" value="${esc(d.phone)}" autocomplete="off" maxlength="30"></label>
+      ${curChips(d.cur, 'Wage is paid in')}
+      ${amountField(d.wage, d.cur, 'wage', 'Monthly wage')}
+      <label class="fld"><span>Started work on</span><input type="date" name="start" value="${esc(d.start)}" max="${today()}" required></label>
+      ${old ? `<label class="fld"><span>Salary cleared up to <em>(optional — wages before this day were paid outside the app)</em></span><input type="date" name="clearedTo" value="${esc(d.clearedTo || '')}"></label>
+      <label class="fld"><span>Before the app <em>(optional — owed to them, or put − for what was already paid)</em></span><input name="openingAmount" inputmode="decimal" value="${esc(d.openingAmount || '')}" placeholder="0" autocomplete="off"></label>` : `
+      <div class="oldpay" hidden>
+        <div class="fld"><span>Has their salary been paid?</span><div class="curseg roles">
+          <label class="opt-month"><input type="radio" name="cleared" value="month" checked><span><b>Yes, up to the end of last month</b><small class="lm"></small></span></label>
+          <label><input type="radio" name="cleared" value="today"><span><b>Yes, up to today</b><small>Nothing is owed today</small></span></label>
+          <label><input type="radio" name="cleared" value="part"><span><b>No, not fully</b><small>Type what has been paid since they started</small></span></label>
+        </div></div>
+        <label class="fld paidpart" hidden><span>Already paid since they started</span><div class="amt-in"><b class="cur-sym">${SYM[d.cur].trim()}</b><input name="paidSoFar" inputmode="decimal" placeholder="0" autocomplete="off"></div><small class="amt-preview"></small></label>
+        <p class="note oldinfo"></p>
+      </div>`}
+      ${textField('idNo', 'National ID or passport number', '', d.idNo, false)}
+      ${old ? '' : `<label class="fld"><span>Photo of the national ID or passport</span><input type="file" name="idphoto" accept="image/*,application/pdf" required></label>
+      <label class="fld"><span>Profile photo <em>(optional — shown in the staff list)</em></span><input type="file" name="profile" accept="image/*" capture="environment"></label>`}
+      ${byField()}${approvalNote(old)}
+      <p class="err"></p>
+      <button class="btn primary">${old ? saveLabel() : 'Add employee'}</button>
+    </form>${datalists()}`);
+  refreshOld($('#sheet form'));
+}
+// Started on an old date: was the salary paid up to the end of last month, up to today, or only partly?
+function refreshOld(f) {
+  const box = $('.oldpay', f);
+  if (!box) return;
+  const start = f.elements.start.value, t = today(), monthEnd = lastMonthEnd();
+  box.hidden = !(DATE_RE.test(start) && start < t);
+  if (box.hidden) return;
+  const canMonth = start <= monthEnd;
+  $('.opt-month', f).hidden = !canMonth;
+  if (!canMonth && f.elements.cleared.value === 'month') $('[name=cleared][value=part]', f).checked = true; // started this month: usually not paid yet
+  $('.lm', f).textContent = `${monthName(monthEnd.slice(0, 7))} and before are paid; wages count from 1 ${MONTHS[+t.slice(5, 7) - 1]}`;
+  const choice = f.elements.cleared.value, wage = parseAmount(f.elements.wage.value) || 0, cur = formCur(f);
+  $('.paidpart', f).hidden = choice !== 'part';
+  const w = { id: 'new', wage, cur, start, status: 'active', ...(choice === 'month' ? { clearedTo: monthEnd } : choice === 'today' ? { clearedTo: t } : {}) };
+  const earned = workerLedger(w, [], t).earned, paid = choice === 'part' ? parseAmount(f.elements.paidSoFar.value) || 0 : 0;
+  $('.oldinfo', f).innerHTML = !wage ? 'Type the monthly wage to see what is owed.'
+    : choice === 'part' ? `Earned since ${fmtDate(start)}: <b>${money(earned, cur)}</b><br>Already paid: <b>${money(paid, cur)}</b><br>Still to pay now: <b>${money(minus(earned, paid), cur)}</b>`
+    : choice === 'month' ? `Still to pay now (this month so far): <b>${money(earned, cur)}</b>` : 'Nothing is owed today. Wages count again from tomorrow.';
+}
+async function saveWorker(f) {
+  const v = Object.fromEntries(new FormData(f));
+  const old = workerOf(f.dataset.id);
+  const wage = parseAmount(v.wage), opening = String(v.openingAmount || '').replace(/[,\s$]/g, '');
+  const rec = { name: clean(v.name), job: clean(v.job), phone: clean(v.phone), wage, cur: formCur(f), start: v.start, idNo: clean(v.idNo) };
+  if (!rec.name) return formErr(f, 'name', 'Type their name');
+  if (!rec.job) return formErr(f, 'job', 'Type their job');
+  if (wage === null) return formErr(f, 'wage', 'Type the monthly wage, like 300');
+  if (!DATE_RE.test(rec.start) || rec.start > today()) return formErr(f, 'start', 'Pick the day they started');
+  if (old) {
+    rec.openingAmount = opening ? Math.round(Number(opening) * 100) / 100 : 0;
+    rec.clearedTo = DATE_RE.test(v.clearedTo || '') ? v.clearedTo : undefined;
+    if (!Number.isFinite(rec.openingAmount)) return formErr(f, 'openingAmount', 'Type a number, like 150 or −50');
+  } else {
+    if (!f.elements.idphoto.files[0]) return formErr(f, 'idphoto', 'Add a photo of their national ID or passport');
+    const choice = $('.oldpay', f).hidden ? '' : v.cleared;
+    if (choice === 'month') rec.clearedTo = lastMonthEnd();
+    if (choice === 'today') rec.clearedTo = today();
+    if (choice === 'part') {
+      const paid = String(v.paidSoFar || '').trim() ? parseAmount(v.paidSoFar) : 0;
+      if (paid === null) return formErr(f, 'paidSoFar', 'Type what has been paid, like 200 — or 0');
+      if (paid) Object.assign(rec, { openingAmount: -paid, openingNote: 'Paid before the app' });
+    }
+  }
+  const by = clean(v.by);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    if (!can('edit')) return requestChange('W', old, rec, changes, by);
+    update({ workers: S.workers.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
+    closeSheet(); render(); return toast('Changes saved ✓');
+  }
+  const [[id], seq] = nextIds('W', 1, S.seq);
+  const extra = [rec.clearedTo && `salary cleared up to ${fmtDate(rec.clearedTo)}`, rec.openingAmount && beforeText(rec.openingAmount, rec.cur)].filter(Boolean).join(' · ');
+  update({ workers: [...S.workers, { id, ...rec, status: 'active', by, createdAt: stampSec() }], seq, lastBy: by,
+    log: logWith([['Employee', id, `${rec.name} added · ${rec.job} · ${money(wage, rec.cur)} a month from ${fmtDate(rec.start)}${extra ? ' · ' + extra : ''}`]], by) });
+  for (const type of ['idphoto', 'profile']) {
+    const file = f.elements[type].files[0];
+    if (!file) continue;
+    try { const p = await prepareFile(file); await keepFile({ for: id, type, name: p.name, mime: p.mime }, p.data); }
+    catch (e) { alert(`${FILE_NAME[type]}: ${e.message}`); }
+  }
+  render(); workerDetail(id); toast(`${rec.name} added ✓`);
+}
+
+// Days not worked: one day, or several days in a row; each comes off that month's wage at wage ÷ 30.
+function absenceForm(id) {
+  const w = workerOf(id);
+  openSheet(`${head('Days not worked', 'out', w.name)}
+    <form data-form="absence" data-id="${esc(id)}">
+      <label class="fld"><span>Day not worked</span><input type="date" name="from" value="${today()}" min="${esc(w.start)}" max="${today()}" required></label>
+      <label class="fld"><span>Until <em>(optional — for several days in a row)</em></span><input type="date" name="to" min="${esc(w.start)}" max="${today()}"></label>
+      ${textField('note', 'Reason', 'e.g. Sick, absent, leave', '', false)}
+      <p class="muted">Each day takes ${money(Math.round(w.wage / 30 * 100) / 100, w.cur)} off that month's wage.</p>
+      ${byField()}
+      <p class="err"></p>
+      <button class="btn out">Save</button>
+    </form>${datalists()}`);
+}
+// the dates from one day to another (both included)
+function datesBetween(a, b) { const out = []; for (let d = a; d <= b && out.length < 62; d = dayAfter(d)) out.push(d); return out; }
+// Record days not worked for someone; days already recorded are skipped. Returns how many were added, or an error.
+function addAbsences(w, from, to, note, by) {
+  if (!DATE_RE.test(from) || from < w.start || from > today()) return 'Pick a day between their start and today';
+  if (to && (!DATE_RE.test(to) || to < from || to > today())) return 'The last day must be after the first, and not after today';
+  const days = datesBetween(from, to || from);
+  if (days.length > 31) return 'At most 31 days at once';
+  if (w.left && days.some(d => d > w.left)) return `They left on ${fmtDate(w.left)}`;
+  if (w.clearedTo && from <= w.clearedTo) return `Their salary is cleared up to ${fmtDate(w.clearedTo)}: days before that don't change the pay`;
+  const have = new Set(absencesOf(w.id).map(a => a.date)), fresh = days.filter(d => !have.has(d));
+  if (!fresh.length) return 'Already recorded';
+  const [ids, seq] = nextIds('A', fresh.length, S.seq), at = stampSec();
+  const span = fresh.length === 1 ? fmtDate(fresh[0]) : `${fmtDate(fresh[0])} – ${fmtDate(fresh[fresh.length - 1])} (${fresh.length} days)`;
+  update({ absences: [...S.absences, ...fresh.map((date, i) => ({ id: ids[i], worker: w.id, date, note, by, createdAt: at }))], seq, lastBy: by,
+    log: logWith([['Days not worked', w.id, `${w.name}: ${span}${note ? ' · ' + note : ''}`]], by) });
+  return fresh.length;
+}
+function saveAbsence(f) {
+  const w = workerOf(f.dataset.id), v = Object.fromEntries(new FormData(f)), by = clean(v.by);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const n = addAbsences(w, v.from, v.to, clean(v.note), by);
+  if (typeof n === 'string') return formErr(f, 'from', n);
+  closeSheet(); render(); toast(`✓ ${n} day${n === 1 ? '' : 's'} not worked recorded for ${w.name}`);
+}
+function absenceSheet(id) {
+  const a = S.absences.find(x => x.id === id), w = a && workerOf(a.worker);
+  if (!a) return;
+  openSheet(`${head('Day not worked', 'out', w ? w.name : a.worker)}
+    <div class="dbig out">${esc(fmtDay(a.date))}</div>
+    ${waitingNote(id)}
+    <dl class="facts">${[['Reason', a.note], ['Recorded by', a.by], ['Recorded', a.createdAt && fmtAbs(String(a.createdAt).slice(0, 16))], ['Comes off', w && `${money(Math.round(w.wage / 30 * 100) / 100, w.cur)} from ${monthName(a.date.slice(0, 7))}`]].filter(x => x[1]).map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    ${can('delete') ? `<button class="btn danger" data-act="del" data-kind="A" data-id="${esc(id)}">🗑 Delete — they did work 🔒</button>` : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="A" data-id="${esc(id)}">🗑 Ask to delete 🔒</button>` : ''}`);
+}
+
+// Someone leaves: an admin records it (the office manager asks), then their final settlement is paid.
+function leftForm(id) {
+  const w = workerOf(id);
+  openSheet(`${head(`${w.name} has left`, 'out', w.id)}
+    <form data-form="left" data-id="${esc(id)}">
+      <label class="fld"><span>Last day of work</span><input type="date" name="left" value="${today()}" required></label>
+      <p class="muted">Their wage is counted up to this day. Then pay the final settlement.</p>
+      ${byField()}${can('edit') ? '' : '<p class="note">An admin approves this first.</p>'}
+      <p class="err"></p>
+      <button class="btn out">${can('edit') ? 'Save' : 'Send for approval'}</button>
+    </form>${datalists()}`);
+}
+function saveLeft(f) {
+  const w = workerOf(f.dataset.id), left = f.elements.left.value, by = clean(f.elements.by.value);
+  if (!DATE_RE.test(left) || left < w.start) return formErr(f, 'left', 'Pick a day on or after they started');
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const rec = { status: 'left', left }, changes = [`Status: Working → Left on ${fmtDate(left)}`];
+  if (!can('edit')) return requestChange('W', w, rec, changes, by);
+  update({ workers: S.workers.map(x => x.id === w.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Left', w.id, `${w.name} left on ${fmtDate(left)}`]], by), lastBy: by });
+  render(); settleWorker(w.id);
+}
+// Someone who left: still owed something → pay it (that slip is the full final statement); nothing owed → the signed statement.
+function settleWorker(id) {
+  if (ledgerOf(workerOf(id)).balance > 0.004) return payForm(id, 'settlement');
+  finalSheet(id);
+}
+function finalSheet(id) {
+  const w = workerOf(id), l = ledgerOf(w);
+  openSheet(`${head('Final settlement', 'in', w.name)}
+    <p class="note">${l.balance < -0.004 ? `${esc(w.name)} was paid ${money(-l.balance, l.cur)} more than they earned. The statement shows it as owed by them.` : `Every wage is paid. ${esc(w.name)} signs that they received everything up to ${fmtDate(w.left || today())}.`}</p>
+    <form data-form="final" data-id="${esc(id)}">
+      ${sigField(w.name)}
+      ${photoField(w.name)}
+      <p class="err"></p>
+      <button class="btn in">Make the final settlement (PDF)</button>
+    </form>`);
+  sigPad($('#sheet canvas.sig'));
+}
+async function saveFinal(f) {
+  const w = workerOf(f.dataset.id), cv = $('canvas.sig', f);
+  if (!cv.dataset.ink) return formErr(f, null, 'Please ask them to sign in the box first.');
+  const btn = $('button.btn', f);
+  btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
+  try {
+    const p = f.elements.photo.files[0], photo = p ? await imgFrom(new Blob([(await prepareFile(p)).data], { type: 'image/jpeg' })) : null;
+    const st = workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo });
+    const blob = await renderStatement(st), name = `${st.no} ${fileSafe(w.name)} final settlement.pdf`;
+    await keepFile({ for: w.id, type: 'statement', no: st.no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
+    update({ log: logWith([['Final settlement', w.id, `${w.name}: final settlement statement ${st.no} signed`]]) });
+    readySheet(st.title, st.no, blob, name);
+  } catch (e) { btn.disabled = false; formErr(f, null, e.message); }
+}
+// Everything about one employee: wages month by month, every payment with its voucher number, and the balance.
+// docs = voucher numbers not saved yet (the settlement slip being made right now)
+function workerStatementSpec(w, { final = false, no, sig = null, photo = null, date = today(), docs = {} } = {}) {
+  const l = ledgerOf(w), M = n => slipMoney(n, w.cur), end = w.status === 'left' && w.left ? w.left : today();
+  const pays = live(S.expenses).filter(e => e.worker === w.id).sort(byAt);
+  const settled = Math.abs(l.balance) < 0.005;
+  return {
+    title: final ? 'FINAL SETTLEMENT' : 'STATEMENT OF ACCOUNT', no, date: fmtDate(date), stampDate: date.split('-').reverse().join('-'),
+    info: [['Employee', `${w.name}${w.job ? ` · ${w.job}` : ''}`], ['Employee no.', w.id], ['Started', fmtDate(w.start)], [w.status === 'left' ? 'Last day of work' : 'Up to', fmtDate(end)],
+      ['Monthly wage', `${M(w.wage)} (30-day month)`], w.clearedTo ? ['Salary cleared up to', fmtDate(w.clearedTo)] : ['ID / passport no.', w.idNo || '—']],
+    sections: [
+      { title: 'Wages earned', cols: [{ h: 'Month', w: 330 }, { h: 'Days worked', w: 480 }, { h: 'Earned', w: 250, right: true }],
+        rows: l.months.map(m => { const offs = dayList(absencesOf(w.id, m.month)); return [monthName(m.month), `${m.days - m.daysOff} of ${m.days}${m.daysOff ? ` (${m.daysOff} not worked${offs ? `: ${offs}` : ''})` : ''}`, M(m.earned)]; }), total: ['Total earned', M(l.earned)] },
+      { title: 'Payments', cols: [{ h: 'Date', w: 170 }, { h: 'Voucher / ref', w: 200 }, { h: 'Details', w: 440 }, { h: 'Paid', w: 250, right: true }],
+        rows: pays.map(e => { const c = inWage(e, w.cur); return [fmtDate(e.at.slice(0, 10)), docs[e.id] || docNo(e.id) || e.id, `${e.reason}${e.cur !== w.cur ? ` · ${slipMoney(e.amount, e.cur)}${e.rate ? ` at ${plain(e.rate)}` : ''}` : ''}`, c === null ? 'no rate' : M(c / 100)]; }),
+        total: ['Total paid', M(l.paid)] },
+    ],
+    // the tables already total what was earned and paid: here only what is outside them, and the balance
+    summary: [...(l.opening ? [[l.opening > 0 ? 'Owed from before the app' : 'Paid before the app', M(Math.abs(l.opening))]] : []),
+      [l.balance >= 0 ? 'Balance due to the employee' : 'Paid ahead (owed by the employee)', M(Math.abs(l.balance)), true]],
+    verdict: settled ? { text: final ? 'FULLY SETTLED — ALL WAGES PAID' : 'FULLY PAID UP TO DATE', good: true } : l.balance > 0 ? { text: `BALANCE DUE ${M(l.balance)}`, good: false } : { text: `OWED BY THE EMPLOYEE ${M(-l.balance)}`, good: false },
+    sign: final ? { label: 'Received in full and final settlement', name: w.name, sig, photo } : null,
+    preparedBy: myName() || S.lastBy || '', ref: w.id,
+  };
+}
+function workerStatement(id) { const w = workerOf(id), st = workerStatementSpec(w, { no: statementNo() }); shareStatement(st, `${st.no} ${fileSafe(w.name)}.pdf`); }
+
+/* paying an employee: salary for a month, an advance, or the final settlement */
+function monthsOf(w) {
+  const out = [], last = today().slice(0, 7);
+  for (let m = w.start.slice(0, 7); m <= last && out.length < 240; m = nextMonth(m)) out.push(m);
+  return out.reverse().slice(0, 24);
+}
+// the month most likely being paid: last month if it hasn't had a salary yet, otherwise this month
+function payMonth(w) {
+  const ms = monthsOf(w), paid = new Set(live(S.expenses).filter(e => e.worker === w.id && e.pay === 'salary').map(e => e.month));
+  return ms.find((m, i) => i === 1 && !paid.has(m)) || ms[0];
+}
+// what is still owed for work up to the end of that month (the days not worked recorded for it are already off)
+function owedFor(w, month) {
+  return ledgerOf(w, month ? [today(), `${month}-31`].sort()[0] : today());
+}
+function payInfo(f) {
+  const w = workerOf(f.dataset.id), pay = f.dataset.pay;
+  if (pay === 'advance') {
+    const used = advancesUsd(live(S.expenses).filter(e => e.worker === w.id), today().slice(0, 7));
+    return `Advances given to ${esc(w.name)} this month: <b>${money(used, 'USD')}</b> of the ${money(ADVANCE_LIMIT_USD, 'USD')} limit.`;
+  }
+  const month = f.elements.month ? f.elements.month.value : '';
+  const l = owedFor(w, month), m = l.months.find(x => x.month === month), offs = month ? absencesOf(w.id, month) : [];
+  return `${m ? `${monthName(month)}: ${m.days - m.daysOff} days worked of ${m.days}${offs.length ? ` (not worked: ${esc(dayList(offs))})` : ''} → <b>${money(m.earned, l.cur)}</b><br>` : ''}Still to pay ${esc(w.name)}${month ? ` up to the end of ${monthName(month)}` : ''}: <b>${money(l.balance, l.cur)}</b>`;
+}
+function payForm(id, pay, approval) {
+  const w = workerOf(id), appr = approval && approvedAdvances(id).find(c => c.id === approval);
+  const month = pay === 'salary' ? payMonth(w) : '';
+  const suggested = appr ? +appr.after.amount : pay === 'advance' ? '' : Math.max(0, owedFor(w, month).balance);
+  const cur = appr ? appr.after.cur : w.cur;
+  const title = { salary: 'Pay salary', advance: 'Give an advance', settlement: 'Final settlement' }[pay];
+  openSheet(`${head(title, 'out', w.name)}
+    <form data-form="pay" data-id="${esc(id)}" data-pay="${pay}" data-approval="${esc(appr ? appr.id : '')}">
+      ${pay === 'salary' ? `<label class="fld"><span>For the month of</span><select name="month">${monthsOf(w).map(m => `<option value="${m}" ${m === month ? 'selected' : ''}>${monthName(m)}</option>`).join('')}</select></label>
+      <div class="fld"><span>Days not worked that month <em>(${money(Math.round(w.wage / 30 * 100) / 100, w.cur)} a day comes off)</em></span>
+        <div class="addoff"><input type="date" name="offDate" min="${esc(w.start)}" max="${today()}" aria-label="Day not worked"><button type="button" class="btn small ghost" data-act="addOffHere">＋ Add this day</button></div></div>` : ''}
+      <p class="note payinfo"></p>
+      ${appr ? `<input type="hidden" name="cur" value="${esc(cur)}"><p class="muted">Approved by ${esc(appr.decidedBy)}: ${money(+appr.after.amount, cur)}</p>` : curChips(cur, 'Paid in')}
+      ${amountField(suggested, cur)}
+      ${rateField(cur)}
+      ${accountChips(S.lastMode || 'Cash', 'Paid from')}
+      ${byField()}
+      <p class="err"></p>
+      <button class="btn out">Save, then sign the slip</button>
+    </form>${datalists()}`);
+  const f = $('#sheet form');
+  $('.payinfo', f).innerHTML = payInfo(f);
+}
+function refreshPay(f, t) {
+  $('.payinfo', f).innerHTML = payInfo(f);
+  if (t && (t.name === 'month' || t.name === 'offDate') && !f.dataset.typed) { // keep the suggested amount in step until they type their own
+    const w = workerOf(f.dataset.id), l = owedFor(w, f.elements.month.value);
+    f.elements.amount.value = Math.max(0, l.balance) || '';
+    refreshAmount(f.elements.amount);
+  }
+}
+// a day not worked added straight from the salary screen
+function addOffHere(b) {
+  const f = b.closest('form'), w = workerOf(f.dataset.id), d = f.elements.offDate.value;
+  const by = clean(f.elements.by.value) || myName() || S.lastBy || '';
+  const n = addAbsences(w, d, '', '', by);
+  if (typeof n === 'string') return formErr(f, 'offDate', n);
+  if (d.slice(0, 7) !== f.elements.month.value) toast(`Recorded for ${monthName(d.slice(0, 7))} — another month`);
+  f.elements.offDate.value = '';
+  $('.err', f).textContent = '';
+  refreshPay(f, f.elements.offDate);
+}
+function savePay(f) {
+  const w = workerOf(f.dataset.id), pay = f.dataset.pay, v = Object.fromEntries(new FormData(f));
+  const amount = parseAmount(v.amount), cur = formCur(f), rate = rateFrom(f, cur);
+  if (amount === null) return formErr(f, 'amount', 'Type the amount paid, like 250');
+  if (rate === null) return formErr(f, 'rate', RATE_ERR);
+  const by = clean(v.by);
+  if (!by) return formErr(f, 'by', 'Type your name');
+  const appr = f.dataset.approval && approvedAdvances(w.id).find(c => c.id === f.dataset.approval);
+  if (pay === 'advance' && !appr) {
+    const used = advancesUsd(live(S.expenses).filter(e => e.worker === w.id), today().slice(0, 7));
+    const usd = cur === 'USD' ? amount : amount / rate;
+    if (cents(used + usd) > cents(ADVANCE_LIMIT_USD)) {
+      if (!can('edit')) return askAdvance(w, amount, cur, by);
+      if (!confirm(`This is more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit (${money(used, 'USD')} given this month already).\n\nGive it anyway?`)) return;
+    }
+  }
+  if (appr && (cur !== appr.after.cur || amount > +appr.after.amount)) return formErr(f, 'amount', `The admin approved ${money(+appr.after.amount, appr.after.cur)} — not more.`);
+  const month = pay === 'salary' ? v.month : '';
+  const rec = { cur, amount, rate, paidTo: w.name, reason: PAY_REASON[pay](month), location: '', project: '', mode: v.mode || 'Cash', ...dateFrom({}),
+    worker: w.id, pay, ...(month ? { month } : {}), ...(appr ? { approval: appr.id } : {}) };
+  const [[id], seq] = nextIds('E', 1, S.seq);
+  update({ expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq, lastBy: by, lastMode: rec.mode, ...(rate ? { lastRate: rate } : {}) });
+  render(); toast(`Saved ✓ ${money(amount, cur)} to ${w.name}`);
+  slipSheet('E', id);
+}
+// above the monthly limit, the office manager asks an admin first
+function askAdvance(w, amount, cur, by) {
+  const [[id], seq] = nextIds('C', 1, S.seq);
+  const text = `Advance of ${money(amount, cur)} to ${w.name} — more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit`;
+  update({
+    changes: [...S.changes, { id, kind: 'W', target: w.id, action: 'advance', before: {}, after: { amount, cur }, text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
+    log: logWith([['Advance asked', w.id, `${text} — waiting for an admin`]], by), lastBy: by,
+  });
+  closeSheet(); render(); toast('Sent to an admin ✓ You can give it once they approve.');
+}
+
+// What a salary slip shows: how the amount due was reached, from the payment and the employee's account.
+function payslipSpec(r) {
+  const w = workerOf(r.worker) || { id: r.worker || '', name: r.paidTo, wage: 0, cur: r.cur, start: r.at.slice(0, 10) };
+  const M = n => slipMoney(n, w.cur), round2 = n => Math.round(n * 100) / 100, lines = [];
+  const paidNow = inWage(r, w.cur); // this payment in the wage's currency (cents), or null without a rate
+  // the account up to the end of the month paid (salary), the last day (settlement) or today (advance), this payment included
+  const end = r.pay === 'salary' && r.month ? [today(), `${r.month}-31`].sort()[0] : r.pay === 'settlement' && w.left ? w.left : today();
+  const upTo = ledgerOf(w, end), due = paidNow === null ? null : round2(upTo.balance + paidNow / 100);
+  const after = { t: upTo.balance >= 0 ? 'Balance after this payment' : 'Paid ahead after this payment', v: M(Math.abs(upTo.balance)), muted: true };
+  if (r.pay === 'salary' && r.month) {
+    const m = upTo.months.find(x => x.month === r.month) || { days: 0, daysOff: 0, earned: 0 };
+    lines.push({ t: 'Monthly wage (30-day month)', v: M(w.wage) });
+    if (m.days < 30) lines.push({ t: `Pay for ${m.days} days (wage ÷ 30 × ${m.days})`, v: M(round2(w.wage * m.days / 30)) });
+    const offs = dayList(absencesOf(w.id, r.month));
+    if (m.daysOff) lines.push({ t: `Less ${m.daysOff} day${m.daysOff === 1 ? '' : 's'} not worked${offs ? `: ${offs}` : ''}`, v: `−${M(round2(w.wage * m.days / 30) - m.earned)}` });
+    lines.push({ t: `Earned for ${monthName(r.month)}`, v: M(m.earned), strong: true });
+    const other = due === null ? 0 : round2(due - m.earned);
+    if (other) lines.push({ t: other > 0 ? 'Earlier months still unpaid' : 'Less advances and earlier payments', v: `${other > 0 ? '+' : '−'}${M(Math.abs(other))}` });
+    if (due !== null) lines.push({ t: `Total due to end of ${MON[+r.month.slice(5, 7) - 1]} ${r.month.slice(0, 4)}`, v: M(due), strong: true });
+  } else if (r.pay === 'advance') lines.push({ t: 'Advance on salary', v: slipMoney(r.amount, r.cur) });
+  else if (due !== null) lines.push({ t: `Total due up to the last day of work${w.left ? `, ${fmtDate(w.left)}` : ''}`, v: M(due), strong: true });
+  lines.push(after);
+  const salary = r.pay === 'salary';
+  return { title: SLIP_TITLE[r.pay] || SLIP_TITLE.voucher, party: ['Employee', `${w.name}${w.job ? ` · ${w.job}` : ''}`], when: [salary ? 'Pay period' : 'Date', salary ? monthName(r.month) : slipDay(r)],
+    forLabel: salary ? 'Pay details' : 'Being payment for', lines,
+    extra: [...(salary ? [['Paid on', slipDay(r)]] : []), ['Paid from', accountOf(r.mode)], ...rateRow(r), ['Employee no.', w.id]], signLabel: 'Received by', signName: w.name };
 }
 
 /* ---------- import old entries (paste rows from a list or sheet) ---------- */
@@ -2060,19 +3585,56 @@ const ACTIONS = {
   approvals: () => approvalsSheet(),
   moveApp: () => moveApp(),
   decide: b => decide(b.dataset.id, !!b.dataset.ok),
+  askDelete: b => askDelete(b.dataset.kind, b.dataset.id),
+  slip: b => slipSheet(b.dataset.kind, b.dataset.id),
+  sigClear: b => sigPad($('canvas.sig', b.closest('.fld'))),
+  showFile: b => showFile(b.dataset.id),
+  shareShown: () => shareShown(),
+  letterhead: async () => { if (await unlock('Enter the password to change the letterhead.')) letterheadSheet(); },
+  stamp: async () => { if (await unlock('Enter the password to change the company stamp.')) stampSheet(); },
+  nudge: b => nudgeStamp(b.dataset.k, b.dataset.d),
+  stampSave: () => saveStampPlace(),
+  changeCode: () => changeCode(),
+  bioOn: () => bioOn(),
+  bioOff: () => bioOff(),
+  reveal: async () => { if (await pinPrompt({ why: 'Enter your code to see the balances' })) { showMoney = true; render(); } },
+  conceal: () => { showMoney = false; render(); },
+  addWorker: () => workerForm(),
+  openWorker: b => workerDetail(b.dataset.id),
+  editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
+  markLeft: async b => { if (await unlock('Enter the password to record that this employee has left.')) leftForm(b.dataset.id); },
+  payWorker: b => payForm(b.dataset.id, b.dataset.pay, b.dataset.approval),
+  settle: b => settleWorker(b.dataset.id),
+  addAbsence: b => absenceForm(b.dataset.id),
+  openAbsence: b => absenceSheet(b.dataset.id),
+  addOffHere: b => addOffHere(b),
+  workerStatement: b => workerStatement(b.dataset.id),
+  projectStatement: b => projectStatement(b.dataset.id),
+  payeeStatement: b => payeeStatement(b.dataset.name),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
   input.closest('.fld').querySelector('.amt-preview').textContent = n === null ? '' : money(n, formCur(input.form));
+  refreshRate(input.form);
+}
+// "≈ $55.56" under the SSP rate, so a mistyped rate shows at once
+function refreshRate(f) {
+  const out = f && $('.rate-usd', f);
+  if (!out) return;
+  const rate = parseAmount(f.elements.rate.value), amt = f.elements.amount ? parseAmount(f.elements.amount.value) : null;
+  out.textContent = rate === null ? '' : amt === null ? `1 USD = ${plain(rate)} SSP` : `${money(amt, 'SSP')} is about ${money(Math.round(amt / rate * 100) / 100, 'USD')}`;
 }
 document.addEventListener('click', e => {
+  const k = e.target.closest('[data-pin]');
+  if (k) return pinKey(k.dataset.pin);
   const b = e.target.closest('[data-act]');
   if (b && ACTIONS[b.dataset.act]) ACTIONS[b.dataset.act](b);
 });
 document.addEventListener('submit', e => {
+  if (e.target.id === 'lkPwForm') return pinPassword(e);
   const f = e.target.closest('form[data-form]');
   if (!f) return;
   e.preventDefault();
@@ -2083,6 +3645,9 @@ document.addEventListener('input', e => {
   t.classList.remove('bad');
   if (t.closest('.brows')) updateBulk(t.form);
   if (t.closest('.amt-in')) refreshAmount(t);
+  if (t.name === 'rate' && t.form) refreshRate(t.form);
+  if (t.form && t.form.dataset.form === 'pay') { if (t.name === 'amount') t.form.dataset.typed = '1'; refreshPay(t.form, t); }
+  if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
   if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
@@ -2093,7 +3658,12 @@ document.addEventListener('change', e => {
     $$('.cur-sym', t.form).forEach(s => (s.textContent = SYM[t.value].trim()));
     $$('.amt-in input', t.form).forEach(refreshAmount);
     if ($('.brows', t.form)) updateBulk(t.form);
+    $$('.ratef', t.form).forEach(l => { l.hidden = t.value !== 'SSP'; $('input', l).required = !l.hidden; });
+    refreshRate(t.form);
   }
+  if (t.dataset.attach !== undefined) attachPicked(t);
+  if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
+  if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }
@@ -2113,13 +3683,38 @@ addEventListener('storage', e => { if (e.key === KEY) { S = load(); render(); } 
 // sync as soon as the internet comes back, when the app is reopened, and every few minutes
 addEventListener('online', () => scheduleSync(0));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { scheduleSync(0); checkForUpdate(); } });
+
+/* the code pad: typing on a keyboard works too; opening the app can't be skipped */
+document.addEventListener('keydown', e => {
+  if (!pin || pin.mode === 'pass' || !$('#lock').open) return;
+  if (/^\d$/.test(e.key)) { e.preventDefault(); pinKey(e.key); }
+  else if (e.key === 'Backspace') { e.preventDefault(); pinKey('del'); }
+});
+$('#lock').addEventListener('cancel', e => { if (pin && pin.mandatory) e.preventDefault(); else if (pin) { e.preventDefault(); pinKey('cancel'); } });
+$('#lock').addEventListener('close', () => { if (pin && pin.mandatory) $('#lock').showModal(); }); // closed by the browser anyway: open again
+// Leaving the app locks it: coming back asks for the code. Not when the app itself sent you away for a moment
+// (the camera, choosing a file, the share sheet) — that is consumed by the next return.
+// ponytail: a picker that was cancelled without leaving keeps the pass until the next return within 5 minutes
+let leftAt = 0, pickerAt = 0;
+document.addEventListener('click', e => {
+  const t = e.target;
+  if ((t.type === 'file') || t.closest('label')?.querySelector('input[type=file]') || t.closest('[data-act=shareShown], [data-act=shareInvite]')) pickerAt = Date.now();
+}, true);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { leftAt = Date.now(); return; }
+  const mine = pickerAt && Date.now() - pickerAt < 5 * 60e3;
+  pickerAt = 0;
+  if (leftAt && !mine) lockApp();
+});
 setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
 setInterval(renderLock, 10000);
 
 if (S) { S = migrate(S); save(); repairImportedMoves(); }
+loadOutbox().then(() => { if (outbox.length) uploadFiles(); });
 if (S && location.hash) history.replaceState(null, '', location.pathname);
 if (location.search) history.replaceState(null, '', location.pathname + location.hash); // drop ?v= left by an update
 render();
+lockApp(); // opening the app asks for the code (a phone signed in before codes existed chooses one now)
 checkForUpdate();
 if ($('form[data-form=join]')) inviteHint($('form[data-form=join]'));
 scheduleSync(0);

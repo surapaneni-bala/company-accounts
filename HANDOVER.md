@@ -1,7 +1,7 @@
 # Handover — Company Accounts
 
-Last updated **8 Oct 2026** · live app version **6497338b76** (logins released) · script in this repo: **version 3**
-· the owner's real sheet was still on the FIRST script on 8 Oct — see [§6](#6-where-things-stand-open-items)
+Last updated **9 Oct 2026** · live app version **c4014f2231** (employees, files, vouchers, app lock, statements, days not
+worked) · script in this repo: **version 7** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
 
@@ -69,9 +69,12 @@ see afterwards.
 ```
 src/            app source, joined in this order by tools/build.js into one page
   shell.html    page, all CSS, markers <!--APP-->
-  core.js       state, helpers, password, all screens and forms, saving, backup
+  core.js       state, helpers, password/unlock, all screens and forms, saving, backup, sheet back-navigation
+  calc.js       pay maths (30-day month, worker ledger, advances in USD), amounts in words, JPEG → one-page PDF
+  files.js      photos/PDFs: IndexedDB copy + upload outbox, view/share, signature pad, slip/voucher renderer, letterhead
   sync.js       Google Sheet sync, invite links, join/connect, "update the script" help
-  auth.js       logins: sign in/out, set up logins, admin "Logins" screens, can()/RIGHTS per role
+  auth.js       logins, can()/RIGHTS per role, change requests (edit/delete/advance) + approvals, quick unlock (code / Face ID)
+  staff.js      Staff tab: employees, pay salary / advance / final settlement, leaving, salary slip contents
   import.js     paste import (expenses + moves), repairs, double-count warning
   update.js     new-version check (version.json) and "Update now"
   main.js       button/form wiring, events, start-up, service-worker registration
@@ -83,6 +86,7 @@ docs/test/      the TEST COPY (node tools/build.js --test): own storage key bepl
                 prefix test-accounts-, purple "TEST COPY" bar, home-screen name TEST
 tools/          build, tests, local Google stand-in, real-Chrome checks
 ```
+Build order (tools/build.js): core, calc, files, sync, auth, staff, import, update, main.
 
 All the source files run as **one script** (they are concatenated). Top-level code must not *call* a
 function or `const` defined in a later file. This once broke start-up: `inviteFromHash` was called
@@ -92,13 +96,18 @@ before it existed.
 
 ```
 S = { v: 2, company, pass: {salt, hash},              // SHA-256(salt|password), checked on the device
-      expenses: [E], credits: [R], transfers: [T], projects: [P], log: [L],
+      expenses: [E], credits: [R], transfers: [T], projects: [P], log: [L], changes: [C], workers: [W], files: [F],
       seq: {E,R,T,P,B: n},  dev: 'K7Q',                // ids are PREFIX-DEV-0001, so devices never clash
       dirty: [ids waiting to sync], settingsU, link: {u, k, since, sheet} | null,
-      lastBy, lastCur, lastLoc, lastMode, lastProject, lastExpProject, lastBackup, createdAt }
+      lastBy, lastCur, lastLoc, lastMode, lastProject, lastExpProject, lastRate, lastBackup, createdAt, kindsSeen }
 E = { id, cur:'USD'|'SSP', amount, paidTo, reason, location, project, mode:'Cash'|'Bank', at:'YYYY-MM-DDTHH:MM',
       manualDate, by, createdAt:'…:SS', batch, editedAt, editedBy, deleted, deletedBy, u }
-R = { id, cur, amount, project (required), mode, note, at, … }      T = { id, cur, amount, from, to, note, at, … }
+      + rate (SSP for 1 USD, required on SSP entries from v4), and for a payment to an employee:
+        worker (W id), pay: 'salary'|'advance'|'settlement', month 'YYYY-MM', daysOff, approval (C id of an approved advance)
+R = { id, cur, amount, project (required), mode, note, at, rate, … }      T = { id, cur, amount, from, to, note, at, … }
+W = { id, name, job, site, phone, wage, cur, start:'YYYY-MM-DD', idNo, status:'active'|'left', left, openingAmount, openingNote, … }
+F = { id, fileId (Drive), name, mime, for (record id | 'settings'), type: voucher|receipt|slip|photo|attachment|profile|idphoto|letterhead, no (PV-…/RC-…), by, createdAt }
+C = { id, kind, target, action?: 'delete'|'advance', before, after, text, by, at, status: waiting|approved|rejected, decidedBy }
 P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, at, action, id (the entry), text, by }
 ```
 
@@ -109,12 +118,25 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
   `{ token, user: {id, name, username, role}, check: {salt, hash} }` (check = their password, for offline
   unlock), or `{ out: true, why }` when signed out. `S.link` also keeps `v` (script version) and `logins`.
 - Money is added up in whole cents (`cents()`).
+- **Files** live in IndexedDB `<KEY>-files` (store `files`, key = F id, `{…meta, data: ArrayBuffer, pending}`), never in
+  localStorage or backups. `keepFile()` puts a file there as *pending*; `uploadFiles()` (after every sync, needs script
+  v4) sends `{op:'upload'}` and only then creates the F record, so the sheet never has a record without its file.
+  Uploaded files stay as an offline copy; `dropFileCopies()` removes those (not pending ones) on sign-out.
+- **Slips** are drawn on a 1240×1754 canvas (A4 at 150 dpi) over the letterhead (latest F of type `letterhead`,
+  for `settings`, admins only; content kept between y 270 and 1570 to miss its header/footer), saved as JPEG and
+  wrapped by `jpegToPdf()`. Voucher numbers come from `nextIds('PV'|'RC')`, so they are per device. Share happens
+  from a separate tap (`shareShown`), because iPhone refuses the share sheet after a long async step.
 - `accountOf(mode)` maps older payment types: Card/Cheque count as Bank, anything else counts as Cash.
 
 ### Sync protocol (app ↔ `Code.gs`)
 
 - **Request:** `POST` the web app link with a **text/plain** body (no CORS preflight):
-  `{ key, since, push: [{ id, k, u, d }] }`. The kinds `k` are E, R, P, L, S (settings), T.
+  `{ key, since, push: [{ id, k, u, d }] }`. The kinds `k` are E, R, P, L, S (settings), T, C, W, F.
+  Records are pushed in `KIND_KEY` order (…, W, C, F): the sheet only takes a change request whose entry it has,
+  and (from non-admins) a file record whose `for` record it has.
+- **Files (script v4):** `{ op:'upload', name, mime, data: base64 }` → `{ ok, fileId }` (JPEG/PNG/PDF, ≤ 8 MB, into
+  Drive folder "Company app files (do not share)/YYYY-MM"); `{ op:'file', id: <F id> }` → `{ ok, name, mime, data }`
+  only if `view_()` lets this login see that F record. The owner runs `allowFiles()` once after pasting v4.
 - **Reply:** `{ ok, version, seq, sheet, kinds, pull: [...] }`.
   - The newest copy of each id wins (by `u`).
   - `pull` returns every record whose `seq` is greater than `since`.
@@ -155,7 +177,52 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
   `uid`). Only admins receive the company password inside S. Refused records come back in `refused` and stay
   queued on the phone. A copy the sheet already has (same or older `u`) is ignored before any rule is checked,
   so a phone resending after a lost reply is never refused.
-- `KINDS_SEEN` (sync.js) goes up whenever the app learns a new record kind; `migrate()` then sets `since` to 0
+- Change requests carry `action`: none = an edit (only `EDITABLE` fields), `'delete'` (after = {}), `'advance'` (kind W,
+  after = {amount, cur}; approving changes nothing — whoever pays then records the advance with `approval: <C id>`).
+- Rights: `staff` (Staff tab) for admin and manager. The letterhead F goes to everyone (store keepers make vouchers);
+  employees (W) and their files never go to store keepers.
+- **App lock and the 4-digit code** (auth.js `pinPrompt`, `lockApp`; the `#lock` dialog is a full-screen code pad):
+  `session.quick = {salt, hash, len: 4, cred, tries}` lives only in the sign-in slot. `lockApp()` runs at start-up, after
+  every sign-in (a new session chooses its code first, then `offerBio()`), and when the page becomes visible again —
+  except right after the app itself opened the camera / file picker / share sheet (`pickerAt`, consumed on return).
+  The lock can't be closed (Escape and forced closes reopen it). 5 wrong codes → password (`session.check`, offline).
+  `unlock()` (edits, deletes, settings) uses the pad when a code exists, else the password box. Face ID = WebAuthn
+  platform credential made from a tap (`bioOn`), accepted when the assertion's UV flag is set; the code always works.
+  `showMoney` (Accounts home balances and totals) is false until the code is given, and again after every lock.
+- **Sections:** `tab = 'menu'` is the first page (Accounts / Employees tiles); `ACC_TABS` (home, hist, proj, sheet) show
+  the bottom bar; `staff` is Employees. Without the `staff` right (store keeper) there is no menu. The header shows the
+  section name and a round ‹ back button. `WELCOME` (core.js) is the title of the first screen.
+- **Slip pages are as tall as the slip** (A4 width): the form is drawn on a see-through layer, then put on a page with the
+  letterhead's top part and its bottom tenth (`LH_FOOT`, the address strip) at the foot; `pdfPages` sizes each page
+  from its picture. Nothing is painted white over the letterhead, so its watermark shows (tints are see-through).
+  One plain type family (`SANS`: Helvetica Neue / Arial / Roboto), no 800 weights; the app uses the phone's system font.
+  The signature is cut to its ink (`inkOnly`) and set on its line with the name under it, never enlarged past a pen
+  line (`placeSignature`). Stamps are kept as PNG; `cleanStamp` removes whatever background a stamp picture has
+  (white paper, a black square from an old JPEG, or none) before it is drawn.
+- **Slips** (files.js `renderSlip`) follow the company's paper voucher: ruled box with paid to | date, being payment
+  for | amount in (SSP/USD boxes + amount), amount in words | paid from / rate, received by (signature) | photo, then
+  prepared / checked / approved. It measures first and sets a long slip tighter so it ends above the letterhead
+  footer (y ≤ 1570). The **company stamp** (F type `stamp`, for `settings`, admins only, sent to everyone like the
+  letterhead) is drawn at the right of "approved"; `inkCircle()` finds its ring from the ink, and the date is written
+  letter by letter along the arc at `place = {a, r, s}` (angle, radius and size as parts of the ring's radius;
+  defaults `STAMP_PLACE` measured on the owner's stamp), adjustable in Settings → Company stamp and saved on the F record.
+- **Statements** (files.js `renderStatement`, as many A4 pages as needed via calc.js `pdfPages`): info box, tables that
+  carry on to the next page with their header, totals, a verdict box, and for a final settlement the signature, photo
+  and stamp. Employee (`workerStatementSpec`: wages by month + payments with voucher numbers; final = signed "FULLY
+  SETTLED", kept as F type `statement` for the employee, or as the settlement payment's slip), project (receipts) and
+  payee (all payments to one "Paid to" name); the last two are made on demand and not kept.
+- **Days not worked** (kind A `{ id, worker, date, note, by }`, one record per day): added by admins and the office
+  manager (the sheet checks the employee exists; store keepers never receive them); `workerLedger(w, pays, today,
+  absences)` takes each day in the counted range off its month (plus the `daysOff` number older salary payments
+  carried). The salary screen lists the month's days and can add one; slips and statements print the dates. Deleting
+  one: admin directly, office manager via a change request (`EDITABLE.A`). `KINDS_SEEN` = 4.
+- **Employees added on an old date:** `clearedTo` (W) = salary settled up to that day (the ledger counts from the next
+  day); "not fully paid" stores what was already paid as a negative `openingAmount` ("paid before the app").
+  New employees need a job and an ID photo; the Site field is gone (old records keep it).
+- **App icon / logo:** `python3 tools/make-icons.py` cuts the "B" mark from `private/brand/logo.png` (never committed)
+  into `src/icon-*.png`; the in-app logo (`APP_LOGO`) is `icon-192.png`. Installed iPhones keep their old home-screen
+  icon until the app is removed and added again — only do that when nothing is waiting to sync.
+- `KINDS_SEEN` (sync.js) goes up whenever the app learns a new record kind (now 3: W and F); `migrate()` then sets `since` to 0
   once, because an older version skipped the unknown records but moved past them.
 - Sync replies also carry `me` (the signed-in person) and `logins` (whether the company has logins).
 - Phone side: signing in removes the company code from the phone; a store keeper's phone drops everything
@@ -203,8 +270,9 @@ node tools/mock-server.js           # prints a company code; web app link = http
   act like **two separate devices**.
 - Mock state is kept in `tools/.mock-state.json` (git-ignored). Delete it to start fresh.
 
-**Offline and update checks need real Chrome.** Claude Code's built-in browser pane blocks service
-workers.
+**Offline and update checks need real Chrome** (headless, below). Note: since Oct 2026 the built-in browser pane
+*does* run service workers — after a rebuild, reload twice (or call `registration.update()`), and the first visit
+to `/test/` on an address that already has the real app reloads once while the test copy's offline copy takes over.
 ```bash
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --remote-debugging-port=9333 --user-data-dir=/tmp/chrome-test about:blank &
 node tools/pages-like-server.js docs 8795          # behaves like GitHub Pages (10-minute caching)
@@ -214,6 +282,12 @@ node tools/chrome-check.js http://127.0.0.1:8795/ expr.js --offline  # network c
 
 To test an update, edit `APP_VERSION` in the served `index.html`, the cache name in `sw.js` and
 `version.json`. Then run `--reload` and the reported version must change.
+
+**Try files, staff and approvals end to end:** start `mock-server.js` and the docs server (both are in
+`.claude/launch.json`: `mock-sheet` and `app`), set up a company + logins, then use `http://localhost:8764/`,
+`http://127.0.0.1:8764/` and `http://localhost:8764/test/` as three phones (admin, manager, store keeper).
+The fake Drive keeps uploaded files in `tools/.mock-state.json` (`drive.files[*].b64`): decode a PDF and convert it with
+`sips -s format png x.pdf --out x.png` to look at a slip. WebAuthn can't be finished there (it waits for a finger).
 
 **Test the owner's way:** at phone widths 375 px and 320 px, check that no text is cut off, no number
 splits across lines, and there's no sideways scrolling. Before declaring a total correct, reproduce
@@ -236,6 +310,48 @@ git commit -m "fix: …" && git push
 - Commits use the `type: description` style. No attribution lines (the owner's setting).
 
 ## 6. Where things stand (open items)
+
+**RELEASED 9 Oct 2026: live app c4014f2231 + sheet script v7 published** (`main` merged from `staff`). Proved before
+release: all tests; the reviewer's attack scripts stay closed; the owner's old list entered in 186414e5b5 and opened by
+c4014f2231 gives identical totals (USD cash −163,730, bank 24,841, total −138,889, SSP 0; 71 expenses, 1 move).
+Owner's steps after release: paste v7 into the REAL sheet + run `allowFiles` once + New version; each phone taps
+Update now and chooses its 4-digit code; upload the letterhead and stamp again in the real app (the test sheet's Drive is
+separate); add the employees in the real app. Until v7 is pasted, accounts keep working and new kinds wait on the phones.
+Undo: Apps Script → Manage deployments → previous version; app → revert the release commit and push.
+
+History of the build (kept for reference):
+**Version 4–6 — staff, files, vouchers, app lock, stamp, statements: BUILT AND TESTED, NOT RELEASED.** (Script v5 = v4 +
+the company stamp; v6 = + `clearedTo` on employees and the `statement` file type; v7 = + days not worked (kind A);
+the app needs ≥ 4 for files.) The source is on branch
+**`staff`** (pushed); `main` got only `docs/test/` (commit e71d330, 9 Oct 2026), so https://app.b-e-p-l.com/test/ runs
+d376856f61 with `/test/sheet-script.txt` v4, while the live app stays 186414e5b5 with `sheet-script.txt` v3. Keep it so
+until release: the live app's "Show me how" must not hand the owner v4 before the Drive permission step. To update
+the test copy: on `staff` build `--test`, commit, then on `main` `git checkout staff -- docs/test` and push.
+- Checked: all five `tools/test-*.js` pass; end to end in the browser with the mock (admin, office manager, store
+  keeper as three phones): SSP rate required; voucher, receipt and salary slip PDFs (on the real letterhead, read
+  back from fake Drive and rendered); upload → F record → other phone downloads it; employee ledger matches a hand
+  count; advance limit (admin confirm / manager request → approval → "Give it", capped at the approved amount);
+  office-manager wage change, leaving and delete wait for approval and apply on approve; store keeper gets the
+  letterhead but no employees; quick-unlock code (5 wrong → password); back to the project after an edit; History
+  keeps its scroll; no sideways scroll at 375/320 px. The owner's old list entered in live 186414e5b5 and opened by
+  the new code: identical totals to the cent (USD cash, bank, total; SSP; 71 expenses, 1 move).
+- Not checkable here: Face ID / fingerprint (needs a real phone), the iPhone share sheet, camera capture.
+- **Security review of v4 (independent reviewer, 8 Oct 2026).** Fixed, each with a check in `tools/test-files.js`:
+  (HIGH) a forged file record could name any Drive file id and download it as the owner → the script keeps a hidden
+  `_files` tab of the files it uploaded (with the uploader) and refuses any other fileId, and a non-admin may only
+  name their own uploads; once a company has logins, company-code phones (old invite links) get no employees or
+  files and can't upload/download; an edit request must leave its entry valid (refused otherwise); uploads must start
+  with real JPEG/PNG/PDF bytes and get the extension of their type. In the app: quick-unlock setup always asks for
+  the password itself; approval cards also show "Date set by hand" and "Moved to"; a phone signed out by the sheet
+  keeps only its unsent records (and drops the company password copy). Accepted, tell the owner: the $100 advance
+  limit and its approval are checked by the app, not the sheet (the office manager can record any expense anyway;
+  every advance shows on the employee's page and in the Expenses tab with its rate); a store keeper can tell that an
+  id like W-…-0001 exists (nothing about it).
+- Owner's steps, in order: (1) make a backup in the app; (2) push only the test copy (`docs/test/`), or release
+  everything once happy — see the plan; (3) in the **test** Google Sheet paste `/test/sheet-script.txt`, run
+  `allowFiles` once (Drive permission), Manage deployments → ✏️ → New version; (4) on the iPhone test copy: Sheet →
+  Settings → Letterhead; add an employee, pay a salary, sign, send the PDF to themselves on WhatsApp; set up quick
+  unlock with Face ID; (5) then the same script steps on the real sheet, build, push, "Update now" on every phone.
 
 **Stage 1 — logins: RELEASED 8 Oct 2026** (app 6497338b76, script v3 on main). The owner still has to paste
 script v3 into the real sheet, update the app, set up logins with the setup code, give logins, and only then
@@ -314,7 +430,7 @@ folder, which is temporary:
 
 - **Reproduce first:** rebuild the owner's exact data state before fixing a reported total.
 - **Never test a "fix" in a browser that can't run it:** use `tools/chrome-check.js` for anything
-  involving the offline copy.
+  involving the offline copy (and remember the built-in pane now has its own service worker, see §4).
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.
 - **Expect pasted links to be damaged:** the join box replaces its content on paste and finds the
   invite inside any text.

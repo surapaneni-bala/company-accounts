@@ -7,11 +7,11 @@ const SESSION_KEY = KEY + '-login';
 const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper' };
 const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Sees everything · adds entries · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
 const RIGHTS = {
-  admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones'],
-  manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup'], // suggest = edits wait for an admin's approval
+  admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones', 'staff'],
+  manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval
   store: ['add'],
 };
-const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [] };
+const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [] };
 
 // { token, user: { id, name, username, role }, check: { salt, hash } } — or { out: true, why } once signed out
 let session = loadSession();
@@ -45,6 +45,7 @@ async function signedInAs(res, password) {
   // reload the company settings as this person may see them (only admins get the company password);
   // a store keeper sees only their own entries: drop everything else this phone held (it's all on the sheet)
   const clear = { settingsU: 0, ...(res.me.role === 'admin' ? {} : { pass: null }), ...(res.me.role === 'store' ? onlyUnsent() : {}) };
+  if (res.me.role === 'store') dropFileCopies();
   S = { ...S, ...clear, link: { ...S.link, k: '', since: 0, logins: true }, lastBy: res.me.name };
   save();
 }
@@ -52,16 +53,17 @@ async function signedInAs(res, password) {
 function signedOutByServer(why) {
   saveSession({ out: true, why });
   // nothing stays on a phone that lost access — except changes it hasn't sent yet
-  S = { ...S, ...(S.dirty.length ? {} : NOTHING_SEEN), link: { ...S.link, since: 0 } };
-  save(); closeSheet(); render();
+  S = { ...S, ...onlyUnsent(), pass: null, link: { ...S.link, since: 0 } }; // signing in again brings back what this login may see
+  dropFileCopies();
+  save(); closeAll(); render();
 }
 async function signOut() {
-  const n = S.dirty.length;
-  if (n) return alert(`This phone has ${n} change${n === 1 ? '' : 's'} not sent to the Google Sheet yet.\n\nConnect to the internet and wait until it says "Up to date", then sign out.`);
+  const n = S.dirty.length + outbox.length;
+  if (n) return alert(`This phone has ${n} change${n === 1 ? '' : 's'} or file${n === 1 ? '' : 's'} not sent to the Google Sheet yet.\n\nConnect to the internet and wait until it says "Up to date", then sign out.`);
   if (!confirm('Sign out of this phone?\n\nThe company records leave this phone. They come back when someone signs in.')) return;
   const token = session.token;
   saveSession({ out: true }); // the sign-in screen shows at once, so nothing new can be added meanwhile
-  closeSheet(); render();
+  closeAll(); render(); dropFileCopies();
   try { await callServer(S.link, { op: 'logout', token }); } catch { /* already signed out on the sheet: fine */ }
   if (!S.dirty.length) { S = { ...S, ...NOTHING_SEEN, link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
   render();
@@ -97,8 +99,8 @@ async function doSignIn(f) {
   catch (e) { return formErr(f, e.offline ? null : 'password', e.offline ? 'No internet. Signing in needs internet.' : e.message); }
   await signedInAs(res, v.password);
   update({ log: logWith([['Signed in', '—', `${res.me.name} signed in on this phone (${S.dev})`]], res.me.name) });
-  closeSheet(); tab = 'home'; render(); toast(`Welcome, ${res.me.name} ✓`);
-  syncNow();
+  closeSheet(); tab = 'menu'; render(); toast(`Welcome, ${res.me.name} ✓`);
+  syncNow(); lockApp();
 }
 
 /* the owner's first login, proven with a one-time setup code that only appears inside the Google Sheet */
@@ -127,7 +129,7 @@ async function doSetupLogins(f) {
   update({ log: logWith([['Logins', '—', `Logins set up. ${res.me.name} (${res.me.username}) is the first admin.`]], res.me.name) });
   render(); toast('Logins are ready ✓ Now give the others theirs.');
   syncNow();
-  usersSheet();
+  usersSheet(); lockApp();
 }
 
 /* admins: give, change and close logins */
@@ -189,10 +191,13 @@ async function requireLogins(on) {
 
 /* my login */
 function accountSheet() {
-  const u = session.user;
+  const u = session.user, q = session.quick;
   openSheet(`${head(u.name, '', `${u.username} · ${ROLES[u.role]}`)}
+    <h3 class="subh" style="margin-top:0">Opening the app</h3>
+    <div class="setrow"><span>4-digit code<br><span class="muted">${q ? 'Asked every time you open the app' : 'Not set yet'}</span></span><button class="btn small ghost" data-act="changeCode">${q ? 'Change' : 'Set'}</button></div>
+    <div class="setrow" id="bioRow"><span>Face ID / Touch ID<br><span class="muted">${q && q.cred ? 'On — opens the app with your face or finger' : 'Checking this phone…'}</span></span><span></span></div>
     <form data-form="password">
-      <h3 class="subh" style="margin-top:0">Change my password</h3>
+      <h3 class="subh">Change my password</h3>
       <label class="fld"><span>Current password</span><input type="password" name="old" required autocomplete="current-password"></label>
       <label class="fld"><span>New password</span><input type="password" name="pw" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
       <label class="fld"><span>New password again</span><input type="password" name="pw2" required minlength="8" autocomplete="new-password"></label>
@@ -200,6 +205,13 @@ function accountSheet() {
       <button class="btn primary">Change password</button>
     </form>
     <button class="btn ghost" data-act="signOut" style="margin-top:14px">Sign out of this phone</button>`);
+  here = accountSheet;
+  bioAvailable().then(ok => {
+    const row = $('#bioRow');
+    if (!row) return;
+    const on = !!(session.quick && session.quick.cred);
+    row.outerHTML = `<div class="setrow" id="bioRow"><span>Face ID / Touch ID<br><span class="muted">${on ? 'On — opens the app with your face or finger' : ok ? 'Off' : 'This phone does not offer it to apps'}</span></span>${ok && session.quick ? `<button class="btn small ${on ? 'ghost' : 'primary'}" data-act="${on ? 'bioOff' : 'bioOn'}">${on ? 'Turn off' : 'Turn on'}</button>` : ''}</div>`;
+  });
 }
 async function doChangePassword(f) {
   const v = Object.fromEntries(new FormData(f));
@@ -217,7 +229,7 @@ function loginsCard() {
   if (signedIn()) {
     return `<section class="card pad"><h3>👤 ${esc(session.user.name)}</h3>
       <p class="muted">Signed in as <b>${esc(session.user.username)}</b> · ${ROLES[session.user.role]}</p>
-      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">My password · Sign out</button></div></section>`;
+      <div class="two">${can('logins') ? '<button class="btn ghost" data-act="users">👥 Logins</button>' : ''}<button class="btn ghost" data-act="account">Code, Face ID, password</button></div></section>`;
   }
   if (S.link.logins) {
     return `<section class="card pad"><h3>👥 Logins</h3><p class="muted">Everyone can have their own username and password. Sign in with yours.</p>
@@ -239,19 +251,25 @@ const saveLabel = () => (can('edit') ? 'Save changes' : 'Send for approval');
 const approvalNote = old => (old && !can('edit') ? '<p class="note">An admin approves this change first. Until then the entry and the totals stay as they are.</p>' : '');
 const waiting = () => (S.changes || []).filter(c => c.status === 'waiting');
 const waitingFor = id => waiting().filter(c => c.target === id);
-const recordsOf = kind => S[kind === 'P' ? 'projects' : COLL[kind]] || [];
+const recordsOf = kind => S[KIND_KEY[kind]] || [];
 const targetOf = c => recordsOf(c.kind).find(x => x.id === c.target);
 // the fields an edit may change, per kind (the Google Sheet checks the same list)
 const EDITABLE = {
-  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate'],
-  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate'],
+  E: ['cur', 'amount', 'paidTo', 'reason', 'location', 'project', 'mode', 'at', 'manualDate', 'rate'],
+  R: ['cur', 'amount', 'project', 'mode', 'note', 'at', 'manualDate', 'rate'],
   T: ['cur', 'amount', 'from', 'to', 'note', 'at', 'manualDate'],
   P: ['name', 'value', 'valueCur'],
+  W: ['name', 'phone', 'job', 'site', 'wage', 'cur', 'start', 'idNo', 'status', 'left', 'openingAmount', 'openingNote', 'clearedTo'],
+  A: ['date', 'note'],
 };
-const editPart = c => Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f)));
+const editPart = c => (c.action ? {} : Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f))));
+const whatIs = (kind, r) => (kind === 'P' ? `Project "${r.name}"` : kind === 'W' ? `Employee ${r.name}`
+  : kind === 'A' ? `Day not worked: ${(workerOf(r.worker) || {}).name || r.worker}, ${fmtDate(r.date)}${r.note ? ` (${r.note})` : ''}` : describe(kind, r));
 // what approving would really change, worked out from the entry itself — never from the text sent with the request
 function changeLines(c, r) {
   if (!r) return [];
+  if (c.action === 'delete') return [`Delete it: ${whatIs(c.kind, r)}`];
+  if (c.action === 'advance') return [`Give an advance of ${money(+c.after.amount, c.after.cur)} — more than the $${ADVANCE_LIMIT_USD} a month limit`];
   const next = { ...r, ...editPart(c) };
   if (c.kind !== 'P') return diff(r, next);
   const vc = x => x.valueCur || 'USD';
@@ -287,7 +305,7 @@ function changeCard(c) {
   // the entry was changed by someone else after this request: show it so the admin looks first
   const moved = r && Object.keys(c.before || {}).some(f => String(r[f] ?? '') !== String(c.before[f] ?? ''));
   return `<section class="card pad" style="margin-bottom:12px">
-    <p style="margin:0 0 6px"><b>${esc(r ? (c.kind === 'P' ? `Project "${r.name}"` : describe(c.kind, r)) : c.target)}</b></p>
+    <p style="margin:0 0 6px"><b>${esc(r ? whatIs(c.kind, r) : c.target)}</b></p>
     <ul style="margin:0 0 8px;padding-left:20px">${(lines.length ? lines : ['No real change — reject it']).map(t => `<li>${esc(t)}</li>`).join('')}</ul>
     <p class="muted" style="margin:0 0 10px">Asked by ${esc(c.by)} · ${esc(fmtAbs(c.at))}</p>
     ${gone ? '<p class="note">This entry was deleted — the change can only be rejected.</p>' : moved ? '<p class="note">⚠️ This entry was changed after the request. Check it before approving.</p>' : ''}
@@ -298,15 +316,164 @@ async function decide(id, ok) {
   if (!await unlock('Enter the password to approve or reject changes.')) return;
   const c = S.changes.find(x => x.id === id);
   if (!c || c.status !== 'waiting') return approvalsSheet();
-  const me = myName() || S.lastBy || 'Admin', key = c.kind === 'P' ? 'projects' : COLL[c.kind];
+  const me = myName() || S.lastBy || 'Admin', key = KIND_KEY[c.kind];
   const r = targetOf(c), next = r && { ...r, ...editPart(c) };
   if (ok && (!r || r.deleted || !VALID[c.kind](next))) return alert("This change can't be applied: the entry is gone or the new values aren't valid. Reject it instead.");
+  if (ok && c.action === 'delete' && c.kind === 'P' && [...live(S.expenses), ...live(S.credits)].some(x => x.project === c.target)) return alert('This project still has entries. Move or delete them first, or reject this.');
   const what = changeLines(c, r).join(' ; ') || 'no real change';
   const patch = {
     changes: S.changes.map(x => (x.id === id ? { ...x, status: ok ? 'approved' : 'rejected', decidedBy: me, decidedAt: stampSec() } : x)),
     log: logWith([[ok ? 'Approved' : 'Rejected', c.target, `${what} — asked by ${c.by}`]], me),
   };
-  if (ok) patch[key] = S[key].map(x => (x.id === c.target ? { ...next, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
+  // an approved advance changes nothing yet: whoever hands over the money then records it against this approval
+  if (ok && c.action === 'delete') patch[key] = S[key].map(x => (x.id === c.target ? { ...x, deleted: stampSec(), deletedBy: `${c.by} (approved by ${me})` } : x));
+  if (ok && !c.action) patch[key] = S[key].map(x => (x.id === c.target ? { ...next, editedAt: stampSec(), editedBy: `${c.by} (approved by ${me})` } : x));
   update(patch);
-  render(); approvalsSheet(); toast(ok ? 'Approved ✓ The entry is changed' : 'Rejected — the entry stays as it was');
+  render(); approvalsSheet(); toast(!ok ? 'Rejected — the entry stays as it was' : c.action === 'delete' ? 'Approved ✓ The entry is deleted' : c.action === 'advance' ? 'Approved ✓ The advance can be given now' : 'Approved ✓ The entry is changed');
+}
+// An office manager's delete waits for an admin, like her edits.
+async function askDelete(k, id) {
+  if (!await unlock('Enter the password to ask for this entry to be deleted.')) return;
+  const r = S[KIND_KEY[k]].find(x => x.id === id);
+  if (!confirm(`Ask an admin to delete this?\n\n${whatIs(k, r)}\n\nIt stays as it is until an admin approves.`)) return;
+  const by = myName() || S.lastBy || '';
+  const [[cid], seq] = nextIds('C', 1, S.seq), text = `Delete: ${whatIs(k, r)}`;
+  update({
+    changes: [...S.changes, { id: cid, kind: k, target: id, action: 'delete', before: {}, after: {}, text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
+    log: logWith([['Delete asked', id, `${text} — waiting for an admin`]], by),
+  });
+  closeSheet(); render(); toast('Sent for approval ✓ It is deleted when an admin approves.');
+}
+
+/* ---------- the 4-digit code: opening the app, showing balances, unlocking edits ---------- */
+// The code and the Face ID key live only in this phone's sign-in slot (never in backups). The code is checked like
+// the password (slow hash); after 5 wrong codes only the password works. Face ID is a key made on this phone for this
+// address; the phone's own check (the "user verified" flag) is what counts. iPhone home-screen apps sometimes fumble
+// Face ID, so the code always works too.
+const PIN_LEN = 4, QUICK_TRIES = 5;
+const quick = () => (signedIn() && session.quick && session.quick.len === PIN_LEN && session.quick.tries < QUICK_TRIES ? session.quick : null);
+const rndBytes = n => crypto.getRandomValues(new Uint8Array(n));
+const bytesB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64uBytes = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function bioAvailable() {
+  try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch { return false; }
+}
+async function bioCheck() {
+  const q = session && session.quick;
+  if (!q || !q.cred) return false;
+  try {
+    const a = await navigator.credentials.get({ publicKey: { challenge: rndBytes(32), allowCredentials: [{ type: 'public-key', id: b64uBytes(q.cred) }], userVerification: 'required', timeout: 60000 } });
+    return !!(new Uint8Array(a.response.authenticatorData)[32] & 4); // the phone checked the face or finger, not just a tap
+  } catch { return false; }
+}
+// Face ID is turned on from a tap (phones only allow it then); some phones never answer, so give up after a minute.
+async function bioOn() {
+  try {
+    const make = navigator.credentials.create({ publicKey: {
+      challenge: rndBytes(32), rp: { name: 'Company Accounts' }, user: { id: rndBytes(16), name: session.user.username, displayName: session.user.name },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
+    const c = await Promise.race([make, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 65000))]);
+    saveSession({ ...session, quick: { ...session.quick, cred: bytesB64u(c.rawId) } });
+    toast('Face ID / Touch ID is on ✓');
+  } catch { alert('Face ID / Touch ID could not be turned on. Your 4-digit code still works.'); }
+  reopenHere();
+}
+function bioOff() { saveSession({ ...session, quick: { ...session.quick, cred: null } }); toast('Face ID / Touch ID is off'); reopenHere(); }
+
+// The pad. mode: 'check' (type the code), 'new' then 'confirm' (choose a code), 'pass' (the password instead).
+// mandatory = it can't be closed (opening the app). Resolves true once unlocked or a code is chosen.
+let pin = null;
+function pinPrompt({ why, mode = 'check', mandatory = false }) {
+  if (pin) pin.resolve(false); // a newer prompt replaces an older one
+  return new Promise(resolve => {
+    pin = { why, mode: mode === 'check' && !quick() ? 'pass' : mode, mandatory, typed: '', first: '', err: '', busy: false, resolve };
+    const d = $('#lock');
+    pinDraw();
+    if (!d.open) d.showModal();
+    if (pin.mode === 'check' && quick().cred) bioTry(false); // straight to Face ID; the pad is right there if it fails
+  });
+}
+function pinDraw() {
+  const p = pin, q = quick();
+  const title = { check: 'Enter your code', new: 'Choose a 4-digit code', confirm: 'Type the code again', pass: 'Enter your password' }[p.mode];
+  const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" data-pin="${n}">${n}</button>`).join('');
+  $('#lockIn').innerHTML = `${APP_LOGO}<h2>${title}</h2><p class="lk-why">${esc(p.why)}</p>
+    ${p.mode === 'pass' ? `<form id="lkPwForm"><input type="password" id="lkPw" autocomplete="current-password" placeholder="Your password" required><p class="err">${esc(p.err)}</p><button class="btn primary">Unlock</button></form>`
+      : `<div class="dots${p.err ? ' shake' : ''}">${Array.from({ length: PIN_LEN }, (_, i) => `<i class="${i < p.typed.length ? 'on' : ''}"></i>`).join('')}</div>
+      <p class="err">${esc(p.busy ? 'Checking…' : p.err)}</p>
+      <div class="keypad">${keys}${p.mode === 'check' && q && q.cred ? '<button type="button" class="ghostkey" data-pin="bio" aria-label="Use Face ID">🙂</button>' : '<span></span>'}<button type="button" data-pin="0">0</button><button type="button" class="ghostkey" data-pin="del" aria-label="Delete">⌫</button></div>`}
+    <div class="lk-foot">${p.mode === 'check' ? '<button type="button" class="link" data-pin="pass">Use my password</button>' : ''}${p.mode === 'pass' && q ? '<button type="button" class="link" data-pin="code">Use my code</button>' : ''}${p.mandatory ? '' : '<button type="button" class="link" data-pin="cancel">Cancel</button>'}</div>`;
+  if (p.mode === 'pass') $('#lkPw').focus();
+}
+function pinDone(ok) {
+  const p = pin;
+  pin = null;
+  if (ok && session.quick && session.quick.tries) saveSession({ ...session, quick: { ...session.quick, tries: 0 } });
+  $('#lock').close();
+  p.resolve(ok);
+}
+async function bioTry(say) {
+  if (await bioCheck()) { if (pin) pinDone(true); }
+  else if (say && pin) { pin.err = 'Face ID did not work. Type your code.'; pinDraw(); }
+}
+async function pinKey(k) {
+  const p = pin;
+  if (!p || p.busy) return;
+  if (k === 'cancel') return pinDone(false);
+  if (k === 'bio') return bioTry(true);
+  if (k === 'pass' || k === 'code') { p.mode = k === 'pass' ? 'pass' : 'check'; p.err = ''; p.typed = ''; return pinDraw(); }
+  if (k === 'del') { p.typed = p.typed.slice(0, -1); return pinDraw(); }
+  if (p.typed.length >= PIN_LEN) return;
+  p.typed += k; p.err = '';
+  pinDraw();
+  if (p.typed.length < PIN_LEN) return;
+  if (p.mode === 'new') { p.first = p.typed; p.typed = ''; p.mode = 'confirm'; return pinDraw(); }
+  if (p.mode === 'confirm') {
+    if (p.typed !== p.first) { p.mode = 'new'; p.typed = ''; p.err = "The two codes didn't match. Choose again."; return pinDraw(); }
+    p.busy = true; pinDraw();
+    const salt = randHex();
+    saveSession({ ...session, quick: { salt, hash: await slowHash(p.typed, salt), len: PIN_LEN, cred: (session.quick && session.quick.cred) || null, tries: 0 } });
+    return pinDone(true);
+  }
+  // check: let the dots fill, then the slow check
+  p.busy = true; pinDraw();
+  const q = session.quick, good = await slowHash(p.typed, q.salt) === q.hash;
+  p.busy = false;
+  if (good) return pinDone(true);
+  const tries = (q.tries || 0) + 1;
+  saveSession({ ...session, quick: { ...q, tries } });
+  p.typed = '';
+  if (tries >= QUICK_TRIES) { p.mode = 'pass'; p.err = 'Too many wrong codes. Type your password.'; }
+  else p.err = `Wrong code. ${QUICK_TRIES - tries} ${QUICK_TRIES - tries === 1 ? 'try' : 'tries'} left.`;
+  pinDraw();
+}
+async function pinPassword(e) {
+  e.preventDefault();
+  const p = pin, pw = $('#lkPw').value;
+  if (!p) return;
+  if (await slowHash(pw, session.check.salt) === session.check.hash) return pinDone(true);
+  p.err = 'Wrong password. Try again.'; pinDraw();
+}
+
+// Every time the app is opened or comes back, it asks for the code (or Face ID). A new sign-in chooses the code first.
+let showMoney = false; // the balances on Accounts home, shown after the code was given; hidden again when the app locks
+function lockApp() {
+  if (!signedIn() || mustSignIn() || (pin && pin.mandatory)) return;
+  showMoney = false; unlockedUntil = 0;
+  if (!quick() && !(session.quick && session.quick.len === PIN_LEN)) {
+    return pinPrompt({ mode: 'new', mandatory: true, why: 'You type it (or use Face ID) every time you open the app.' }).then(() => { render(); offerBio(); });
+  }
+  pinPrompt({ mandatory: true, why: `${S.company || 'Company accounts'} · ${session.user.name}` }).then(() => render());
+}
+async function offerBio() {
+  if (!(await bioAvailable()) || session.quick.cred) return;
+  openSheet(`${head('Face ID / Touch ID')}
+    <p class="hint">Open the app with your face or finger instead of typing the code. The code still works.</p>
+    <button class="btn primary" data-act="bioOn">Turn on Face ID / Touch ID</button>
+    <button class="btn ghost" data-act="close" style="margin-top:10px">Not now</button>`);
+}
+async function changeCode() {
+  const ok = quick() ? await pinPrompt({ why: 'First your current code' }) : await unlock('Enter your password to choose a new code.', true);
+  if (ok && await pinPrompt({ mode: 'new', why: 'You type it (or use Face ID) every time you open the app.' })) { toast('New code saved ✓'); reopenHere(); }
 }
