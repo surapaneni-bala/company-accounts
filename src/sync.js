@@ -30,7 +30,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 7; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 8; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 const notAllowedMsg = n => `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
 const SCRIPT_URL = 'https://app.b-e-p-l.com/sheet-script.txt'; // the sheet script, published next to the app
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error

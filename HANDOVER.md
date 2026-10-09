@@ -467,6 +467,8 @@ folder, which is temporary:
   headers, so `fetch` rejects. The owner's first live vouchers (9 Oct) never uploaded while sync worked — most likely the real
   sheet had never been allowed to use Drive (`allowFiles` not run); reproduced with the mock's NODRIVE=1. `uploadFailure` now asks the sheet (`answers`) and,
   if it answers, names the Drive permission step instead of blaming the internet.
+  Script v8 goes to the root: `doPost` catches any error and answers `{ ok: false, error }` (`sheetError_`), so the phone
+  shows the sheet's own message (any app version does) and Executions logs it with `console.error`.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.
 - **Expect pasted links to be damaged:** the join box replaces its content on paste and finds the
   invite inside any text.

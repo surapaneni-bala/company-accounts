@@ -125,6 +125,7 @@ function loadGas(code, state = {}, opts = {}) {
     DriveApp: opts.noDrive ? NO_DRIVE : makeDrive(drive),
     Session: { getScriptTimeZone: () => 'UTC' },
     Logger: { log: () => {} },
+    console: { log: () => {}, error: () => {} },
   };
   vm.createContext(sandbox);
   const api = vm.runInContext(`${code}\n;({ setup, doGet, doPost })`, sandbox);

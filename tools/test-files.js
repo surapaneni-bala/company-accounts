@@ -126,4 +126,10 @@ const e = rows('Expenses');
 assert.deepStrictEqual(e[2].slice(15, 17), ['SSP per USD', 'Employee']);
 assert.deepStrictEqual(e.find(r => r[0] === 'E-AG1-0001').slice(15, 17), [4500, 'John']);
 
+// a script error comes back as a readable answer, not Google's error page (which the phone takes for "no internet")
+const nd = loadGas(fs.readFileSync(path.join(__dirname, '../apps-script/Code.gs'), 'utf8'), {}, { noDrive: true });
+nd.setup();
+const ndUp = JSON.parse(nd.doPost({ postData: { contents: JSON.stringify({ op: 'upload', key: nd.props.KEY, name: 'a.png', mime: 'image/png', data: png }) } }).getContent());
+assert.ok(!ndUp.ok && /allowFiles/.test(ndUp.error) && /DriveApp/.test(ndUp.error), 'a sheet without Drive permission says so: ' + ndUp.error);
+
 console.log('Employees and files: all checks passed');
