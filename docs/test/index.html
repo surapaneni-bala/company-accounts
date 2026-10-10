@@ -432,7 +432,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'afb21a2298'; // filled in by tools/build.js
+const APP_VERSION = 'a6f23bf069'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1563,7 +1563,7 @@ async function patchFile(f, patch) {
   if (rec) await filePut({ ...rec, ...patch });
   outbox = outbox.map(x => (x.id === f.id ? { ...x, ...patch } : x));
 }
-const cancelledWhy = f => `Cancelled on ${fmtAbs(String(f.cancelled).slice(0, 16))}${f.cancelledBy ? ` by ${f.cancelledBy}` : ''} — the entry was changed after it was signed`;
+const cancelledWhy = f => `Cancelled on ${fmtAbs(String(f.cancelled).slice(0, 16))}${f.cancelledBy ? ` by ${f.cancelledBy}` : ''} — ${f.cancelReason || 'the entry was changed after it was signed'}`;
 // the pages of a PDF this app made: each page is one JPEG picture
 async function pdfJpegs(blob) {
   const b = new Uint8Array(await blob.arrayBuffer()), find = (seq, from) => { for (let i = from; i <= b.length - seq.length; i++) if (seq.every((x, j) => b[i + j] === x)) return i; return -1; };
@@ -1757,13 +1757,22 @@ async function showFile(id) {
     ${f.mime === 'application/pdf' ? '<p class="filebig">📄</p>' : `<img class="viewimg" src="${URL.createObjectURL(blob)}" alt="${esc(title)}">`}
     <button class="btn in" data-act="shareShown">📤 Send or save</button>
     ${f.removed || f.replaced ? `<p class="note">${f.removed ? 'Removed' : 'Replaced by a newer one'} on ${esc(fmtAbs(String(f.removed || f.replaced).slice(0, 16)))}${f.removedBy || f.replacedBy ? ` by ${esc(f.removedBy || f.replacedBy)}` : ''}. Kept in the company Google Drive, folder CHANGES.</p>`
-      : can('edit') && CHANGEABLE.includes(f.type) ? `<div class="two" style="margin-top:10px"><label class="btn ghost">🔄 Replace<input type="file" hidden accept="image/*,application/pdf" data-replace="${esc(id)}"></label><button class="btn danger" data-act="removeFile" data-id="${esc(id)}">🗑 Remove</button></div>` : ''}
+      : can('edit') && CHANGEABLE.includes(f.type) ? `<label class="btn ghost" style="margin-top:10px">🔄 Delete and replace<input type="file" hidden accept="image/*,application/pdf" data-replace="${esc(id)}"></label>
+        <p class="muted center">Choose the new one: only then is this one taken off (a copy is kept in Drive, folder CHANGES).</p>`
+      : can('edit') && SIGNED_TYPES.includes(f.type) && !f.cancelled && entryOf(f.for) ? `<button class="btn ghost" data-act="replacePaper" data-id="${esc(id)}" style="margin-top:10px">🔄 Delete and make a new one</button>
+        <p class="muted center">This one is cancelled only when the new one is made; until then it stays as it is.</p>` : ''}
     ${f.pending ? `<p class="muted center">Kept on this phone, not uploaded yet: ${esc(uploadWhy())}</p>` : ''}`);
 }
-// An attachment or a payment photo can be replaced or removed (admins). Nothing is thrown away: the old one stays in
-// Drive, filed under CHANGES (script v12), and in the entry's list marked Replaced or Removed. Signed papers follow the
-// cancel / correct flow instead.
+// A file on an entry is only ever deleted by putting a new one in its place (owner, 10 Oct 2026): nothing changes until
+// the new one is there. An attachment or payment photo is replaced by a new upload (the old one is kept in Drive under
+// CHANGES, script v12, and marked Replaced); a signed voucher, receipt or slip by a newly made one (the old one cancelled).
 const CHANGEABLE = ['attachment', 'photo'];
+const entryOf = id => { const e = S.expenses.find(x => x.id === id && !x.deleted); if (e) return ['E', e]; const r = S.credits.find(x => x.id === id && !x.deleted); return r ? ['R', r] : null; };
+async function replacePaper(id) {
+  const f = fileMeta(id), en = f && entryOf(f.for);
+  if (!en || !await unlock('Enter your code to replace it.')) return;
+  slipSheet(en[0], en[1].id, f.id);
+}
 async function replaceFile(input) {
   const file = input.files[0], old = fileMeta(input.dataset.replace);
   input.value = '';
@@ -1775,14 +1784,6 @@ async function replaceFile(input) {
     toast(`${FILE_NAME[old.type] || 'File'} replaced ✓ — the old one is kept`);
     closeSheet();
   } catch (e) { alert(e.message); }
-}
-async function removeFile(id) {
-  const f = fileMeta(id);
-  if (!f || !await unlock('Enter your code to remove the file.')) return;
-  if (!confirm(`Remove "${f.name}" from this entry?\n\nA copy is kept in the company Google Drive (folder CHANGES).`)) return;
-  await setAside(f, 'removed');
-  toast('Removed ✓ — a copy is kept');
-  closeSheet();
 }
 // set a file aside: one not uploaded yet is simply dropped; one in Drive is kept there and marked
 async function setAside(f, how) {
@@ -2386,14 +2387,15 @@ function receiptSpec(r, party) {
 }
 
 // Make a voucher (expense), receipt (money received) or salary slip (a payment to an employee) for an entry.
-function slipSheet(k, id) {
+function slipSheet(k, id, replaces = '') {
   const r = S[COLL[k]].find(x => x.id === id);
   if (!r) return;
-  const isR = k === 'R', who = paperSigner(k, r), title = paperTitle(k, r);
+  const isR = k === 'R', who = paperSigner(k, r), title = paperTitle(k, r), old = replaces && fileMeta(replaces);
   openSheet(`${head(title, isR ? 'in' : 'out', r.id)}
     ${needsNewPaper(id) ? `<p class="note">${cancelledWhyNote(k, r)}</p>` : ''}
+    ${old ? `<p class="note">This new ${title.toLowerCase()} replaces ${esc(old.no || old.name)}. The old one is cancelled when this one is made — close this screen and it stays as it is.</p>` : ''}
     <p class="hint">${esc(money(r.amount, r.cur))} · ${esc(isR ? projName(r.project) : `${r.paidTo} — ${r.reason}`)}</p>
-    <form data-form="slip" data-kind="${k}" data-id="${esc(id)}">
+    <form data-form="slip" data-kind="${k}" data-id="${esc(id)}" data-replaces="${esc(old ? old.id : '')}">
       ${isR ? textField('party', 'Received from', 'Who paid the money?', '', false) : ''}
       ${sigField(who)}
       ${isR ? '' : photoField(who)}
@@ -2425,7 +2427,9 @@ async function saveSlip(f) {
     if (w) spec.approval = approval;
     const blob = w ? await renderStatement(spec) : await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, preparedBy: r.by, ref: r.id, approval });
     const name = `${no} ${fileSafe(spec.signName || '')}.pdf`;
-    await keepFile({ for: r.id, type, no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
+    await keepFile({ for: r.id, type, no, name, mime: 'application/pdf', ...(f.dataset.replaces ? { replaces: f.dataset.replaces } : {}) }, await blob.arrayBuffer());
+    const replaced = f.dataset.replaces && fileMeta(f.dataset.replaces);
+    if (replaced && !replaced.cancelled) await patchFile(replaced, { cancelled: stampSec(), cancelledBy: myName() || S.lastBy || '', cancelReason: `replaced by ${no}`, was: { amount: r.amount, cur: r.cur } });
     await keepTakenPhoto(f, r.id, no);
     readySheet(spec.title, no, blob, name);
   } catch (e) { btn.disabled = false; formErr(f, null, e.message); }
@@ -4061,7 +4065,7 @@ const ACTIONS = {
   correctPaper: b => correctPaper(b.dataset.kind, b.dataset.id),
   mySig: async () => { if (await unlock('Enter your code to change your signature.')) mySigSheet(); },
   mySigRemove: () => removeMySig(),
-  removeFile: b => removeFile(b.dataset.id),
+  replacePaper: b => replacePaper(b.dataset.id),
   changeCode: () => changeCode(),
   bioOn: () => bioOn(),
   bioOff: () => bioOff(),
