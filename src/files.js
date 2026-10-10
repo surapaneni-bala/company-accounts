@@ -94,18 +94,14 @@ async function uploadFailure(e) {
   if (e.timedOut || !await answers(S.link.u)) return SLOW_MSG;
   return can('settings') ? DRIVE_MSG : 'the Google Sheet cannot save files yet — tell the owner (it needs permission to use Google Drive).';
 }
-/* ---------- cancelled papers: an entry changed after its voucher, receipt or slip was signed ---------- */
+/* ---------- cancelled papers: the money on an entry changed after its voucher, receipt or slip was signed ---------- */
 // The paper no longer matches what was signed, so it is cancelled — kept as proof (the sheet renames it "CANCELLED …" into a
 // Cancelled folder; the app stamps it whenever it is opened or sent) — and a new one is made and signed again.
 const SIGNED_TYPES = ['voucher', 'receipt', 'slip'];
-// What the person signed for: the paper's main lines and boxes. Muted lines (project, location, a note, the balance after)
-// are the office's own filing, so moving an expense to a project never cancels its voucher.
-function signedFacts(k, r) {
-  try {
-    const s = k === 'R' ? receiptSpec(r, '') : r.pay ? payslipSpec(r) : voucherSpec(r);
-    return JSON.stringify([s.title, s.party, s.when, s.lines.filter(l => !l.muted), s.extra, r.amount, r.cur, stampDate(r)]);
-  } catch { return ''; }
-}
+// What the person signed for: the money, and who received it. Anything else (paid from cash or bank, the date, what it was
+// for, the project, the rate) is the office's own record: changing it leaves the signed paper as it is, since it may be with
+// the client already (owner, 10 Oct 2026, after Bank → Cash cancelled a voucher: "cancel only if I change the voucher").
+const signedFacts = (k, r) => JSON.stringify([r.amount, r.cur, k === 'R' ? '' : r.paidTo]);
 function cancelSigned(was) {
   const changed = new Map(); // entry id → the entry as it was signed
   [['E', 'expenses'], ['R', 'credits']].forEach(([k, key]) => {
@@ -123,6 +119,33 @@ async function patchFile(f, patch) {
   const rec = await fileGet(f.id);
   if (rec) await filePut({ ...rec, ...patch });
   outbox = outbox.map(x => (x.id === f.id ? { ...x, ...patch } : x));
+}
+// An admin may take back the cancel of a paper an edit cancelled, while it is the entry's latest paper, no new one has been
+// made and the money on it still matches the entry (owner, 10 Oct 2026: "I don't want to make a new voucher").
+const canUncancel = f => {
+  const en = can('settings') && f.cancelled && !f.cancelReason && f.was && SIGNED_TYPES.includes(f.type) && entryOf(f.for);
+  const latest = en && filesFor(f.for).filter(x => SIGNED_TYPES.includes(x.type)).pop();
+  return !!en && latest.id === f.id && needsNewPaper(f.for) && en[1].amount === f.was.amount && en[1].cur === f.was.cur;
+};
+const uncancellable = id => { const p = filesFor(id).filter(x => SIGNED_TYPES.includes(x.type)).pop(); return p && canUncancel(p) ? p : null; };
+const uncancelButton = (f, label) => `<button class="btn ghost" data-act="uncancelPaper" data-id="${esc(f.id)}" style="margin-top:10px">↩️ ${label}</button>
+  <p class="muted center">The money on it still matches this payment: it becomes valid again, without the stamp, and no new one is needed.</p>`;
+async function uncancelPaper(id) {
+  const f = fileMeta(id);
+  if (!f || !canUncancel(f)) return;
+  if (outbox.some(o => o.id === id)) return alert('It is still waiting to upload. Press Sync now, then try again.');
+  if (f.stamped && (S.link.v || 2) < 13) return alert(`First update the Google Sheet script to version ${NEWEST_SCRIPT} (Sheet tab → Show me how), then try again.`);
+  if (!await unlock(`Enter your code to make ${f.no || 'this paper'} valid again.`)) return;
+  try {
+    // the stamped copy took the original's place in Drive and the original went to the bin: the sheet takes it back out
+    const fileId = f.stamped ? (await callServer(S.link, { op: 'original', id })).fileId : f.fileId;
+    if (!/^[\w-]{10,100}$/.test(String(fileId || ''))) throw new Error('The Google Sheet did not find the original.');
+    const { cancelled, cancelledBy, cancelReason, was, stamped, ...kept } = S.files.find(x => x.id === id);
+    update({ files: S.files.map(x => (x.id === id ? { ...kept, fileId } : x)) });
+    scheduleSync(0);
+  } catch (e) { return alert(e.offline ? 'No internet — try again when it is on.' : e.message); }
+  toast(`${f.no || 'The paper'} is valid again ✓`);
+  closeSheet();
 }
 const cancelledWhy = f => `Cancelled on ${fmtAbs(String(f.cancelled).slice(0, 16))}${f.cancelledBy ? ` by ${f.cancelledBy}` : ''} — ${f.cancelReason || 'the entry was changed after it was signed'}`;
 // the pages of a PDF this app made: each page is one JPEG picture
@@ -268,13 +291,13 @@ async function uploadFiles() {
 
 // The file's bytes: the copy on this phone, or fetched from the company Drive (and kept for next time).
 async function fileBlob(id) {
-  const hit = await fileGet(id).catch(() => null);
-  if (hit) return new Blob([hit.data], { type: hit.mime });
-  const rec = S.files.find(f => f.id === id);
+  const hit = await fileGet(id).catch(() => null), rec = S.files.find(f => f.id === id);
+  // the copy here, unless the record now names another Drive file (a cancel taken back: the original instead of the stamped copy)
+  if (hit && (hit.pending || !hit.fileId || !rec || hit.fileId === rec.fileId)) return new Blob([hit.data], { type: hit.mime });
   if (!rec || !S.link) throw new Error('This file is not on this phone.');
   const res = await callServer(S.link, { op: 'file', id });
   const data = fromB64(res.data).buffer;
-  filePut({ ...rec, data, pending: false }).catch(() => {});
+  filePut({ ...rec, fileId: res.fileId || rec.fileId, data, pending: false }).catch(() => {}); // the Drive file the sheet sent (script 13)
   return new Blob([data], { type: res.mime });
 }
 // a file waiting to go up wins over its record (a stamped copy of a cancelled paper replaces the one in Drive)
@@ -316,6 +339,7 @@ async function showFile(id) {
   const title = f.no || FILE_NAME[f.type] || 'File';
   openSheet(`${head(title, '', f.name)}
     ${f.cancelled ? `<p class="note">${esc(cancelledWhy(f))}. It is kept as proof and always sent with a CANCELLED stamp.</p>` : ''}
+    ${canUncancel(f) ? uncancelButton(f, 'Undo the cancel — keep it as it was signed') : ''}
     ${f.mime === 'application/pdf' ? '<p class="filebig">📄</p>' : `<img class="viewimg" src="${URL.createObjectURL(blob)}" alt="${esc(title)}">`}
     <button class="btn in" data-act="shareShown">📤 Send or save</button>
     ${can('edit') && isOldVersion(f) && currentOf(f) ? `<button class="btn danger" data-act="deleteOld" data-id="${esc(id)}" style="margin-top:10px">🗑 Delete this old version</button>
@@ -1027,7 +1051,8 @@ function slipSheet(k, id, replaces = '') {
       <button class="btn ${isR ? 'in' : 'out'}">Make the ${title.toLowerCase()} (PDF)</button>
     </form>
     ${needsNewPaper(id) && can('settings') && r.pay !== 'settlement' ? `<p class="hint center" style="margin-top:14px">Or, as an admin, correct the old one without a new signature: their signature stays with the amount they signed for, and you approve the change.</p>
-    <button class="btn ghost" data-act="correctPaper" data-kind="${k}" data-id="${esc(id)}">✏️ Correct the old ${title.toLowerCase()} (admin)</button>` : ''}`);
+    <button class="btn ghost" data-act="correctPaper" data-kind="${k}" data-id="${esc(id)}">✏️ Correct the old ${title.toLowerCase()} (admin)</button>` : ''}
+    ${uncancellable(id) ? uncancelButton(uncancellable(id), `Keep the old ${title.toLowerCase()} — undo the cancel (admin)`) : ''}`);
   sigPad($('#sheet canvas.sig'));
   showMySigField();
 }

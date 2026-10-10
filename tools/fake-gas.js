@@ -105,6 +105,7 @@ function makeDrive(drive) {
       getParents: () => iter([folder(f.folder)]),
       moveTo: dest => { f.folder = dest.getId(); },
       setTrashed: t => { f.trashed = !!t; },
+      isTrashed: () => !!f.trashed,
     };
   };
   return {

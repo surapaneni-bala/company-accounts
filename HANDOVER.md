@@ -331,6 +331,13 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**TEST COPY 10 Oct 2026 (branch `keep-voucher`, not live): app edb5544d3d + script v13.** Bank → Cash (or any edit that
+leaves the money and the person alone) no longer cancels a signed paper; admins can undo a cancel (the original comes back
+out of the Drive bin). Checked end to end on the mock sheet: Bank → Cash kept PV valid; $250 → $300 cancelled it (no undo
+offered); back to $250 → undo → original out of the bin, renamed and refiled, stamped copy binned, the app opens the original
+(same bytes as Drive), Check a paper says Genuine; 375 px fine; all tests. On "update live": merge, build, push; the owner
+pastes v13 (sheet-script.txt?v=14), New version, then undoes the cancel of the voucher that Bank → Cash cancelled.
+
 **RELEASED 10 Oct 2026 (night, final): live app 7e78815726** (script still v12): check codes + sealed signatures against
 forgery, Check a paper, the saved signature in black. Checked on the release build: code printed and stored, Genuine /
 NOT GENUINE / not found answered right, saved signature black; opens offline; all tests.
@@ -543,11 +550,19 @@ folder, which is temporary:
   if it answers, names the Drive permission step instead of blaming the internet.
   Script v8 goes to the root: `doPost` catches any error and answers `{ ok: false, error }` (`sheetError_`), so the phone
   shows the sheet's own message (any app version does) and Executions logs it with `console.error`.
-- **Signed papers are never changed or thrown away** (owner's choice, 9 Oct 2026). Editing what a voucher, receipt or slip
-  prints in its main lines and boxes (`signedFacts`; muted lines like project, location, a note don't count) cancels it on the
-  editing admin's phone (`cancelSigned`, hooked in `update()`): F gets `cancelled`; the entry asks for a new one (signed again,
-  new number); opened or sent from the app it carries a big CANCELLED stamp (`stampCancelled`), and an admin's phone sends a
-  stamped copy up in its place (`queueStamps`, same F id, `stamped: true`; needs script ≥ 9, which bins the unstamped original).
+- **Signed papers are never changed or thrown away** (owner's choice, 9 Oct 2026). Only an edit of the **money or who received
+  it** (`signedFacts` = amount, currency, paid to) cancels a voucher, receipt or slip (`cancelSigned`, hooked in `update()`).
+  Everything else (paid from cash/bank, date, what for, project, rate) leaves the signed paper as it is — owner, 10 Oct 2026,
+  after Bank → Cash cancelled a voucher the client already had: "cancel only if I change the voucher". A cancel: F gets
+  `cancelled`; the entry asks for a new one (signed again, new number); opened or sent from the app it carries a big CANCELLED
+  stamp (`stampCancelled`), and an admin's phone sends a stamped copy up in its place (`queueStamps`, same F id,
+  `stamped: true`; needs script ≥ 9, which bins the unstamped original).
+- **An admin can take a cancel back** (`uncancelPaper`, "↩️ Keep the old … — undo the cancel", on the new-paper screen and on
+  the cancelled paper) while it is the entry's latest paper, no new one exists and the money still matches `was`. A stamped one
+  needs script ≥ 13: op `original` takes the unstamped original out of the Drive bin (the newest binned upload before the
+  stamped copy whose name carries the paper's number; Drive keeps the bin 30 days) and the phone names it in the F record
+  again; the sheet then bins the stamped copy (`merge_`) and refiles the original as in use. `fileBlob` refetches a kept copy
+  whose `fileId` no longer matches its record (the `file` op now says which Drive file it sent).
 - **Drive layout (script v10, owner's request 10 Oct 2026: "like my family documents folder, and better"):** a filing
   cabinet in "<FIRST WORD OF COMPANY> SUPER APP" (the Google Sheet inside): `01 PAYMENTS/YYYY/YYYY-MM MONTH/<date> <PAID TO>
   (E-…)/` (one folder per payment: voucher, photo, attachments), `02 MONEY RECEIVED/…/<date> <PROJECT> (R-…)/`,
