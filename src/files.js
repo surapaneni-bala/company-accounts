@@ -165,12 +165,13 @@ async function queueStamps() {
     } catch { /* not on this phone and no internet: next time the app is opened */ }
   }
 }
-// A complete file record the sheet refuses (an admin's: never for the login) names a Drive file the sheet has no note of
-// uploading. The file is sent again from this phone — once per opening of the app — so its record carries one it knows.
+// A file record the sheet refuses (an admin's: never for the login) either names a Drive file the sheet has no note of
+// uploading, or has no Drive number at all (saved by an app version that trusted a reply without one). Either way the file
+// is sent again from this phone — once per opening of the app — so its record carries a file the sheet knows.
 const resent = new Set();
 async function resendRefused(ids) {
   if (!can('settings')) return;
-  for (const f of S.files.filter(x => ids.has(x.id) && VALID.F(x) && !resent.has(x.id))) {
+  for (const f of S.files.filter(x => ids.has(x.id) && (VALID.F(x) || !x.fileId) && !resent.has(x.id))) {
     resent.add(f.id);
     const rec = await fileGet(f.id).catch(() => null);
     if (!rec || !rec.data) continue; // not on this phone: the message says which file it is
@@ -201,6 +202,8 @@ async function uploadFiles() {
       let res;
       try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
       catch (e) { uploadErr = await uploadFailure(e); break; }
+      // a reply without the file's Drive number is not an upload (a record without one could never be filed): try again later
+      if (!/^[\w-]{10,100}$/.test(String(res.fileId || ''))) { uploadErr = 'the Google Sheet did not give the file its Drive number — it tries again by itself.'; break; }
       const { data, pending, ...d } = rec, fresh = { ...d, fileId: res.fileId };
       update({ files: S.files.some(x => x.id === d.id) ? S.files.map(x => (x.id === d.id ? { ...x, ...fresh } : x)) : [...S.files, fresh] });
       await filePut({ ...rec, fileId: res.fileId, pending: false });

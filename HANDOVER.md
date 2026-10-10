@@ -340,8 +340,11 @@ but its F record was refused). Not reproduced with a fresh setup (add employee +
 The message named it: file "image.jpg" (F-8BM-0013). Fix on branch `refused-why`: the message says why (record
 incomplete, or the sheet has no note of uploading its Drive file — checked against `VALID`), and an admin's phone sends a
 complete-but-refused file again once per opening (`resendRefused`), so its record carries a file the sheet knows (proven on the
-mock with an unknown fileId: refused → resent → accepted → filed). Root cause still unknown (not reproduced fresh); the
-original loose file stays in the company folder for the owner to delete.
+mock with an unknown fileId: refused → resent → accepted → filed). The resend didn't apply: the message then said "its record is
+incomplete (no Drive file number)". CAUSE: `uploadFiles` trusted any `ok: true` reply and saved the F record with
+`res.fileId` undefined (reproduced on 2efcc99473 by answering one upload like the sheet's doGet: { ok, app, version } — e.g. a
+redirect that turns the POST into a GET). FIX (`fileid-guard`): a reply without a valid Drive number is a failed upload
+(retried); a refused F record without one is re-sent from the phone. The loose copy stays in the company folder.
 
 **RELEASED 10 Oct 2026 (later): live app 2bfc6f2c61 + sheet script v10** (`main` merged from `drive-tree`): the Drive
 filing cabinet (§3 "Drive layout"). App change: only the Delete employee wording and NEWEST_SCRIPT 10. Checked: all tests
