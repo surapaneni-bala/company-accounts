@@ -31,7 +31,23 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
 const NEWEST_SCRIPT = 10; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
-const notAllowedMsg = n => `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
+// what a record is, in a few words: messages about changes the sheet did not take say which ones
+function recordLabel(id) {
+  if (id === 'settings') return 'company settings';
+  for (const [key, k] of Object.entries(SYNC_KEYS)) {
+    const r = (S[key] || []).find(x => recId(key, x) === id);
+    if (r) return `${k === 'F' ? `file "${r.name}"` : k === 'L' ? 'a Change Log line' : k === 'C' ? 'an approval request' : whatIs(k, r)} (${id})`;
+  }
+  return id;
+}
+// The sheet refuses an admin's change only when the record itself is not right (never for the login), so an admin is
+// told what it is, to pass on; anyone else is told it needs an admin.
+const notAllowedMsg = ids => {
+  const n = ids.length, list = ids.slice(0, 3).map(recordLabel).join('; ') + (n > 3 ? ` and ${n - 3} more` : '');
+  return can('settings')
+    ? `The Google Sheet did not accept ${n} change${n === 1 ? '' : 's'}: ${list}. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — send a screenshot of this to whoever looks after the app.`
+    : `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent: ${list}. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
+};
 const SCRIPT_URL = 'https://app.b-e-p-l.com/sheet-script.txt'; // the sheet script, published next to the app
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error
 let syncBusy = false, syncAgain = false, syncTimer = 0;
@@ -192,7 +208,7 @@ async function syncNow() {
     if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
     lastRefused = refused;
     if (S.dirty.some(id => !sent.has(id))) syncAgain = true; // more waiting than one batch: send the rest straight after
-    sync = notAllowed.size ? { state: 'error', at: stampSec(), err: notAllowedMsg(notAllowed.size) }
+    sync = notAllowed.size ? { state: 'error', at: stampSec(), err: notAllowedMsg([...notAllowed]) }
       : refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };
     if ((changed || was.logins !== S.link.logins || was.v !== S.link.v) && !typing()) render();
   } catch (e) {
