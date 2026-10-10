@@ -489,14 +489,19 @@ folder, which is temporary:
   editing admin's phone (`cancelSigned`, hooked in `update()`): F gets `cancelled`; the entry asks for a new one (signed again,
   new number); opened or sent from the app it carries a big CANCELLED stamp (`stampCancelled`), and an admin's phone sends a
   stamped copy up in its place (`queueStamps`, same F id, `stamped: true`; needs script ≥ 9, which bins the unstamped original).
-- **Drive layout (script v9, owner's request 9–10 Oct 2026):** everything in "<first word of company> Super App" (the Google
-  Sheet moved in too): `Payments & receipts/YYYY-MM` (by the entry's month) and `/Cancelled`, `Employees/<Name> (W-id)` with
-  everything about one employee (profile, ID, their payments' slips, statements, photos) and its `Changes` (replaced photos,
-  cancelled or deleted slips), `Deleted employees/<Name> (W-id)` (an admin deleted them: the whole folder), `Deleted entries`,
-  `Company` (+ `Changes`). `fileHome_` works out a file's place from its record without Drive calls; `organize_` refiles
-  what each sync touched; `organizeAll_` (once per `LAYOUT`, also run by `allowFiles`) refiles everything, moves the sheet in
-  and bins emptied old folders. The **Files** tab lists every upload with status and folder. Nothing is thrown away except
-  the unstamped original of a cancelled paper. A Drive problem never stops a sync.
+- **Drive layout (script v10, owner's request 10 Oct 2026: "like my family documents folder, and better"):** a filing
+  cabinet in "<FIRST WORD OF COMPANY> SUPER APP" (the Google Sheet inside): `01 PAYMENTS/YYYY/YYYY-MM MONTH/<date> <PAID TO>
+  (E-…)/` (one folder per payment: voucher, photo, attachments), `02 MONEY RECEIVED/…/<date> <PROJECT> (R-…)/`,
+  `03 EMPLOYEES/<NAME> (W-…)/` with `ID DOCUMENT`, `PROFILE PHOTO`, `STATEMENTS`, `OTHER DOCUMENTS`, `PAYMENT SLIPS/YYYY/<date>
+  <ADVANCE|SALARY YYYY-MM|FINAL SETTLEMENT> (E-…)/`, `04 COMPANY/LETTERHEAD|STAMP`, `08 DELETED EMPLOYEES/<NAME> (W-…)/` (an
+  admin deleted them: the whole folder), `09 DELETED ENTRIES/01 PAYMENTS/…` (same folders). One rule for old versions: each
+  section and each employee has `CHANGES` with the same folders inside (replaced photos/documents, cancelled papers). Undated
+  documents are named by kind and date ("ID DOCUMENT 2026-10-08.jpg"). Folders "… (ID)" are found by their ID (`child_`), so
+  edits rename them; folders a move empties go to the bin up to the sections (`tidyUp_`); sections 01–09 always exist.
+  `fileHome_` works out folder, Drive name and status without Drive calls; `organize_` refiles what each sync touched;
+  `organizeAll_` (once per `LAYOUT`, now '2'; also run by `allowFiles`) refiles everything, moves the sheet in, bins empty
+  folders. New uploads wait in the company folder until their record files them. The **Files** tab lists every upload in
+  folder order with status, folder and link. Nothing is thrown away except the unstamped original of a cancelled paper.
 - **Deleting an employee** (admins: Delete employee; office manager: Ask to delete): their payments stay in the accounts.
 - **Deleting is for good, so a deleted record's waiting files are never sent** (`forDeleted` in `uploadFiles`, which also
   removes them from the phone). Before 9 Oct test entries deleted before their upload still went to Drive.

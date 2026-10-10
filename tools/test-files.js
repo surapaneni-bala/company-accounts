@@ -69,11 +69,11 @@ const html = Buffer.from('<html><script>alert(1)</script></html>').toString('bas
 assert.strictEqual(post({ op: 'upload', token: s.token, name: 'invoice.pdf.exe', mime: 'image/png', data: html }).ok, false, 'not a real picture');
 const named = post({ op: 'upload', token: s.token, name: 'invoice.pdf.exe', mime: 'image/png', data: png });
 assert.strictEqual(gas.dump().drive.files[named.fileId].name, 'invoice.pdf.png', 'the extension comes from the type');
-// everything lives in one company folder ("<first word of the company> Super App"), the Google Sheet too
+// everything lives in one company folder ("<FIRST WORD OF THE COMPANY> SUPER APP"), the Google Sheet too
 const drv = () => gas.dump().drive;
 const pathOf = id => { const d = drv(), out = []; for (let f = d.files[id].folder; f && f !== 'root'; f = d.folders[f].parent) out.unshift(d.folders[f].name); return out.join(' / '); };
-assert.ok(pathOf(up.fileId).startsWith('Test Super App / Payments & receipts / '), 'kept in the company folder: ' + pathOf(up.fileId));
-assert.strictEqual(pathOf('SHEET'), 'Test Super App', 'the Google Sheet is moved into the company folder');
+assert.strictEqual(pathOf(up.fileId), 'TEST SUPER APP', 'a new upload waits in the company folder until its record files it');
+assert.strictEqual(pathOf('SHEET'), 'TEST SUPER APP', 'the Google Sheet is moved into the company folder');
 
 const file = (id, u, uid, extra) => ({ id, k: 'F', u, d: { id, fileId: up.fileId, name: 'receipt.png', mime: 'image/png', type: 'attachment', uid, ...extra } });
 post({ token: s.token, since: 0, push: [exp('E-SK1-0001', 30, s.me.id)] });
@@ -137,56 +137,63 @@ assert.ok(!ndUp.ok && /allowFiles/.test(ndUp.error) && /DriveApp/.test(ndUp.erro
 // allowFiles proves Drive works by making the files folder: without Drive it fails in the editor, not later on the phones
 assert.throws(() => nd.allowFiles(), /DriveApp/, 'allowFiles fails loudly without Drive');
 gas.allowFiles();
-assert.strictEqual(pathOf('SHEET'), 'Test Super App', 'allowFiles files everything into the company folder');
+assert.strictEqual(pathOf('SHEET'), 'TEST SUPER APP', 'allowFiles files everything into the company folder');
 
 // every file in its place (see "Drive" in Code.gs), worked out from its record; nothing is thrown away
-const pdf = Buffer.from('%PDF-1.4 voucher').toString('base64'), TOP = 'Test Super App';
+const pdf = Buffer.from('%PDF-1.4 voucher').toString('base64'), TOP = 'TEST SUPER APP';
 const upload = (name, mime = 'image/png', data = png) => post({ op: 'upload', token: owner, name, mime, data }).fileId;
 const vId = upload('PV-OW1-0001 Shop.pdf', 'application/pdf', pdf), pId = upload('photo.png');
 const voucher = (u, extra = {}) => file('F-OW1-0100', u, 'x', { for: 'E-OW1-0100', type: 'voucher', mime: 'application/pdf', name: 'PV-OW1-0001 Shop.pdf', fileId: vId, createdAt: '2026-10-08T09:00:00', ...extra });
 assert.deepStrictEqual(post({ token: owner, since: 0, push: [exp('E-OW1-0100', 50, 'x'), voucher(50), file('F-OW1-0101', 50, 'x', { for: 'E-OW1-0100', type: 'photo', fileId: pId })] }).refused, []);
-assert.deepStrictEqual([pathOf(vId), pathOf(pId)], [`${TOP} / Payments & receipts / 2026-10`, `${TOP} / Payments & receipts / 2026-10`], "by the payment's month");
+const PAY = `${TOP} / 01 PAYMENTS / 2026 / 2026-10 OCTOBER / 2026-10-08 SHOP (E-OW1-0100)`;
+assert.deepStrictEqual([pathOf(vId), pathOf(pId)], [PAY, PAY], 'one folder per payment: voucher and photo together, by year and month');
 post({ token: owner, since: 0, push: [voucher(51, { cancelled: '2026-10-09T21:00:00', cancelledBy: 'Owner' })] });
-assert.deepStrictEqual([pathOf(vId), drv().files[vId].name], [`${TOP} / Payments & receipts / Cancelled`, 'CANCELLED PV-OW1-0001 Shop.pdf'], 'a cancelled voucher is kept, renamed');
-assert.strictEqual(pathOf(pId), `${TOP} / Payments & receipts / 2026-10`, 'the photo of an entry that only changed stays');
+const PAY_OLD = `${TOP} / 01 PAYMENTS / CHANGES / 2026 / 2026-10 OCTOBER / 2026-10-08 SHOP (E-OW1-0100)`;
+assert.deepStrictEqual([pathOf(vId), drv().files[vId].name], [PAY_OLD, 'CANCELLED PV-OW1-0001 Shop.pdf'], 'a cancelled voucher: the same folders under CHANGES, renamed');
+assert.strictEqual(pathOf(pId), PAY, 'the photo of an entry that only changed stays');
 // the stamped copy replaces the unstamped original, which goes to the bin
 const sId = upload('PV-OW1-0001 Shop.pdf', 'application/pdf', pdf);
 post({ token: owner, since: 0, push: [voucher(52, { cancelled: '2026-10-09T21:00:00', cancelledBy: 'Owner', stamped: true, fileId: sId })] });
-assert.deepStrictEqual([drv().files[vId].trashed, pathOf(sId), drv().files[sId].name], [true, `${TOP} / Payments & receipts / Cancelled`, 'CANCELLED PV-OW1-0001 Shop.pdf']);
+assert.deepStrictEqual([drv().files[vId].trashed, pathOf(sId), drv().files[sId].name], [true, PAY_OLD, 'CANCELLED PV-OW1-0001 Shop.pdf']);
 post({ token: owner, since: 0, push: [exp('E-OW1-0100', 53, 'x', { deleted: '2026-10-09T21:05:00', deletedBy: 'Owner' })] });
-assert.deepStrictEqual([pathOf(sId), pathOf(pId)], [`${TOP} / Deleted entries`, `${TOP} / Deleted entries`], "a deleted entry's files");
-// an employee: one folder with everything (profile, ID, their payments' slips); replaced photos go to Changes;
-// renamed, the folder follows; deleted by an admin, the whole folder goes to Deleted employees
+const PAY_GONE = `${TOP} / 09 DELETED ENTRIES / 01 PAYMENTS / 2026 / 2026-10 OCTOBER / 2026-10-08 SHOP (E-OW1-0100)`;
+assert.deepStrictEqual([pathOf(sId), pathOf(pId)], [PAY_GONE, PAY_GONE], "a deleted entry's files: the same folders under DELETED ENTRIES");
+assert.strictEqual(Object.values(drv().folders).filter(f => f.name === '2026-10-08 SHOP (E-OW1-0100)' && !f.trashed).length, 1, 'the folders the move emptied went to the bin');
+// an employee: one folder, a folder per kind of document; their payments' slips by year, one folder per payment;
+// replaced photos in CHANGES (the same folders); renamed, the folder follows; deleted by an admin, the whole folder moves
 const prof1 = upload('profile.png'), prof2 = upload('profile.png'), idp = upload('id.png'), slip = upload('PV-OW1-0002 John.pdf', 'application/pdf', pdf);
-const john = (u, extra = {}) => worker('W-OW1-0100', u, 'x', { name: 'John Doe', ...extra }), JOHN = `${TOP} / Employees / John Doe (W-OW1-0100)`;
+const john = (u, extra = {}) => worker('W-OW1-0100', u, 'x', { name: 'John Doe', ...extra }), JOHN = `${TOP} / 03 EMPLOYEES / JOHN DOE (W-OW1-0100)`;
 assert.deepStrictEqual(post({ token: owner, since: 0, push: [john(60), file('F-OW1-0110', 60, 'x', { for: 'W-OW1-0100', type: 'profile', fileId: prof1, createdAt: '2026-10-08T09:00:00' }),
   file('F-OW1-0111', 60, 'x', { for: 'W-OW1-0100', type: 'idphoto', fileId: idp, createdAt: '2026-10-08T09:00:00' }),
   exp('E-OW1-0102', 60, 'x', { worker: 'W-OW1-0100', pay: 'advance' }), file('F-OW1-0112', 60, 'x', { for: 'E-OW1-0102', type: 'slip', mime: 'application/pdf', name: 'PV-OW1-0002 John.pdf', fileId: slip })] }).refused, []);
-assert.deepStrictEqual([pathOf(prof1), pathOf(idp), pathOf(slip)], [JOHN, JOHN, JOHN], 'everything about one employee in their folder');
+assert.deepStrictEqual([pathOf(prof1), pathOf(idp), pathOf(slip)], [`${JOHN} / PROFILE PHOTO`, `${JOHN} / ID DOCUMENT`, `${JOHN} / PAYMENT SLIPS / 2026 / 2026-10-08 ADVANCE (E-OW1-0102)`]);
+assert.deepStrictEqual([drv().files[prof1].name, drv().files[idp].name], ['PROFILE PHOTO 2026-10-08.png', 'ID DOCUMENT 2026-10-08.png'], 'named by kind and date');
 post({ token: owner, since: 0, push: [file('F-OW1-0113', 61, 'x', { for: 'W-OW1-0100', type: 'profile', fileId: prof2, createdAt: '2026-10-09T09:00:00' })] });
-assert.deepStrictEqual([pathOf(prof1), pathOf(prof2)], [`${JOHN} / Changes`, JOHN], 'a replaced profile photo goes to Changes');
+assert.deepStrictEqual([pathOf(prof1), pathOf(prof2), drv().files[prof2].name], [`${JOHN} / CHANGES / PROFILE PHOTO`, `${JOHN} / PROFILE PHOTO`, 'PROFILE PHOTO 2026-10-09.png'], 'a replaced photo goes to CHANGES');
 post({ token: owner, since: 0, push: [john(62, { name: 'John D. Doe' })] });
-assert.strictEqual(pathOf(idp), `${TOP} / Employees / John D. Doe (W-OW1-0100)`, 'renamed: the folder follows');
+assert.strictEqual(pathOf(idp), `${TOP} / 03 EMPLOYEES / JOHN D. DOE (W-OW1-0100) / ID DOCUMENT`, 'renamed: the folder follows');
 post({ token: owner, since: 0, push: [john(63, { name: 'John D. Doe', deleted: '2026-10-09T22:00:00', deletedBy: 'Owner' })] });
-const GONE = `${TOP} / Deleted employees / John D. Doe (W-OW1-0100)`;
-assert.deepStrictEqual([pathOf(idp), pathOf(slip), pathOf(prof1)], [GONE, GONE, `${GONE} / Changes`], 'a deleted employee: the whole folder');
-// the company letterhead: the newest in Company, older ones in Company / Changes
+const GONE = `${TOP} / 08 DELETED EMPLOYEES / JOHN D. DOE (W-OW1-0100)`;
+assert.deepStrictEqual([pathOf(idp), pathOf(slip), pathOf(prof1)], [`${GONE} / ID DOCUMENT`, `${GONE} / PAYMENT SLIPS / 2026 / 2026-10-08 ADVANCE (E-OW1-0102)`, `${GONE} / CHANGES / PROFILE PHOTO`], 'a deleted employee: the whole folder');
+// the company letterhead: the newest in COMPANY / LETTERHEAD, older ones in COMPANY / CHANGES / LETTERHEAD
 const lh1 = upload('letterhead.png'), lh2 = upload('letterhead.png');
 post({ token: owner, since: 0, push: [file('F-OW1-0120', 70, 'x', { for: 'settings', type: 'letterhead', fileId: lh1, createdAt: '2026-10-09T10:00:00' }), file('F-OW1-0121', 70, 'x', { for: 'settings', type: 'letterhead', fileId: lh2, createdAt: '2026-10-09T11:00:00' })] });
-assert.deepStrictEqual([pathOf(lh1), pathOf(lh2)], [`${TOP} / Company / Changes`, `${TOP} / Company`]);
-// the Files tab lists every file with its status and folder
+assert.deepStrictEqual([pathOf(lh1), pathOf(lh2), drv().files[lh2].name], [`${TOP} / 04 COMPANY / CHANGES / LETTERHEAD`, `${TOP} / 04 COMPANY / LETTERHEAD`, 'LETTERHEAD 2026-10-09.png']);
+// the Files tab lists every file with its status and folder, in the folders' order
 const ftab = rows('Files');
-assert.ok(ftab.some(r => r[3] === 'PV-OW1-0001 Shop.pdf' && r[6] === 'Cancelled' && r[7] === 'Deleted entries' && r[9].endsWith(sId + '/view')), 'the Files tab shows the cancelled voucher of a deleted entry');
-assert.ok(ftab.some(r => r[2] === 'Profile photo' && r[6] === 'Replaced by a newer one' && r[7] === 'Deleted employees / John D. Doe (W-OW1-0100) / Changes'), 'and where a replaced photo is');
-// once per layout: everything is refiled and emptied old folders are removed
+assert.ok(ftab.some(r => r[3] === 'CANCELLED PV-OW1-0001 Shop.pdf' && r[6] === 'Cancelled' && r[7] === PAY_GONE.slice(TOP.length + 3) && r[9].endsWith(sId + '/view')), 'the Files tab shows the cancelled voucher of a deleted entry');
+assert.ok(ftab.some(r => r[3] === 'PROFILE PHOTO 2026-10-08.png' && r[6] === 'Replaced by a newer one' && r[7] === '08 DELETED EMPLOYEES / JOHN D. DOE (W-OW1-0100) / CHANGES / PROFILE PHOTO'), 'and where a replaced photo is');
+const order = ftab.slice(3).map(r => r[7]).filter(Boolean);
+assert.deepStrictEqual(order, order.slice().sort((a, b) => a.localeCompare(b)), 'in the order of the folders');
+// once per layout: everything is refiled and empty folders go to the bin
 drv().files[pId].folder = drv().files.SHEET.folder; gas.props.FILES_LAYOUT = '0';
-const oldMonth = Object.keys(drv().folders).find(k => drv().folders[k].name === TOP);
-drv().folders.oldfolder = { name: '2026-09', parent: oldMonth };
+const top = Object.keys(drv().folders).find(k => drv().folders[k].name === TOP);
+drv().folders.oldfolder = { name: 'Payments & receipts', parent: top }; drv().folders.oldmonth = { name: '2026-10', parent: 'oldfolder' };
 post({ token: owner, since: 0, push: [] });
-assert.deepStrictEqual([pathOf(pId), drv().folders.oldfolder.trashed], [`${TOP} / Deleted entries`, true], 'refiled once; the emptied old folder removed');
+assert.deepStrictEqual([pathOf(pId), drv().folders.oldmonth.trashed, drv().folders.oldfolder.trashed], [PAY_GONE, true, true], 'refiled once; old empty folders binned');
 // the company folder follows the company's name
 post({ token: owner, since: 0, push: [{ id: 'settings', k: 'S', u: 80, d: { company: 'Acme Works Ltd', pass: { salt: 's', hash: 'h' } } }] });
-assert.strictEqual(pathOf('SHEET'), 'Acme Super App', 'renamed with the company');
+assert.strictEqual(pathOf('SHEET'), 'ACME SUPER APP', 'renamed with the company');
 // a Drive problem (the file was removed by hand) never stops a sync
 const upX = post({ op: 'upload', token: owner, name: 'x.png', mime: 'image/png', data: png });
 post({ token: owner, since: 0, push: [exp('E-OW1-0101', 53, 'x'), file('F-OW1-0102', 53, 'x', { for: 'E-OW1-0101', fileId: upX.fileId })] });
