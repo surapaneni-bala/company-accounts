@@ -553,9 +553,11 @@ folder, which is temporary:
   `inkOnly`), kept on THIS PHONE ONLY (IndexedDB `mysig-<login id>`, dropped at sign-out with the file copies, never synced).
   Slip / final settlement forms show "Sign Approved by with my saved signature" (ticked by default); `drawApproved` puts it
   above the Approved-by line with "Digitally signed by <name> · <date>"; a correction uses it automatically.
-- **Attachments and payment photos can be replaced or removed** (admins, `CHANGEABLE`): F gets `replaced`/`removed` (+By),
-  the new one `replaces`; nothing is thrown away — script v12 files old versions under CHANGES; a file not uploaded yet is
-  simply dropped. Signed papers keep the cancel/correct flow.
+- **A file on an entry is only deleted by putting a new one in its place** (owner, 10 Oct 2026; admins): an attachment or
+  payment photo → "Delete and replace" (new upload with `replaces`; the old F gets `replaced`, filed under CHANGES by script
+  v12); a signed voucher/receipt/slip → "Delete and make a new one" (`replacePaper` opens the signing screen with
+  `data-replaces`; the old paper is cancelled with `cancelReason: 'replaced by <no>'` only once the new one is made). Closing
+  either without a new one changes nothing. There is no plain Remove (the sheet still understands `removed`).
 - **After an edit cancels a signed paper** (owner, 10 Oct 2026): saving opens the slip screen for the new one (`needsNewPaper`,
   `cancelledWhyNote`); until it is made the payment shows "New slip/voucher/receipt needed". The cancelled F keeps `was`
   ({amount, cur} signed for). **Admins may correct instead of a new signature** (owner's choice): `correctPaper` makes a 2-page
