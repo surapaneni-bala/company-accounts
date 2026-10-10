@@ -1,6 +1,6 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **2efcc99473** (employees, files, vouchers, app lock, statements, days not
+Last updated **9 Oct 2026** · live app version **d77e8f3e38** (employees, files, vouchers, app lock, statements, days not
 worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections, cancelled vouchers, Drive filing cabinet, Files tab) · script in this repo: **version 10** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
@@ -329,6 +329,11 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 10 Oct 2026 (late night): live app d77e8f3e38** (script still v10): an upload reply without a Drive number is
+never saved as a file record (cause of the stuck profile photo); refused records without one are re-sent. Checked on the
+release build: the owner's record (no fileId, photo on the phone) is repaired and filed; a reply without a number is retried
+and ends filed; opens offline; all tests pass.
+
 **RELEASED 10 Oct 2026 (night): live app 2efcc99473** (script still v10): refused records say why; an admin's phone
 sends a complete-but-refused file again once (`resendRefused`). Checked on the release build: the recreated stuck profile
 photo is refused, resent, accepted and filed; opens offline; all tests pass.
@@ -340,8 +345,11 @@ but its F record was refused). Not reproduced with a fresh setup (add employee +
 The message named it: file "image.jpg" (F-8BM-0013). Fix on branch `refused-why`: the message says why (record
 incomplete, or the sheet has no note of uploading its Drive file — checked against `VALID`), and an admin's phone sends a
 complete-but-refused file again once per opening (`resendRefused`), so its record carries a file the sheet knows (proven on the
-mock with an unknown fileId: refused → resent → accepted → filed). Root cause still unknown (not reproduced fresh); the
-original loose file stays in the company folder for the owner to delete.
+mock with an unknown fileId: refused → resent → accepted → filed). The resend didn't apply: the message then said "its record is
+incomplete (no Drive file number)". CAUSE: `uploadFiles` trusted any `ok: true` reply and saved the F record with
+`res.fileId` undefined (reproduced on 2efcc99473 by answering one upload like the sheet's doGet: { ok, app, version } — e.g. a
+redirect that turns the POST into a GET). FIX (`fileid-guard`): a reply without a valid Drive number is a failed upload
+(retried); a refused F record without one is re-sent from the phone. The loose copy stays in the company folder.
 
 **RELEASED 10 Oct 2026 (later): live app 2bfc6f2c61 + sheet script v10** (`main` merged from `drive-tree`): the Drive
 filing cabinet (§3 "Drive layout"). App change: only the Delete employee wording and NEWEST_SCRIPT 10. Checked: all tests
