@@ -432,7 +432,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '2b6c1dc9cd'; // filled in by tools/build.js
+const APP_VERSION = 'a48ee52cd2'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -818,7 +818,8 @@ function itemRow(x, k, showDate) {
   const title = isE ? x.reason : `From ${projName(x.project)}`;
   const acct = accountOf(x.mode);
   const sub = [isE ? x.paidTo : x.note, isE ? x.location : '', `${ACCOUNT_ICON[acct]} ${acct}`, ...when].filter(Boolean).map(esc).join(' · ');
-  const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '') + (waitingFor(x.id).length ? '<i class="tag warn">Change waiting</i>' : '');
+  const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '') + (waitingFor(x.id).length ? '<i class="tag warn">Change waiting</i>' : '')
+    + (needsNewPaper(x.id) ? `<i class="tag bad">New ${isE ? (x.pay ? 'slip' : 'voucher') : 'receipt'} needed</i>` : '');
   return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${esc(x.id)}">
     <span class="dot">${isE ? '−' : '+'}</span>
     <span class="main"><span class="t"><span class="tt">${esc(title)}</span>${tags}</span><span class="s">${sub}</span></span>
@@ -1064,6 +1065,7 @@ function saveExpense(f) {
     if (!can('edit')) return requestChange('E', old, rec, changes, by);
     update({ expenses: S.expenses.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
+    if (needsNewPaper(old.id)) { render(); return slipSheet('E', old.id); } // its signed paper was cancelled: make the new one now
   } else {
     const [[id], seq] = nextIds('E', 1, S.seq);
     update({
@@ -1169,6 +1171,7 @@ function saveCredit(f) {
     if (!can('edit')) return requestChange('R', old, rec, changes, by);
     update({ credits: S.credits.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
+    if (needsNewPaper(old.id)) { render(); return slipSheet('R', old.id); } // its signed receipt was cancelled: make the new one now
   } else {
     const [[id], seq] = nextIds('R', 1, S.seq);
     update({
@@ -1583,8 +1586,17 @@ async function stampCancelled(blob, f) {
   }
   return pages.length ? new Blob([pdfPages(pages)], { type: 'application/pdf' }) : blob;
 }
-// the note on an entry whose paper was cancelled and not made again yet
-const cancelledNote = id => { const fs = filesFor(id).filter(f => SIGNED_TYPES.includes(f.type)); return fs.length && fs.every(f => f.cancelled) ? '<p class="note">🧾 The voucher was cancelled because this entry was changed after it was signed. Make a new one below — the person signs again.</p>' : ''; };
+// the paper an entry gets: a payment voucher, a salary slip, an advance voucher, a final settlement, or a receipt
+const paperTitle = (k, r) => (k === 'R' ? 'Receipt' : r.pay ? { salary: 'Salary slip', advance: 'Advance voucher', settlement: 'Final settlement' }[r.pay] : 'Payment voucher');
+const paperSigner = (k, r) => (k === 'R' ? (myName() || r.by || 'the person receiving') : r.paidTo);
+// an entry whose signed paper was cancelled (it changed after signing) and not made again yet
+const needsNewPaper = id => { const fs = filesFor(id).filter(f => SIGNED_TYPES.includes(f.type)); return fs.length > 0 && fs.every(f => f.cancelled); };
+const cancelledWhyNote = (k, r) => `The old ${paperTitle(k, r).toLowerCase()} was cancelled because this payment changed after it was signed. ${esc(paperSigner(k, r))} signs again for <b>${esc(money(r.amount, r.cur))}</b>.`;
+const cancelledNote = id => {
+  if (!needsNewPaper(id)) return '';
+  const e = S.expenses.find(x => x.id === id), k = e ? 'E' : 'R', r = e || S.credits.find(x => x.id === id);
+  return r ? `<p class="note">🧾 ${cancelledWhyNote(k, r)} Make the new one below.</p>` : '';
+};
 
 // A cancelled paper already in Drive gets a stamped copy, sent up in its place (an admin's phone; the sheet bins the
 // unstamped original). Tried once per opening of the app: a file this phone can't fetch now waits for the next time.
@@ -2229,9 +2241,9 @@ function receiptSpec(r, party) {
 function slipSheet(k, id) {
   const r = S[COLL[k]].find(x => x.id === id);
   if (!r) return;
-  const isR = k === 'R', who = isR ? (myName() || r.by || 'the person receiving') : r.paidTo;
-  const title = isR ? 'Receipt' : r.pay ? { salary: 'Salary slip', advance: 'Advance voucher', settlement: 'Final settlement' }[r.pay] : 'Payment voucher';
+  const isR = k === 'R', who = paperSigner(k, r), title = paperTitle(k, r);
   openSheet(`${head(title, isR ? 'in' : 'out', r.id)}
+    ${needsNewPaper(id) ? `<p class="note">${cancelledWhyNote(k, r)}</p>` : ''}
     <p class="hint">${esc(money(r.amount, r.cur))} · ${esc(isR ? projName(r.project) : `${r.paidTo} — ${r.reason}`)}</p>
     <form data-form="slip" data-kind="${k}" data-id="${esc(id)}">
       ${isR ? textField('party', 'Received from', 'Who paid the money?', '', false) : ''}

@@ -148,8 +148,17 @@ async function stampCancelled(blob, f) {
   }
   return pages.length ? new Blob([pdfPages(pages)], { type: 'application/pdf' }) : blob;
 }
-// the note on an entry whose paper was cancelled and not made again yet
-const cancelledNote = id => { const fs = filesFor(id).filter(f => SIGNED_TYPES.includes(f.type)); return fs.length && fs.every(f => f.cancelled) ? '<p class="note">🧾 The voucher was cancelled because this entry was changed after it was signed. Make a new one below — the person signs again.</p>' : ''; };
+// the paper an entry gets: a payment voucher, a salary slip, an advance voucher, a final settlement, or a receipt
+const paperTitle = (k, r) => (k === 'R' ? 'Receipt' : r.pay ? { salary: 'Salary slip', advance: 'Advance voucher', settlement: 'Final settlement' }[r.pay] : 'Payment voucher');
+const paperSigner = (k, r) => (k === 'R' ? (myName() || r.by || 'the person receiving') : r.paidTo);
+// an entry whose signed paper was cancelled (it changed after signing) and not made again yet
+const needsNewPaper = id => { const fs = filesFor(id).filter(f => SIGNED_TYPES.includes(f.type)); return fs.length > 0 && fs.every(f => f.cancelled); };
+const cancelledWhyNote = (k, r) => `The old ${paperTitle(k, r).toLowerCase()} was cancelled because this payment changed after it was signed. ${esc(paperSigner(k, r))} signs again for <b>${esc(money(r.amount, r.cur))}</b>.`;
+const cancelledNote = id => {
+  if (!needsNewPaper(id)) return '';
+  const e = S.expenses.find(x => x.id === id), k = e ? 'E' : 'R', r = e || S.credits.find(x => x.id === id);
+  return r ? `<p class="note">🧾 ${cancelledWhyNote(k, r)} Make the new one below.</p>` : '';
+};
 
 // A cancelled paper already in Drive gets a stamped copy, sent up in its place (an admin's phone; the sheet bins the
 // unstamped original). Tried once per opening of the app: a file this phone can't fetch now waits for the next time.
@@ -794,9 +803,9 @@ function receiptSpec(r, party) {
 function slipSheet(k, id) {
   const r = S[COLL[k]].find(x => x.id === id);
   if (!r) return;
-  const isR = k === 'R', who = isR ? (myName() || r.by || 'the person receiving') : r.paidTo;
-  const title = isR ? 'Receipt' : r.pay ? { salary: 'Salary slip', advance: 'Advance voucher', settlement: 'Final settlement' }[r.pay] : 'Payment voucher';
+  const isR = k === 'R', who = paperSigner(k, r), title = paperTitle(k, r);
   openSheet(`${head(title, isR ? 'in' : 'out', r.id)}
+    ${needsNewPaper(id) ? `<p class="note">${cancelledWhyNote(k, r)}</p>` : ''}
     <p class="hint">${esc(money(r.amount, r.cur))} · ${esc(isR ? projName(r.project) : `${r.paidTo} — ${r.reason}`)}</p>
     <form data-form="slip" data-kind="${k}" data-id="${esc(id)}">
       ${isR ? textField('party', 'Received from', 'Who paid the money?', '', false) : ''}
