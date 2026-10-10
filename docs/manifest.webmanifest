@@ -1,6 +1,6 @@
 {
-  "name": "Company Accounts",
-  "short_name": "Accounts",
+  "name": "Brookfield",
+  "short_name": "Brookfield",
   "description": "Company expenses and money received in USD and SSP. Works offline.",
   "start_url": "./",
   "scope": "./",

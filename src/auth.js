@@ -369,7 +369,7 @@ async function bioCheck() {
 async function bioOn() {
   try {
     const make = navigator.credentials.create({ publicKey: {
-      challenge: rndBytes(32), rp: { name: 'Company Accounts' }, user: { id: rndBytes(16), name: session.user.username, displayName: session.user.name },
+      challenge: rndBytes(32), rp: { name: 'Brookfield' }, user: { id: rndBytes(16), name: session.user.username, displayName: session.user.name },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
       authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
     const c = await Promise.race([make, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 65000))]);

@@ -23,10 +23,10 @@ const TEST_SWAPS = {
   ],
   'update.js': [["const CACHE_PREFIX = 'accounts-';", "const CACHE_PREFIX = 'test-accounts-';"]],
   'sw.js': [["const PREFIX = 'accounts-';", "const PREFIX = 'test-accounts-';"]],
-  'manifest.webmanifest': [['"name": "Company Accounts"', '"name": "TEST Accounts"'], ['"short_name": "Accounts"', '"short_name": "TEST"']],
+  'manifest.webmanifest': [['"name": "Brookfield"', '"name": "TEST Brookfield"'], ['"short_name": "Brookfield"', '"short_name": "TEST"']],
   'shell.html': [
-    ['<title>Company Accounts</title>', '<title>TEST Accounts</title>'],
-    ['<meta name="apple-mobile-web-app-title" content="Accounts">', '<meta name="apple-mobile-web-app-title" content="TEST">'],
+    ['<title>Brookfield</title>', '<title>TEST Brookfield</title>'],
+    ['<meta name="apple-mobile-web-app-title" content="Brookfield">', '<meta name="apple-mobile-web-app-title" content="TEST">'],
     ['<body>', '<body>\n<div style="position:sticky;top:0;z-index:20;background:#7A1FA2;color:#fff;font-weight:800;text-align:center;padding:8px 12px;font-size:14px">🧪 TEST COPY — practice here. Your real records are not touched.</div>'],
   ],
 };

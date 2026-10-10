@@ -1,6 +1,6 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **d77e8f3e38** (employees, files, vouchers, app lock, statements, days not
+Last updated **9 Oct 2026** · live app version **42619100e8** (employees, files, vouchers, app lock, statements, days not
 worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections, cancelled vouchers, Drive filing cabinet, Files tab) · script in this repo: **version 10** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
@@ -24,7 +24,7 @@ report.
 
 | | |
 |---|---|
-| App (installable, works offline) | https://app.b-e-p-l.com/ (custom domain since 8 Oct 2026; the old github.io address redirects there) |
+| App "Brookfield" (installable, works offline) | https://app.b-e-p-l.com/ (custom domain since 8 Oct 2026; the old github.io address redirects there) |
 | Repository | https://github.com/surapaneni-bala/company-accounts (GitHub Pages serves `docs/`) |
 | Sheet script to paste into Apps Script | https://app.b-e-p-l.com/sheet-script.txt (a copy of apps-script/Code.gs made by the build) |
 | Check which app version is live | `https://app.b-e-p-l.com/version.json` (also names `home`, the app's address) |
@@ -328,6 +328,12 @@ git commit -m "fix: …" && git push
 - Commits use the `type: description` style. No attribution lines (the owner's setting).
 
 ## 6. Where things stand (open items)
+
+**RELEASED 10 Oct 2026 (night, last): live app 42619100e8** (script still v10): after an edit cancels a signed paper the
+new-paper screen opens ("New slip needed" until made); admins can correct instead (2-page CORRECTED PDF, see §3); the app is
+named **Brookfield** (manifest name/short_name, iPhone title, page title, Face ID prompt; the test copy is "TEST Brookfield" /
+"TEST"). Checked on the release build: edit → screen → admin correction → 2 pages, filed, synced; opens offline; all tests.
+Installed apps keep their old name until reinstalled (Android may update it by itself after some days).
 
 **RELEASED 10 Oct 2026 (late night): live app d77e8f3e38** (script still v10): an upload reply without a Drive number is
 never saved as a file record (cause of the stuck profile photo); refused records without one are re-sent. Checked on the
