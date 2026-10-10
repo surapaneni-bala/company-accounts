@@ -432,7 +432,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'fc5f8e5156'; // filled in by tools/build.js
+const APP_VERSION = '3e60e73d94'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1600,6 +1600,20 @@ async function queueStamps() {
     } catch { /* not on this phone and no internet: next time the app is opened */ }
   }
 }
+// A complete file record the sheet refuses (an admin's: never for the login) names a Drive file the sheet has no note of
+// uploading. The file is sent again from this phone — once per opening of the app — so its record carries one it knows.
+const resent = new Set();
+async function resendRefused(ids) {
+  if (!can('settings')) return;
+  for (const f of S.files.filter(x => ids.has(x.id) && VALID.F(x) && !resent.has(x.id))) {
+    resent.add(f.id);
+    const rec = await fileGet(f.id).catch(() => null);
+    if (!rec || !rec.data) continue; // not on this phone: the message says which file it is
+    await filePut({ ...rec, pending: true });
+    outbox = [...outbox, { ...f }];
+  }
+  uploadFiles();
+}
 // Deleting is for good (nothing brings a record back), so files still waiting for a deleted record are never sent.
 const forDeleted = id => Object.keys(SYNC_KEYS).some(k => (S[k] || []).some(r => r.id === id && r.deleted));
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
@@ -2346,7 +2360,10 @@ function recordLabel(id) {
   if (id === 'settings') return 'company settings';
   for (const [key, k] of Object.entries(SYNC_KEYS)) {
     const r = (S[key] || []).find(x => recId(key, x) === id);
-    if (r) return `${k === 'F' ? `file "${r.name}"` : k === 'L' ? 'a Change Log line' : k === 'C' ? 'an approval request' : whatIs(k, r)} (${id})`;
+    if (!r) continue;
+    // why, as far as this phone can tell: the record is incomplete, or (a file) the sheet does not know its Drive file
+    const why = !VALID[k](r) ? ` — its record is incomplete${k === 'F' && !r.fileId ? ' (no Drive file number)' : ''}` : k === 'F' ? ' — the sheet has no note of uploading its Drive file' : '';
+    return `${k === 'F' ? `file "${r.name}"` : k === 'L' ? 'a Change Log line' : k === 'C' ? 'an approval request' : whatIs(k, r)} (${id})${why}`;
   }
   return id;
 }
@@ -2517,6 +2534,7 @@ async function syncNow() {
     save();
     if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
     lastRefused = refused;
+    if (notAllowed.size) resendRefused(notAllowed);
     if (S.dirty.some(id => !sent.has(id))) syncAgain = true; // more waiting than one batch: send the rest straight after
     sync = notAllowed.size ? { state: 'error', at: stampSec(), err: notAllowedMsg([...notAllowed]) }
       : refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };
