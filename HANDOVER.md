@@ -1,6 +1,6 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **109de932dd** (employees, files, vouchers, app lock, statements, days not
+Last updated **9 Oct 2026** · live app version **5ea1c3e51c** (employees, files, vouchers, app lock, statements, days not
 worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections, cancelled vouchers, Drive filing cabinet, Files tab, office manager without money, my signature, replace/remove attachments) · script in this repo: **version 12** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
@@ -331,6 +331,10 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 10 Oct 2026 (late): live app 5ea1c3e51c** (script still v12): a file on an entry is only deleted by putting a new
+one in its place (Delete and replace / Delete and make a new one). Checked on the release build: no file chosen or screen
+closed → nothing changes; replaced → old kept (paper cancelled "replaced by PV-…", filed under CHANGES); opens offline.
+
 **RELEASED 10 Oct 2026 (night): live app 109de932dd + sheet script v12**: an admin's saved signature on Approved by
 (this phone only, "Digitally signed"), attachments and payment photos can be replaced or removed (old ones under CHANGES).
 Checked: all tests; in Chrome as a signed-in admin the signature from the owner's photo comes out see-through and lands on the
@@ -553,9 +557,11 @@ folder, which is temporary:
   `inkOnly`), kept on THIS PHONE ONLY (IndexedDB `mysig-<login id>`, dropped at sign-out with the file copies, never synced).
   Slip / final settlement forms show "Sign Approved by with my saved signature" (ticked by default); `drawApproved` puts it
   above the Approved-by line with "Digitally signed by <name> · <date>"; a correction uses it automatically.
-- **Attachments and payment photos can be replaced or removed** (admins, `CHANGEABLE`): F gets `replaced`/`removed` (+By),
-  the new one `replaces`; nothing is thrown away — script v12 files old versions under CHANGES; a file not uploaded yet is
-  simply dropped. Signed papers keep the cancel/correct flow.
+- **A file on an entry is only deleted by putting a new one in its place** (owner, 10 Oct 2026; admins): an attachment or
+  payment photo → "Delete and replace" (new upload with `replaces`; the old F gets `replaced`, filed under CHANGES by script
+  v12); a signed voucher/receipt/slip → "Delete and make a new one" (`replacePaper` opens the signing screen with
+  `data-replaces`; the old paper is cancelled with `cancelReason: 'replaced by <no>'` only once the new one is made). Closing
+  either without a new one changes nothing. There is no plain Remove (the sheet still understands `removed`).
 - **After an edit cancels a signed paper** (owner, 10 Oct 2026): saving opens the slip screen for the new one (`needsNewPaper`,
   `cancelledWhyNote`); until it is made the payment shows "New slip/voucher/receipt needed". The cancelled F keeps `was`
   ({amount, cur} signed for). **Admins may correct instead of a new signature** (owner's choice): `correctPaper` makes a 2-page
