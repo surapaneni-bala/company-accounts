@@ -65,6 +65,7 @@ const ACTIONS = {
   mySigRemove: () => removeMySig(),
   replacePaper: b => replacePaper(b.dataset.id),
   deleteOld: b => deleteOld(b.dataset.id),
+  uncancelPaper: b => uncancelPaper(b.dataset.id),
   changeCode: () => changeCode(),
   bioOn: () => bioOn(),
   bioOff: () => bioOff(),

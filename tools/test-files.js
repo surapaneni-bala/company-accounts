@@ -199,6 +199,21 @@ const PAY3 = `${TOP} / 01 PAYMENTS / 2026 / 2026-10 OCTOBER / 2026-10-08 SHOP (E
 post({ token: owner, since: 0, push: [attach('F-OW1-0131', att2, 91, { replaces: 'F-OW1-0130', createdAt: '2026-10-09T12:00:00' }), attach('F-OW1-0130', att1, 91, { replaced: '2026-10-09T12:00:00', replacedBy: 'Owner' }), attach('F-OW1-0132', att3, 91, { removed: '2026-10-09T12:01:00', removedBy: 'Owner' })] });
 assert.deepStrictEqual([pathOf(att2), pathOf(att1), pathOf(att3)], [PAY3, PAY3_OLD, PAY3_OLD], 'the new attachment in place; the replaced and the removed ones under CHANGES');
 assert.ok(rows('Files').some(r => r[9].endsWith(att3 + '/view') && r[6] === 'Removed') && rows('Files').some(r => r[9].endsWith(att1 + '/view') && r[6] === 'Replaced by a newer one'), 'the Files tab says so');
+// an admin takes a cancel back (the change did not touch the money): the original comes out of the bin and is filed as in
+// use again; the stamped copy goes to the bin
+const v2 = upload('PV-OW1-0003 Shop.pdf', 'application/pdf', pdf), s2 = upload('PV-OW1-0003 Shop.pdf', 'application/pdf', pdf);
+const v2rec = (u, extra = {}) => file('F-OW1-0200', u, 'x', { for: 'E-OW1-0200', type: 'voucher', mime: 'application/pdf', name: 'PV-OW1-0003 Shop.pdf', no: 'PV-OW1-0003', fileId: v2, createdAt: '2026-10-08T09:00:00', ...extra });
+post({ token: owner, since: 0, push: [exp('E-OW1-0200', 95, 'x'), v2rec(95)] });
+post({ token: owner, since: 0, push: [v2rec(96, { cancelled: '2026-10-10T21:00:00', cancelledBy: 'Owner', stamped: true, fileId: s2 })] });
+assert.strictEqual(drv().files[v2].trashed, true, 'the stamped copy replaced the original');
+assert.strictEqual(post({ op: 'original', token: m.token, id: 'F-OW1-0200' }).ok, false, 'only an admin brings it back');
+assert.strictEqual(post({ op: 'original', token: owner, id: 'F-OW1-0100' }).ok, false, 'not a paper whose cancel stands with no number');
+assert.strictEqual(post({ op: 'original', token: owner, id: 'F-OW1-0200' }).fileId, v2, 'the original comes out of the bin');
+post({ token: owner, since: 0, push: [v2rec(97)] });
+const PAY4 = `${TOP} / 01 PAYMENTS / 2026 / 2026-10 OCTOBER / 2026-10-08 SHOP (E-OW1-0200)`;
+assert.deepStrictEqual([drv().files[v2].trashed, pathOf(v2), drv().files[v2].name, drv().files[s2].trashed], [false, PAY4, 'PV-OW1-0003 Shop.pdf', true], 'in use again, not renamed CANCELLED; the stamped copy in the bin');
+assert.strictEqual(post({ op: 'original', token: owner, id: 'F-OW1-0200' }).ok, false, 'nothing more to bring back');
+assert.strictEqual(post({ op: 'file', token: owner, id: 'F-OW1-0200' }).fileId, v2, 'a fetched file says which Drive file it is');
 // the company folder follows the company's name
 post({ token: owner, since: 0, push: [{ id: 'settings', k: 'S', u: 80, d: { company: 'Acme Works Ltd', pass: { salt: 's', hash: 'h' } } }] });
 assert.strictEqual(pathOf('SHEET'), 'ACME SUPER APP', 'renamed with the company');

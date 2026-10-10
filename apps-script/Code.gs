@@ -75,7 +75,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 12; // shown when the web app link is opened in a browser
+const VERSION = 13; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -263,7 +263,8 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     const row = [p.id, p.k, u, seq, JSON.stringify(d)];
     if (i === undefined) { index[p.id] = out.length; out.push(row); } else { out[i] = row; }
     touched.push(p.id);
-    if (p.k === 'F' && before && before.fileId !== d.fileId && d.stamped) trash.push(before.fileId); // the unstamped original of a cancelled paper
+    // the unstamped original of a cancelled paper once its stamped copy is in; the stamped copy once an admin takes the cancel back
+    if (p.k === 'F' && before && before.fileId !== d.fileId && (d.stamped || before.stamped)) trash.push(before.fileId);
   });
   const pull = out.filter(r => Number(r[3]) > since).map(toRec_);
   return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused, touched: touched, trash: trash };
@@ -287,7 +288,7 @@ const SIGNED_OUT = 'You have been signed out. Please sign in again.';
 const WRONG_LOGIN = 'Wrong username or password. After 5 wrong tries, wait 15 minutes.';
 
 function account_(req) {
-  if (req.op === 'upload' || req.op === 'file') return files_(req);
+  if (req.op === 'upload' || req.op === 'file' || req.op === 'original') return files_(req);
   if (req.op === 'login') return login_(req);
   if (req.op === 'setup') return setupLogins_(req);
   const me = req.token ? sessionUser_(String(req.token)) : null;
@@ -321,11 +322,30 @@ function files_(req) {
     saveRows_(FILES_TAB, FILE_COLS, rowsOf_(FILES_TAB, FILE_COLS).concat([{ fileId: file.getId(), uid: who.user ? who.user.id : '' }]));
     return { ok: true, fileId: file.getId() };
   }
+  if (req.op === 'original') return original_(who.user, String(req.id || ''));
   const row = readAll_(syncTab_(SpreadsheetApp.getActive())).filter(r => r[0] === String(req.id) && r[1] === 'F')[0];
   const rec = row && view_(who.user, toRec_(row));
   if (!rec) return { ok: false, error: 'This file is not available to you.' };
   const blob = DriveApp.getFileById(rec.d.fileId).getBlob();
-  return { ok: true, name: rec.d.name, mime: rec.d.mime, data: Utilities.base64Encode(blob.getBytes()) };
+  return { ok: true, fileId: rec.d.fileId, name: rec.d.name, mime: rec.d.mime, data: Utilities.base64Encode(blob.getBytes()) };
+}
+// An admin takes back the cancel of a paper (owner, 10 Oct 2026: a voucher the client already has stays valid). Its
+// unstamped original went to the bin when the stamped copy came in, so it comes back out: the newest binned upload before
+// the stamped copy that carries the paper's number. The phone then names it in the file record (and the stamped copy is binned).
+function original_(user, id) {
+  if (user && user.role !== 'admin') return { ok: false, error: 'Only an admin can do this.' };
+  const row = readAll_(syncTab_(SpreadsheetApp.getActive())).filter(r => r[0] === id && r[1] === 'F')[0];
+  const f = row ? JSON.parse(row[4]) : null;
+  if (!f || !f.stamped || !f.no) return { ok: false, error: 'This paper has no original in the bin to bring back.' };
+  const ids = rowsOf_(FILES_TAB, FILE_COLS).map(r => String(r.fileId));
+  for (let i = ids.lastIndexOf(f.fileId) - 1; i >= 0; i--) {
+    let file = null;
+    try { file = DriveApp.getFileById(ids[i]); } catch (err) { continue; } // gone for good
+    if (!file.isTrashed() || file.getName().replace(/\.\w+$/, '').split(' ').indexOf(f.no) < 0) continue;
+    file.setTrashed(false);
+    return { ok: true, fileId: ids[i] };
+  }
+  return { ok: false, error: 'The original of ' + f.no + ' is no longer in the Google Drive bin (Drive keeps it for 30 days).' };
 }
 function uploads_() {
   const map = Object.create(null);
