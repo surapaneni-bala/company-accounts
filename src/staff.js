@@ -262,10 +262,12 @@ function finalSheet(id) {
     <form data-form="final" data-id="${esc(id)}">
       ${sigField(w.name)}
       ${photoField(w.name)}
+      ${mySigField()}
       <p class="err"></p>
       <button class="btn in">Make the final settlement (PDF)</button>
     </form>`);
   sigPad($('#sheet canvas.sig'));
+  showMySigField();
 }
 async function saveFinal(f) {
   const w = workerOf(f.dataset.id), cv = $('canvas.sig', f);
@@ -273,7 +275,7 @@ async function saveFinal(f) {
   const btn = $('button.btn', f);
   btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
   try {
-    const st = workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo: framedPhoto(f) });
+    const st = { ...workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo: framedPhoto(f) }), approval: await approvalFrom(f) };
     const blob = await renderStatement(st), name = `${st.no} ${fileSafe(w.name)} final settlement.pdf`;
     await keepFile({ for: w.id, type: 'statement', no: st.no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
     await keepTakenPhoto(f, w.id, st.no);

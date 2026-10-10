@@ -61,6 +61,9 @@ const ACTIONS = {
   nudge: b => nudgeStamp(b.dataset.k, b.dataset.d),
   stampSave: () => saveStampPlace(),
   correctPaper: b => correctPaper(b.dataset.kind, b.dataset.id),
+  mySig: async () => { if (await unlock('Enter your code to change your signature.')) mySigSheet(); },
+  mySigRemove: () => removeMySig(),
+  removeFile: b => removeFile(b.dataset.id),
   changeCode: () => changeCode(),
   bioOn: () => bioOn(),
   bioOff: () => bioOff(),
@@ -130,6 +133,8 @@ document.addEventListener('change', e => {
     refreshRate(t.form);
   }
   if (t.dataset.attach !== undefined) attachPicked(t);
+  if (t.dataset.mysig !== undefined) saveMySig(t);
+  if (t.dataset.replace !== undefined) replaceFile(t);
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);

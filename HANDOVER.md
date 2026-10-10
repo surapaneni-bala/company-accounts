@@ -1,7 +1,7 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **00040affd8** (employees, files, vouchers, app lock, statements, days not
-worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections, cancelled vouchers, Drive filing cabinet, Files tab, office manager without money) · script in this repo: **version 11** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
+Last updated **9 Oct 2026** · live app version **109de932dd** (employees, files, vouchers, app lock, statements, days not
+worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections, cancelled vouchers, Drive filing cabinet, Files tab, office manager without money, my signature, replace/remove attachments) · script in this repo: **version 12** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
 
@@ -331,6 +331,12 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 10 Oct 2026 (night): live app 109de932dd + sheet script v12**: an admin's saved signature on Approved by
+(this phone only, "Digitally signed"), attachments and payment photos can be replaced or removed (old ones under CHANGES).
+Checked: all tests; in Chrome as a signed-in admin the signature from the owner's photo comes out see-through and lands on the
+voucher's Approved by line; a replaced and a removed attachment are tagged and filed under CHANGES; opens offline. Owner:
+paste v12 (sheet-script.txt?v=16; covers v11) + New version; add My signature on each phone/computer used to make vouchers.
+
 **RELEASED 10 Oct 2026 (last): live app 00040affd8 + sheet script v11**: the office manager sees no account balances
 (see §3 Logins). Checked: test-auth (what she receives, can't add money received); her phone in Chrome drops the money it held,
 fetches again, shows no balance card / Projects tab / sheet link, keeps expenses and employees, no reload loop; opens offline.
@@ -543,6 +549,13 @@ folder, which is temporary:
   folders. New uploads wait in the company folder until their record files them. The **Files** tab lists every upload in
   folder order with status, folder and link. Nothing is thrown away except the unstamped original of a cancelled paper.
 - **Deleting an employee** (admins: Delete employee; office manager: Ask to delete): their payments stay in the accounts.
+- **My signature** (admins, owner 10 Oct 2026): Settings → My signature, from a photo (paper removed by `cleanStamp`, cut by
+  `inkOnly`), kept on THIS PHONE ONLY (IndexedDB `mysig-<login id>`, dropped at sign-out with the file copies, never synced).
+  Slip / final settlement forms show "Sign Approved by with my saved signature" (ticked by default); `drawApproved` puts it
+  above the Approved-by line with "Digitally signed by <name> · <date>"; a correction uses it automatically.
+- **Attachments and payment photos can be replaced or removed** (admins, `CHANGEABLE`): F gets `replaced`/`removed` (+By),
+  the new one `replaces`; nothing is thrown away — script v12 files old versions under CHANGES; a file not uploaded yet is
+  simply dropped. Signed papers keep the cancel/correct flow.
 - **After an edit cancels a signed paper** (owner, 10 Oct 2026): saving opens the slip screen for the new one (`needsNewPaper`,
   `cancelledWhyNote`); until it is made the payment shows "New slip/voucher/receipt needed". The cancelled F keeps `was`
   ({amount, cur} signed for). **Admins may correct instead of a new signature** (owner's choice): `correctPaper` makes a 2-page

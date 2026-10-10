@@ -191,6 +191,14 @@ const top = Object.keys(drv().folders).find(k => drv().folders[k].name === TOP);
 drv().folders.oldfolder = { name: 'Payments & receipts', parent: top }; drv().folders.oldmonth = { name: '2026-10', parent: 'oldfolder' };
 post({ token: owner, since: 0, push: [] });
 assert.deepStrictEqual([pathOf(pId), drv().folders.oldmonth.trashed, drv().folders.oldfolder.trashed], [PAY_GONE, true, true], 'refiled once; old empty folders binned');
+// an attachment replaced or removed: the old one is kept, filed under CHANGES in the same folders
+const att1 = upload('invoice.pdf', 'application/pdf', pdf), att2 = upload('invoice2.pdf', 'application/pdf', pdf), att3 = upload('note.png');
+const attach = (id, fileId, u, extra = {}) => file(id, u, 'x', { for: 'E-OW1-0103', type: 'attachment', fileId, createdAt: '2026-10-08T12:00:00', ...extra });
+post({ token: owner, since: 0, push: [exp('E-OW1-0103', 90, 'x'), attach('F-OW1-0130', att1, 90), attach('F-OW1-0132', att3, 90)] });
+const PAY3 = `${TOP} / 01 PAYMENTS / 2026 / 2026-10 OCTOBER / 2026-10-08 SHOP (E-OW1-0103)`, PAY3_OLD = `${TOP} / 01 PAYMENTS / CHANGES / 2026 / 2026-10 OCTOBER / 2026-10-08 SHOP (E-OW1-0103)`;
+post({ token: owner, since: 0, push: [attach('F-OW1-0131', att2, 91, { replaces: 'F-OW1-0130', createdAt: '2026-10-09T12:00:00' }), attach('F-OW1-0130', att1, 91, { replaced: '2026-10-09T12:00:00', replacedBy: 'Owner' }), attach('F-OW1-0132', att3, 91, { removed: '2026-10-09T12:01:00', removedBy: 'Owner' })] });
+assert.deepStrictEqual([pathOf(att2), pathOf(att1), pathOf(att3)], [PAY3, PAY3_OLD, PAY3_OLD], 'the new attachment in place; the replaced and the removed ones under CHANGES');
+assert.ok(rows('Files').some(r => r[9].endsWith(att3 + '/view') && r[6] === 'Removed') && rows('Files').some(r => r[9].endsWith(att1 + '/view') && r[6] === 'Replaced by a newer one'), 'the Files tab says so');
 // the company folder follows the company's name
 post({ token: owner, since: 0, push: [{ id: 'settings', k: 'S', u: 80, d: { company: 'Acme Works Ltd', pass: { salt: 's', hash: 'h' } } }] });
 assert.strictEqual(pathOf('SHEET'), 'ACME SUPER APP', 'renamed with the company');
