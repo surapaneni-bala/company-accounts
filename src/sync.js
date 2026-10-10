@@ -36,7 +36,10 @@ function recordLabel(id) {
   if (id === 'settings') return 'company settings';
   for (const [key, k] of Object.entries(SYNC_KEYS)) {
     const r = (S[key] || []).find(x => recId(key, x) === id);
-    if (r) return `${k === 'F' ? `file "${r.name}"` : k === 'L' ? 'a Change Log line' : k === 'C' ? 'an approval request' : whatIs(k, r)} (${id})`;
+    if (!r) continue;
+    // why, as far as this phone can tell: the record is incomplete, or (a file) the sheet does not know its Drive file
+    const why = !VALID[k](r) ? ` — its record is incomplete${k === 'F' && !r.fileId ? ' (no Drive file number)' : ''}` : k === 'F' ? ' — the sheet has no note of uploading its Drive file' : '';
+    return `${k === 'F' ? `file "${r.name}"` : k === 'L' ? 'a Change Log line' : k === 'C' ? 'an approval request' : whatIs(k, r)} (${id})${why}`;
   }
   return id;
 }
@@ -207,6 +210,7 @@ async function syncNow() {
     save();
     if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
     lastRefused = refused;
+    if (notAllowed.size) resendRefused(notAllowed);
     if (S.dirty.some(id => !sent.has(id))) syncAgain = true; // more waiting than one batch: send the rest straight after
     sync = notAllowed.size ? { state: 'error', at: stampSec(), err: notAllowedMsg([...notAllowed]) }
       : refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };
