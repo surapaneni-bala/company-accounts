@@ -25,7 +25,7 @@ let res = post({ key, since: 0, push: [settings, old, income] });
 assert.ok(res.ok, res.error);
 
 /* ---------- before logins: everything works exactly as before ---------- */
-assert.deepStrictEqual([get().version, get().logins, get().required], [10, false, false]);
+assert.deepStrictEqual([get().version, get().logins, get().required], [11, false, false]);
 res = post({ key, since: 0, push: [] });
 assert.strictEqual(res.pull.length, 3, 'company code still gives everything');
 assert.deepStrictEqual([res.logins, res.me, res.refused], [false, null, []]);
@@ -152,9 +152,16 @@ res = post({ token: storeTok, since: 0, push: [exp(evil, 40, { uid: storeId }), 
 assert.deepStrictEqual(res.refused.sort(), ['E-SK1-0009', evil].sort(), 'odd ids, or an id that differs inside the record, are refused');
 assert.ok(!post({ key, since: 0, push: [] }).pull.some(p => p.id === evil || p.id === 'E-SK1-0009'), 'and never stored');
 
-/* ---------- office manager: sees everything; her edits wait for an admin's approval ---------- */
+/* ---------- office manager: runs staff and salaries but never sees the company's money; her edits wait for approval ---------- */
+post({ token: ownerTok, since: 0, push: [{ id: 'P-OW1-0001', k: 'P', u: 19, d: { id: 'P-OW1-0001', name: 'Warehouse', value: 1000, valueCur: 'USD' } }] });
 res = post({ token: mary2, since: 0, push: [] });
-assert.deepStrictEqual(res.pull.map(p => p.id).sort(), post({ key, since: 0, push: [] }).pull.map(p => p.id).sort(), 'she sees every record');
+const everything = post({ key, since: 0, push: [] }).pull;
+const money = p => ['R', 'T'].includes(p.k) || (p.k === 'C' && ['R', 'T'].includes(p.d.kind)) || (p.k === 'F' && /^[RT]-/.test(p.d.for)) || (p.k === 'L' && p.d.uid !== maryId);
+assert.deepStrictEqual(res.pull.map(p => p.id).sort(), everything.filter(p => !money(p)).map(p => p.id).sort(), 'she sees every record except the money');
+assert.ok(everything.some(p => p.k === 'R') && !res.pull.some(p => p.k === 'R' || p.k === 'T'), 'no money received, no cash/bank moves');
+assert.deepStrictEqual(res.pull.filter(p => p.k === 'P').map(p => [p.d.name, p.d.value, p.d.valueCur]), [['Warehouse', undefined, undefined]], 'projects by name only, without their value');
+assert.strictEqual(res.sheet, '', 'and no link to the Google Sheet (it shows every balance)');
+assert.deepStrictEqual(post({ token: mary2, since: 0, push: [{ ...income, u: 30, id: 'R-AG1-0001', d: { ...income.d, id: 'R-AG1-0001', uid: maryId } }] }).refused, ['R-AG1-0001'], 'nor can she record money received');
 assert.ok(!res.pull.find(p => p.k === 'S').d.pass, 'no company password for non-admins');
 res = post({ token: mary2, since: 0, push: [{ ...old, u: 20, d: { ...old.d, amount: 60, editedBy: 'Mary' } }, { ...income, u: 21, d: { ...income.d, deleted: 'x' } }] });
 assert.deepStrictEqual(res.refused.sort(), ['E-OLD-0001', 'R-OLD-0001'], 'no direct edits, no deletes');

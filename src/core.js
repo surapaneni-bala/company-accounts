@@ -342,7 +342,7 @@ function viewHome() {
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
   return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
-  ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">Your expenses — only you and the office see them.</p>`}
+  ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? 'Expenses — the balances are kept by the admins.' : 'Your expenses — only you and the office see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
     ${signedIn() ? `<button class="eye" data-act="${hide ? 'reveal' : 'conceal'}">${hide ? '👁 Show' : '🙈 Hide'}</button>` : ''}

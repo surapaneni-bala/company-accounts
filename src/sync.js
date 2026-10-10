@@ -30,7 +30,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 10; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 11; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';
@@ -189,6 +189,16 @@ function applyPull(pull) {
   return changed;
 }
 
+// A login without the money right (the office manager since script v11) must not keep money it received before: once
+// the sheet stops sending it, everything not waiting to be sent leaves this phone and what it may see is fetched again.
+function dropMoney() {
+  if (!signedIn() || can('money') || (S.link.v || 0) < 11) return false;
+  const unsent = new Set(S.dirty);
+  if (![...S.credits, ...S.transfers].some(r => !unsent.has(r.id)) && !S.projects.some(p => p.value)) return false;
+  S = { ...S, ...onlyUnsent(), link: { ...S.link, since: 0 } };
+  save(); dropFileCopies(); render(); scheduleSync(0);
+  return true;
+}
 function scheduleSync(ms = SYNC_DELAY_MS) { if (S && S.link) { clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, ms); } }
 async function syncNow() {
   if (!S || !S.link) return;
@@ -206,7 +216,8 @@ async function syncNow() {
     const accepted = new Set(res.kinds || OLD_SERVER_KINDS), notAllowed = new Set(res.refused || []);
     const refused = new Set([...push.filter(p => !accepted.has(p.k)).map(p => p.id), ...notAllowed]);
     const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link;
-    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || S.link.sheet, v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id)) };
+    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id)) };
+    if (dropMoney()) return; // this login may not hold the company's money: fetch again what it may see
     save();
     if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
     lastRefused = refused;
@@ -254,7 +265,7 @@ function syncCard() {
     <p class="muted">${esc(syncText())}${outbox.length ? ` ${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload: ${esc(uploadWhy())}` : ''}</p>
     ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>'
       : (S.link.v || 2) < NEWEST_SCRIPT && can('settings') ? `<p class="note">A newer Google Sheet script is ready (version ${NEWEST_SCRIPT}; this sheet runs ${S.link.v || 2}). It is needed for employees, files, vouchers and days not worked. <button class="link" data-act="howUpdate">Show me how</button></p>` : ''}
-    ${S.link.sheet ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
+    ${S.link.sheet && can('money') ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
     <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="syncNow">Sync now</button>${can('phones') ? '<button class="btn ghost" data-act="invite">📲 Add a phone 🔒</button>' : ''}</div>
     ${signedIn() ? '' : '<p class="center"><button class="link" data-act="disconnect">Disconnect this device 🔒</button></p>'}</section>`;
 }

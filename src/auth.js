@@ -8,7 +8,7 @@ const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper'
 const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Sees everything · adds entries · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
 const RIGHTS = {
   admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones', 'staff'],
-  manager: ['add', 'suggest', 'date', 'money', 'projects', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval
+  manager: ['add', 'suggest', 'date', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval; no money (balances)
   store: ['add'],
 };
 const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [] };

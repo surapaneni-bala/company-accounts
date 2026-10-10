@@ -75,7 +75,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 10; // shown when the web app link is opened in a browser
+const VERSION = 11; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -173,7 +173,7 @@ function sync_(req) {
   } catch (err) { console.error('Filing in Drive: ' + err.message); }
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
   return {
-    ok: true, version: VERSION, seq: result.seq, sheet: user && user.role === 'store' ? '' : ss.getUrl(), kinds: KINDS,
+    ok: true, version: VERSION, seq: result.seq, sheet: user && user.role !== 'admin' ? '' : ss.getUrl(), kinds: KINDS, // the sheet shows every balance
     pull: result.pull.map(r => view_(user, r)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F'))), refused: result.refused, me: user ? public_(user) : null,
     logins: !!user || users_().length > 0, warning: warning,
   };
@@ -196,9 +196,21 @@ function who_(req) {
 function view_(user, rec) {
   if (!user || user.role === 'admin') return rec;
   if (rec.k === 'S') return { id: rec.id, k: rec.k, u: rec.u, d: { company: rec.d.company } };
-  if (user.role === 'manager') return rec;
+  if (user.role === 'manager') return managerView_(user, rec);
   if (rec.k === 'F' && BRAND_FILES.indexOf(rec.d.type) >= 0) return rec; // everyone's vouchers carry the letterhead and stamp
   return (rec.k === 'E' || rec.k === 'L' || rec.k === 'F') && rec.d.uid === user.id ? rec : null;
+}
+// The office manager runs staff and salaries but never sees the company's money (owner, 10 Oct 2026): no money received,
+// no cash ↔ bank moves, no project values, no files or change requests about those, and only her own Change Log lines
+// (the log names amounts received). Without money in and moves, no balance can be worked out from what she holds.
+const MONEY_KINDS = ['R', 'T'];
+function managerView_(user, rec) {
+  if (MONEY_KINDS.indexOf(rec.k) >= 0) return null;
+  if (rec.k === 'P') { const d = Object.assign({}, rec.d); delete d.value; delete d.valueCur; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
+  if (rec.k === 'C' && MONEY_KINDS.indexOf(rec.d.kind) >= 0) return null;
+  if (rec.k === 'F' && /^[RT]-/.test(String(rec.d.for))) return null;
+  if (rec.k === 'L' && rec.d.uid !== user.id) return null;
+  return rec;
 }
 // What each login may change. before = the stored copy (null for a new record).
 function allowed_(user, p, before) {
@@ -206,7 +218,7 @@ function allowed_(user, p, before) {
   if (before) return false; // only admins change what is already there (an office manager's edit is a change request)
   if (p.d.uid !== user.id || p.d.deleted) return false; // a new record carries its sender's login and isn't born deleted
   if (p.k === 'F' && BRAND_FILES.indexOf(p.d.type) >= 0) return false; // the company letterhead and stamp: admins only
-  if (user.role === 'manager') return ['E', 'R', 'T', 'P', 'L', 'C', 'W', 'F', 'A'].indexOf(p.k) >= 0 && (p.k !== 'C' || p.d.status === 'waiting');
+  if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0));
   return p.k === 'E' || p.k === 'L' || p.k === 'F'; // store keeper: own expenses, notes and their receipts
 }
 
