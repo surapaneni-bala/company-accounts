@@ -432,7 +432,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'c236fdcc7e'; // filled in by tools/build.js
+const APP_VERSION = '92820162cb'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -871,6 +871,7 @@ function projCard(p) {
 function viewSheet() {
   return `${moveBanner()}<div class="stack">
       ${syncCard()}
+      ${can('staff') || can('settings') ? checkPaperCard() : ''}
       ${loginsCard()}
       <section class="card pad" ${can('import') ? '' : 'hidden'}>
         <h3>📥 Old entries</h3>
@@ -1620,13 +1621,14 @@ async function correctPaper(k, id) {
     update({ seq });
     const spec = k === 'R' ? receiptSpec(r, '') : r.pay ? payslipSpec(r) : voucherSpec(r);
     const me = myName() || S.lastBy || 'an admin', was = old.was ? slipMoney(old.was.amount, old.was.cur) : 'the amount on the original';
-    const page1 = await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: null, photo, preparedBy: r.by, ref: r.id,
+    const check = newCheck();
+    const page1 = await renderSlip({ ...spec, no, check, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: null, photo, preparedBy: r.by, ref: r.id,
       badge: `CORRECTED — REPLACES ${old.no || ''}`.trim(), approvedBy: me, ...await mySignature().then(sig => { const a = sig ? { sig, name: me, date: fmtDate(today()) } : null; return { approval: a, preparedSign: a && r.by === me ? a : null }; }),
       signNote: [`Signed by ${paperSigner(k, r)} on ${fmtDate(String(old.createdAt).slice(0, 10))} for ${was}.`, 'The signed original is on page 2.',
         `Corrected by ${me} (admin) on ${fmtDate(today())}:`, `${was} → ${slipMoney(r.amount, r.cur)}`] });
     const blob = new Blob([pdfPages([...await pdfJpegs(page1), ...oldPages])], { type: 'application/pdf' });
     const name = `${no} ${fileSafe(spec.signName || '')} corrected.pdf`;
-    await keepFile({ for: r.id, type, no, name, mime: 'application/pdf', corrects: old.id }, await blob.arrayBuffer());
+    await keepFile({ for: r.id, type, no, name, mime: 'application/pdf', corrects: old.id, check }, await blob.arrayBuffer());
     readySheet(`${spec.title} — corrected`, no, blob, name);
   } catch (e) { toast(e.offline ? 'No internet — the original is not on this phone yet.' : e.message); }
 }
@@ -1800,6 +1802,22 @@ async function deleteOld(id) {
   toast('Old version deleted ✓');
   closeSheet();
 }
+// Sheet tab: is a paper someone shows you genuine? Its number and check code are looked up in the company's records.
+const checkPaperCard = () => `<section class="card pad"><h3>🔎 Check a paper</h3>
+  <p class="muted">Shown a voucher, receipt, slip or statement? Type its number and check code (both are printed on it).</p>
+  <form data-form="checkPaper"><div class="two"><input name="no" placeholder="PV-…" autocomplete="off" autocapitalize="characters" spellcheck="false" required><input name="code" placeholder="XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
+  <button class="btn ghost" style="margin-top:10px">Check</button><div class="check-result"></div></form></section>`;
+function checkPaper(f) {
+  const no = clean(f.elements.no.value).toUpperCase(), code = clean(f.elements.code.value).toUpperCase().replace(/[^0-9A-Z]/g, '');
+  const p = live(S.files).filter(x => String(x.no || '').toUpperCase() === no).pop(), box = $('.check-result', f);
+  if (!p) { box.innerHTML = `<p class="note">❌ No paper ${esc(no)} was made in the app — or it hasn't reached this phone yet (sync, then check again).</p>`; return; }
+  const en = entryOf(p.for), w = workerOf(p.for), about = en ? whatIs(en[0], en[1]) : w ? `Employee ${w.name}` : p.for;
+  const open = `<button type="button" class="btn ghost" data-act="showFile" data-id="${esc(p.id)}" style="margin-top:8px">Open the original to compare</button>`;
+  if (!p.check) { box.innerHTML = `<p class="note">ℹ️ ${esc(no)} was made before check codes. Compare the paper with the original.</p><p class="muted">${esc(about)}</p>${open}`; return; }
+  if (code !== p.check.replace('-', '')) { box.innerHTML = `<p class="note">⚠️ <b>NOT GENUINE:</b> the check code does not match ${esc(no)}. The real one is for: ${esc(about)}.</p>${open}`; return; }
+  box.innerHTML = `<p class="note">✅ <b>Genuine ${esc(no)}</b>${p.cancelled ? ` — but <b>CANCELLED</b> (${esc(cancelledWhy(p))})` : ''}. For: ${esc(about)}. Made ${esc(fmtAbs(String(p.createdAt).slice(0, 16)))}${p.by ? ` by ${esc(p.by)}` : ''}.</p>
+    <p class="muted">Compare the amount and names on the paper with the original:</p>${open}`;
+}
 // set a file aside: one not uploaded yet is simply dropped; one in Drive is kept there and marked
 async function setAside(f, how) {
   if (outbox.some(o => o.id === f.id)) { await fileDel(f.id).catch(() => {}); outbox = outbox.filter(o => o.id !== f.id); return; }
@@ -1818,8 +1836,12 @@ async function mySignature() {
   if (mySigCache && mySigCache.id === id) return mySigCache.canvas;
   const rec = await fileGet(id).catch(() => null);
   if (!rec) return null;
-  const img = await imgFrom(new Blob([rec.data], { type: 'image/png' })), c = document.createElement('canvas');
-  c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
+  const img = await imgFrom(new Blob([rec.data], { type: 'image/png' })), c = document.createElement('canvas'), g = c.getContext('2d');
+  c.width = img.naturalWidth; c.height = img.naturalHeight; g.drawImage(img, 0, 0);
+  // always in black ink, whatever pen it was written with (the owner's choice); the soft edges keep their see-through
+  const d = g.getImageData(0, 0, c.width, c.height), px = d.data;
+  for (let i = 0; i < px.length; i += 4) { px[i] = px[i + 1] = px[i + 2] = 17; }
+  g.putImageData(d, 0, 0);
   mySigCache = { id, canvas: c };
   return c;
 }
@@ -1869,13 +1891,14 @@ async function approvalFrom(f) {
   const sig = await mySignature();
   return sig ? { sig, name: myName(), date: fmtDate(today()) } : null;
 }
-// a saved signature above a Prepared / Approved by line, and a note under it that it was signed digitally
-function drawSigned(g, x, y, w, a) {
+// a saved signature above a Prepared / Approved by line, sealed with the paper's number, and a note that it was signed digitally
+function drawSigned(g, x, y, w, a, seal) {
   if (!a || !a.sig) return;
-  const s = a.sig, k = Math.min(w / s.width, 90 / s.height, 1);
+  const s = a.sig, k = Math.min(w / s.width, 90 / s.height, 1), box = { x, y: y - 36 - s.height * k, w: s.width * k, h: s.height * k };
   g.save(); g.globalCompositeOperation = 'multiply'; // like ink: the stamp under it still shows
-  g.drawImage(s, x, y - 36 - s.height * k, s.width * k, s.height * k);
+  g.drawImage(s, box.x, box.y, box.w, box.h);
   g.restore();
+  sealOver(g, box, seal);
   g.fillStyle = SLIP_C.label; g.font = `italic 400 16px ${SANS}`; g.fillText(`Digitally signed by ${a.name} · ${a.date}`, x, y + 52);
 }
 
@@ -2018,9 +2041,24 @@ function inkOnly(cv) {
 // far that the pen line turns thick (the pad draws 3 screen points wide, i.e. 3 × the screen's pixel density)
 function placeSignature(g, sig, x, lineY, maxW, maxH) {
   const ink = sig && inkOnly(sig);
-  if (!ink) return;
-  const k = Math.min(maxW / ink.width, Math.min(maxH, 130) / ink.height, 1.4 / (devicePixelRatio || 1));
-  g.drawImage(ink, x, lineY - 4 - ink.height * k, ink.width * k, ink.height * k);
+  if (!ink) return null;
+  const k = Math.min(maxW / ink.width, Math.min(maxH, 130) / ink.height, 1.4 / (devicePixelRatio || 1)), w = ink.width * k, h = ink.height * k;
+  g.drawImage(ink, x, lineY - 4 - h, w, h);
+  return { x, y: lineY - 4 - h, w, h };
+}
+/* ---------- against forgery ----------
+   Every signed paper gets a random check code, printed on it and kept with its record: a made-up paper has none that
+   matches, and an altered one shows when opened next to the original (Sheet tab → Check a paper). Every signature on it
+   is overprinted with fine text naming the paper and its code, so a signature lifted from it carries the wrong number. */
+const CHECK_ABC = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+const newCheck = () => { const b = crypto.getRandomValues(new Uint8Array(8)), s = [...b].map(x => CHECK_ABC[x % CHECK_ABC.length]).join(''); return `${s.slice(0, 4)}-${s.slice(4)}`; };
+function sealOver(g, box, text) {
+  if (!box || !text) return;
+  g.save(); g.beginPath(); g.rect(box.x - 6, box.y - 6, box.w + 12, box.h + 12); g.clip();
+  g.fillStyle = 'rgba(38,48,107,.3)'; g.font = `600 9px ${SANS}`;
+  const row = `${text} · `.repeat(Math.ceil((box.w + 60) / (g.measureText(`${text} · `).width)) + 1);
+  for (let yy = box.y, n = 0; yy < box.y + box.h + 12; yy += 11, n++) g.fillText(row, box.x - 6 - (n % 3) * 17, yy);
+  g.restore();
 }
 const boxPath = (g, x, y, w, h, r = 14) => { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); };
 // letter-spaced text, drawn one letter at a time (works on every phone); align 'left' | 'right' | 'center'
@@ -2148,6 +2186,8 @@ async function renderSlip(s) {
   if (s.badge) { g.font = `700 20px ${SANS}`; spaced(g, s.badge, L + 110, y + 75, 1.6); } // e.g. CORRECTED — REPLACES PV-…
   g.font = `600 18px ${SANS}`; g.fillStyle = C.label; spaced(g, 'NO.', R, y + 16, 1.6, 'right');
   g.fillStyle = C.accent; g.font = `700 36px ${SANS}`; g.textAlign = 'right'; g.fillText(s.no, R, y + 52); g.textAlign = 'left';
+  if (s.check) { g.font = `600 16px ${SANS}`; g.fillStyle = C.label; spaced(g, `CHECK ${s.check}`, R, y + 80, 1.4, 'right'); }
+  const seal = s.check ? `${s.no} · ${s.check}` : '';
   y += 110;
   const lineFont = 28, lineH = 46, h4 = 270;
   const lineFontOf = l => `${l.strong ? 700 : 500} ${l.muted ? lineFont - 4 : lineFont}px ${SANS}`;
@@ -2208,7 +2248,7 @@ async function renderSlip(s) {
       let ny = t + 74;
       s.signNote.forEach((line, i) => { g.fillStyle = i >= 2 ? C.accent : C.ink; g.font = `${i === 3 ? 700 : 500} 22px ${SANS}`; wrapText(g, line, split - L - 48).forEach(w => { g.fillText(w, L + 24, ny); ny += 32; }); });
     } else {
-      placeSignature(g, s.receivedSign ? s.receivedSign.sig : s.sig, L + 24, lineY, lineW, lineY - t - 52);
+      sealOver(g, placeSignature(g, s.receivedSign ? s.receivedSign.sig : s.sig, L + 24, lineY, lineW, lineY - t - 52), seal);
       g.fillStyle = C.ink; g.fillRect(L + 24, lineY, lineW, 1.5);
       g.font = `600 24px ${SANS}`; g.fillText(s.signName || '', L + 24, lineY + 30);
       g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText(s.receivedSign ? `Digitally signed · ${s.receivedSign.date}` : 'Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
@@ -2226,13 +2266,13 @@ async function renderSlip(s) {
   if (stampImg) drawStamp(g, stampImg, R - 112, y - 82, 216, s.stampDate, stampImg.place);
   [['Prepared by', s.preparedBy || '', s.preparedSign], ['Checked by', s.checkedBy || '', null], ['Approved by', s.approvedBy || (s.approval ? s.approval.name : ''), s.approval]].forEach(([lab, name, sign], i) => {
     const x = L + i * colW;
-    drawSigned(g, x, y, colW - 40, sign);
+    drawSigned(g, x, y, colW - 40, sign, seal);
     g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
     g.fillRect(x, y, colW - 40, 1.5);
     slipLabel(g, lab, x, y + 30); // drawn after the stamp, so the words stay readable
   });
   g.fillStyle = C.label; g.font = `400 18px ${SANS}`;
-  g.fillText(`Ref ${s.ref} · made in the company app on ${fmtAbs(stamp())}`, L, y + 76);
+  g.fillText(`Ref ${s.ref} · made in the company app on ${fmtAbs(stamp())}${s.check ? ` · check code ${s.check}` : ''}`, L, y + 76);
   // the page: exactly as tall as the slip, on the letterhead's header with the watermark behind the form
   const H = y + 104;
   const page = document.createElement('canvas');
@@ -2335,7 +2375,7 @@ async function renderStatement(st) {
     if (s.photo) { g.fillStyle = C.navy; g.fillRect(split, y, 1.5, h); photoInto(g, s.photo, split + 14, y + 14, R - split - 28, h - 28); }
     const lineY = y + h - 50, lineW = Math.min(520, split - L - 48);
     slipLabel(g, s.label, L + 24, y + 34);
-    placeSignature(g, s.sig, L + 24, lineY, lineW, lineY - y - 50);
+    sealOver(g, placeSignature(g, s.sig, L + 24, lineY, lineW, lineY - y - 50), st.check ? `${st.no} · ${st.check}` : '');
     g.fillStyle = C.ink; g.fillRect(L + 24, lineY, lineW, 1.5);
     g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; g.fillText(s.name, L + 24, lineY + 30);
     g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText('Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
@@ -2344,7 +2384,7 @@ async function renderStatement(st) {
     if (stampImg) drawStamp(g, stampImg, R - 104, y - 45, 180, st.stampDate, stampImg.place); // clear of the page number below
     [['Prepared by', st.preparedBy || '', st.preparedSign], ['Checked by', st.checkedBy || '', null], ['Approved by', st.approval ? st.approval.name : '', st.approval]].forEach(([lab, name, sign], i) => {
       const x = L + i * colW;
-      drawSigned(g, x, y, colW - 40, sign);
+      drawSigned(g, x, y, colW - 40, sign, st.check ? `${st.no} · ${st.check}` : '');
       g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
       g.fillRect(x, y, colW - 40, 1.5);
       slipLabel(g, lab, x, y + 30);
@@ -2352,7 +2392,7 @@ async function renderStatement(st) {
     y += 40;
   }
   // on every page's bottom edge: where it came from (left) and the page number (right)
-  const made = `${st.ref ? `Ref ${st.ref} · ` : ''}made in the company app on ${fmtAbs(stamp())}`;
+  const made = `${st.ref ? `Ref ${st.ref} · ` : ''}made in the company app on ${fmtAbs(stamp())}${st.check ? ` · check code ${st.check}` : ''}`;
   pages.forEach((c, i) => {
     const p = c.getContext('2d'); p.fillStyle = C.label; p.font = `500 18px ${SANS}`;
     p.fillText(made, L, limit + 20); p.textAlign = 'right'; p.fillText(`Page ${i + 1} of ${pages.length}`, R, limit + 20);
@@ -2449,11 +2489,12 @@ async function saveSlip(f) {
     const spec = w ? workerStatementSpec(w, { final: true, no, sig: cv, photo, date: r.at.slice(0, 10), docs: { [r.id]: no } })
       : k === 'R' ? receiptSpec(r, clean(f.elements.party.value)) : r.pay ? payslipSpec(r) : voucherSpec(r);
     if (w) spec.signName = w.name;
-    const signs = { approval: receiving ? null : mine, preparedSign: mine && (w ? spec.preparedBy : r.by) === mine.name ? mine : null, checkedBy: checkedFrom(f) };
+    const check = newCheck();
+    const signs = { approval: receiving ? null : mine, preparedSign: mine && (w ? spec.preparedBy : r.by) === mine.name ? mine : null, checkedBy: checkedFrom(f), check };
     if (w) Object.assign(spec, signs);
     const blob = w ? await renderStatement(spec) : await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, preparedBy: r.by, ref: r.id, receivedSign: receiving ? mine : null, ...signs });
     const name = `${no} ${fileSafe(spec.signName || '')}.pdf`;
-    await keepFile({ for: r.id, type, no, name, mime: 'application/pdf', ...(f.dataset.replaces ? { replaces: f.dataset.replaces } : {}) }, await blob.arrayBuffer());
+    await keepFile({ for: r.id, type, no, name, mime: 'application/pdf', check, ...(f.dataset.replaces ? { replaces: f.dataset.replaces } : {}) }, await blob.arrayBuffer());
     const replaced = f.dataset.replaces && fileMeta(f.dataset.replaces);
     if (replaced && !replaced.cancelled) await patchFile(replaced, { cancelled: stampSec(), cancelledBy: myName() || S.lastBy || '', cancelReason: `replaced by ${no}`, was: { amount: r.amount, cur: r.cur } });
     await keepTakenPhoto(f, r.id, no);
@@ -3666,9 +3707,9 @@ async function saveFinal(f) {
   btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
   try {
     const spec = workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo: framedPhoto(f) }), mine = await approvalFrom(f);
-    const st = { ...spec, approval: mine, preparedSign: mine && spec.preparedBy === mine.name ? mine : null, checkedBy: checkedFrom(f) };
+    const st = { ...spec, approval: mine, preparedSign: mine && spec.preparedBy === mine.name ? mine : null, checkedBy: checkedFrom(f), check: newCheck() };
     const blob = await renderStatement(st), name = `${st.no} ${fileSafe(w.name)} final settlement.pdf`;
-    await keepFile({ for: w.id, type: 'statement', no: st.no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
+    await keepFile({ for: w.id, type: 'statement', no: st.no, name, mime: 'application/pdf', check: st.check }, await blob.arrayBuffer());
     await keepTakenPhoto(f, w.id, st.no);
     update({ log: logWith([['Final settlement', w.id, `${w.name}: final settlement statement ${st.no} signed`]]) });
     readySheet(st.title, st.no, blob, name);
@@ -4114,7 +4155,7 @@ const ACTIONS = {
   payeeStatement: b => payeeStatement(b.dataset.name),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);

@@ -438,6 +438,7 @@ function projCard(p) {
 function viewSheet() {
   return `${moveBanner()}<div class="stack">
       ${syncCard()}
+      ${can('staff') || can('settings') ? checkPaperCard() : ''}
       ${loginsCard()}
       <section class="card pad" ${can('import') ? '' : 'hidden'}>
         <h3>📥 Old entries</h3>

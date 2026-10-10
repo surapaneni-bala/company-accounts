@@ -1,6 +1,6 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **ade0ed2452** (employees, files, vouchers, app lock, statements, days not
+Last updated **9 Oct 2026** · live app version **7e78815726** (employees, files, vouchers, app lock, statements, days not
 worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections, cancelled vouchers, Drive filing cabinet, Files tab, office manager without money, my signature, replace/remove attachments) · script in this repo: **version 12** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
@@ -331,6 +331,10 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 10 Oct 2026 (night, final): live app 7e78815726** (script still v12): check codes + sealed signatures against
+forgery, Check a paper, the saved signature in black. Checked on the release build: code printed and stored, Genuine /
+NOT GENUINE / not found answered right, saved signature black; opens offline; all tests.
+
 **RELEASED 10 Oct 2026 (latest): live app ade0ed2452** (script still v12): the saved signature wherever its owner signs
 (Prepared / Received / Approved, "Digitally signed"), admins name Checked by, old versions deletable once the current one exists.
 Checked on the release build (signed-in admin, the owner's signature): voucher and receipt flows, Checked by remembered, delete
@@ -564,6 +568,11 @@ folder, which is temporary:
   on **Prepared by** when they entered the entry, on **Approved by**, and on a receipt they make in **Received by** instead of
   drawing (`receivedSign`; then Approved by stays blank), each with "Digitally signed by <name> · <date>". Admins can name
   **Checked by** (`checkedField`, remembered in `S.lastChecked`). A correction signs Prepared/Approved the same way.
+- **Against forgery** (owner, 10 Oct 2026): every signed paper gets a random check code (`newCheck`, 8 chars), printed under
+  its number and in the footer and kept on its F record (`check`); every signature on it (hand-drawn and saved) is overprinted
+  with fine text "<no> · <code>" (`sealOver`), so a lifted signature carries the wrong number. Sheet tab → **Check a paper**
+  (admins and the office manager): number + code → Genuine (and whether cancelled) / NOT GENUINE / not found, with the
+  original to compare. The saved signature is always drawn in black ink (recoloured in `mySignature`).
 - **Old versions can be deleted** (admins, `deleteOld`): a cancelled paper or replaced attachment, only when the current one
   exists (`currentOf`); the F gets `deleted` (gone from the app); its Drive copy stays under CHANGES.
 - **A file on an entry is only deleted by putting a new one in its place** (owner, 10 Oct 2026; admins): an attachment or
