@@ -385,7 +385,8 @@ function itemRow(x, k, showDate) {
   const title = isE ? x.reason : `From ${projName(x.project)}`;
   const acct = accountOf(x.mode);
   const sub = [isE ? x.paidTo : x.note, isE ? x.location : '', `${ACCOUNT_ICON[acct]} ${acct}`, ...when].filter(Boolean).map(esc).join(' · ');
-  const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '') + (waitingFor(x.id).length ? '<i class="tag warn">Change waiting</i>' : '');
+  const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '') + (waitingFor(x.id).length ? '<i class="tag warn">Change waiting</i>' : '')
+    + (needsNewPaper(x.id) ? `<i class="tag bad">New ${isE ? (x.pay ? 'slip' : 'voucher') : 'receipt'} needed</i>` : '');
   return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${esc(x.id)}">
     <span class="dot">${isE ? '−' : '+'}</span>
     <span class="main"><span class="t"><span class="tt">${esc(title)}</span>${tags}</span><span class="s">${sub}</span></span>
@@ -631,6 +632,7 @@ function saveExpense(f) {
     if (!can('edit')) return requestChange('E', old, rec, changes, by);
     update({ expenses: S.expenses.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
+    if (needsNewPaper(old.id)) { render(); return slipSheet('E', old.id); } // its signed paper was cancelled: make the new one now
   } else {
     const [[id], seq] = nextIds('E', 1, S.seq);
     update({
@@ -736,6 +738,7 @@ function saveCredit(f) {
     if (!can('edit')) return requestChange('R', old, rec, changes, by);
     update({ credits: S.credits.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
+    if (needsNewPaper(old.id)) { render(); return slipSheet('R', old.id); } // its signed receipt was cancelled: make the new one now
   } else {
     const [[id], seq] = nextIds('R', 1, S.seq);
     update({

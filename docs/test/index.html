@@ -432,7 +432,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'a48ee52cd2'; // filled in by tools/build.js
+const APP_VERSION = 'fe014ae3a6'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1545,14 +1545,15 @@ function signedFacts(k, r) {
   } catch { return ''; }
 }
 function cancelSigned(was) {
-  const changed = new Set();
+  const changed = new Map(); // entry id → the entry as it was signed
   [['E', 'expenses'], ['R', 'credits']].forEach(([k, key]) => {
     const old = new Map(was[key].map(r => [r.id, r]));
-    S[key].forEach(r => { const o = old.get(r.id); if (o && o !== r && !r.deleted && signedFacts(k, o) !== signedFacts(k, r)) changed.add(r.id); });
+    S[key].forEach(r => { const o = old.get(r.id); if (o && o !== r && !r.deleted && signedFacts(k, o) !== signedFacts(k, r)) changed.set(r.id, o); });
   });
-  if (!changed.size) return;
-  const patch = { cancelled: stampSec(), cancelledBy: myName() || S.lastBy || '' };
-  [...changed].flatMap(id => filesFor(id)).filter(f => SIGNED_TYPES.includes(f.type) && !f.cancelled).forEach(f => patchFile(f, patch));
+  const at = stampSec(), by = myName() || S.lastBy || '';
+  // the amount the person signed for is kept with the cancelled paper, so a correction can say it
+  changed.forEach((o, id) => filesFor(id).filter(f => SIGNED_TYPES.includes(f.type) && !f.cancelled)
+    .forEach(f => patchFile(f, { cancelled: at, cancelledBy: by, was: { amount: o.amount, cur: o.cur } })));
 }
 // a change to a file's record, whether it has gone up already or still waits on this phone (then it goes up with it)
 async function patchFile(f, patch) {
@@ -1562,29 +1563,71 @@ async function patchFile(f, patch) {
   outbox = outbox.map(x => (x.id === f.id ? { ...x, ...patch } : x));
 }
 const cancelledWhy = f => `Cancelled on ${fmtAbs(String(f.cancelled).slice(0, 16))}${f.cancelledBy ? ` by ${f.cancelledBy}` : ''} — the entry was changed after it was signed`;
-// a cancelled paper as opened or sent from the app: every page carries a large CANCELLED stamp and why
-async function stampCancelled(blob, f) {
+// the pages of a PDF this app made: each page is one JPEG picture
+async function pdfJpegs(blob) {
   const b = new Uint8Array(await blob.arrayBuffer()), find = (seq, from) => { for (let i = from; i <= b.length - seq.length; i++) if (seq.every((x, j) => b[i + j] === x)) return i; return -1; };
   const pages = [];
-  for (let s = find([0xFF, 0xD8, 0xFF], 0); s >= 0; s = find([0xFF, 0xD8, 0xFF], s + 2)) { // the app's PDFs are JPEG pages
+  for (let s = find([0xFF, 0xD8, 0xFF], 0); s >= 0; s = find([0xFF, 0xD8, 0xFF], s + 2)) {
     const e = find([0xFF, 0xD9], s) + 2;
     if (e < s) break; // not a whole picture: leave the rest
-    const img = await imgFrom(new Blob([b.subarray(s, e)], { type: 'image/jpeg' }));
-    const c = document.createElement('canvas'), w = c.width = img.naturalWidth, h = c.height = img.naturalHeight, g = c.getContext('2d');
+    const data = b.slice(s, e), img = await imgFrom(new Blob([data], { type: 'image/jpeg' }));
+    pages.push({ data, img, w: img.naturalWidth, h: img.naturalHeight });
+    s = e - 2;
+  }
+  return pages;
+}
+// every page with a large stamp turned across it: the word, and a line saying why
+function stampPages(pages, word, why) {
+  return Promise.all(pages.map(async ({ img, w, h }) => {
+    const c = document.createElement('canvas'), g = c.getContext('2d');
+    c.width = w; c.height = h;
     g.drawImage(img, 0, 0);
     g.save(); g.translate(w / 2, h / 2); g.rotate(-0.4);
     g.textAlign = 'center'; g.fillStyle = g.strokeStyle = 'rgba(198,40,40,.8)';
     const big = `800 ${Math.round(w * 0.11)}px ${SANS}`, small = `600 ${Math.round(w * 0.017)}px ${SANS}`;
-    g.font = big; const ww = g.measureText('CANCELLED').width; g.font = small; const rw = g.measureText(cancelledWhy(f)).width;
+    g.font = big; const ww = g.measureText(word).width; g.font = small; const rw = g.measureText(why).width;
     const bw = Math.max(ww, rw) + w * 0.06; // the frame holds both lines and, turned, stays on the page
     g.lineWidth = w * 0.01; g.strokeRect(-bw / 2, -w * 0.11, bw, w * 0.185);
-    g.font = big; g.fillText('CANCELLED', 0, 0);
-    g.font = small; g.fillText(cancelledWhy(f), 0, w * 0.045);
+    g.font = big; g.fillText(word, 0, 0);
+    g.font = small; g.fillText(why, 0, w * 0.045);
     g.restore();
-    pages.push({ data: new Uint8Array(await (await canvasJpeg(c, PDF_Q)).arrayBuffer()), w, h });
-    s = e - 2;
-  }
-  return pages.length ? new Blob([pdfPages(pages)], { type: 'application/pdf' }) : blob;
+    return { data: new Uint8Array(await (await canvasJpeg(c, PDF_Q)).arrayBuffer()), w, h };
+  }));
+}
+// a cancelled paper as opened or sent from the app: every page carries a large CANCELLED stamp and why
+async function stampCancelled(blob, f) {
+  const pages = await pdfJpegs(blob);
+  return pages.length ? new Blob([pdfPages(await stampPages(pages, 'CANCELLED', cancelledWhy(f)))], { type: 'application/pdf' }) : blob;
+}
+
+/* ---------- a correction by an admin, instead of a new signature ----------
+   The person signed for the old amount, so their signature is never put under the new one. Page 1 is the voucher with the
+   new details and the same photo, marked CORRECTED; its signature box says who signed, when and for how much, and that an
+   admin approved the change. Page 2 is the original as they signed it (stamped CANCELLED). */
+async function correctPaper(k, id) {
+  if (!can('settings')) return;
+  if (!await unlock('Enter your code to correct the voucher.')) return;
+  const r = S[COLL[k]].find(x => x.id === id), old = filesFor(id).filter(f => SIGNED_TYPES.includes(f.type) && f.cancelled).pop();
+  if (!r || !old) return;
+  toast('Making the corrected PDF…');
+  try {
+    const original = await fileBlob(old.id), oldPages = await pdfJpegs(old.stamped ? original : await stampCancelled(original, old));
+    const shot = latestFile(id, 'photo');
+    const photo = shot ? await fileBlob(shot.id).then(imgFrom).catch(() => null) : null;
+    const type = k === 'R' ? 'receipt' : r.pay ? 'slip' : 'voucher';
+    const [[no], seq] = nextIds(k === 'R' ? 'RC' : 'PV', 1, S.seq);
+    update({ seq });
+    const spec = k === 'R' ? receiptSpec(r, '') : r.pay ? payslipSpec(r) : voucherSpec(r);
+    const me = myName() || S.lastBy || 'an admin', was = old.was ? slipMoney(old.was.amount, old.was.cur) : 'the amount on the original';
+    const page1 = await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: null, photo, preparedBy: r.by, ref: r.id,
+      badge: `CORRECTED — REPLACES ${old.no || ''}`.trim(), approvedBy: me,
+      signNote: [`Signed by ${paperSigner(k, r)} on ${fmtDate(String(old.createdAt).slice(0, 10))} for ${was}.`, 'The signed original is on page 2.',
+        `Corrected by ${me} (admin) on ${fmtDate(today())}:`, `${was} → ${slipMoney(r.amount, r.cur)}`] });
+    const blob = new Blob([pdfPages([...await pdfJpegs(page1), ...oldPages])], { type: 'application/pdf' });
+    const name = `${no} ${fileSafe(spec.signName || '')} corrected.pdf`;
+    await keepFile({ for: r.id, type, no, name, mime: 'application/pdf', corrects: old.id }, await blob.arrayBuffer());
+    readySheet(`${spec.title} — corrected`, no, blob, name);
+  } catch (e) { toast(e.offline ? 'No internet — the original is not on this phone yet.' : e.message); }
 }
 // the paper an entry gets: a payment voucher, a salary slip, an advance voucher, a final settlement, or a receipt
 const paperTitle = (k, r) => (k === 'R' ? 'Receipt' : r.pay ? { salary: 'Salary slip', advance: 'Advance voucher', settlement: 'Final settlement' }[r.pay] : 'Payment voucher');
@@ -1982,6 +2025,7 @@ async function renderSlip(s) {
   // title and number
   g.fillStyle = C.navy; g.font = `700 46px ${SANS}`; spaced(g, s.title, L, y + 46, 4);
   g.fillStyle = C.accent; g.fillRect(L, y + 66, 90, 5);
+  if (s.badge) { g.font = `700 20px ${SANS}`; spaced(g, s.badge, L + 110, y + 75, 1.6); } // e.g. CORRECTED — REPLACES PV-…
   g.font = `600 18px ${SANS}`; g.fillStyle = C.label; spaced(g, 'NO.', R, y + 16, 1.6, 'right');
   g.fillStyle = C.accent; g.font = `700 36px ${SANS}`; g.textAlign = 'right'; g.fillText(s.no, R, y + 52); g.textAlign = 'left';
   y += 110;
@@ -2040,10 +2084,15 @@ async function renderSlip(s) {
   row(h4, t => {
     const lineY = t + h4 - 52, lineW = Math.min(520, split - L - 48);
     slipLabel(g, s.signLabel, L + 24, t + 34);
-    placeSignature(g, s.sig, L + 24, lineY, lineW, lineY - t - 52);
-    g.fillStyle = C.ink; g.fillRect(L + 24, lineY, lineW, 1.5);
-    g.font = `600 24px ${SANS}`; g.fillText(s.signName || '', L + 24, lineY + 30);
-    g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText('Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
+    if (s.signNote) { // a correction: what was signed, and who approved the change (never the signature under new figures)
+      let ny = t + 74;
+      s.signNote.forEach((line, i) => { g.fillStyle = i >= 2 ? C.accent : C.ink; g.font = `${i === 3 ? 700 : 500} 22px ${SANS}`; wrapText(g, line, split - L - 48).forEach(w => { g.fillText(w, L + 24, ny); ny += 32; }); });
+    } else {
+      placeSignature(g, s.sig, L + 24, lineY, lineW, lineY - t - 52);
+      g.fillStyle = C.ink; g.fillRect(L + 24, lineY, lineW, 1.5);
+      g.font = `600 24px ${SANS}`; g.fillText(s.signName || '', L + 24, lineY + 30);
+      g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText('Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
+    }
     if (s.photo) photoInto(g, s.photo, CX + 14, t + 14, R - CX - 28, h4 - 28);
   });
   // the ruling: outer box, the column line and the lines between rows (see-through: the watermark shows behind)
@@ -2055,7 +2104,7 @@ async function renderSlip(s) {
   y += 200;
   const colW = (R - L) / 3;
   if (stampImg) drawStamp(g, stampImg, R - 112, y - 82, 216, s.stampDate, stampImg.place);
-  [['Prepared by', s.preparedBy || ''], ['Checked by', ''], ['Approved by', '']].forEach(([lab, name], i) => {
+  [['Prepared by', s.preparedBy || ''], ['Checked by', ''], ['Approved by', s.approvedBy || '']].forEach(([lab, name], i) => {
     const x = L + i * colW;
     g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
     g.fillRect(x, y, colW - 40, 1.5);
@@ -2251,7 +2300,9 @@ function slipSheet(k, id) {
       ${isR ? '' : photoField(who)}
       <p class="err"></p>
       <button class="btn ${isR ? 'in' : 'out'}">Make the ${title.toLowerCase()} (PDF)</button>
-    </form>`);
+    </form>
+    ${needsNewPaper(id) && can('settings') && r.pay !== 'settlement' ? `<p class="hint center" style="margin-top:14px">Or, as an admin, correct the old one without a new signature: their signature stays with the amount they signed for, and you approve the change.</p>
+    <button class="btn ghost" data-act="correctPaper" data-kind="${k}" data-id="${esc(id)}">✏️ Correct the old ${title.toLowerCase()} (admin)</button>` : ''}`);
   sigPad($('#sheet canvas.sig'));
 }
 async function saveSlip(f) {
@@ -3891,6 +3942,7 @@ const ACTIONS = {
   stamp: async () => { if (await unlock('Enter the password to change the company stamp.')) stampSheet(); },
   nudge: b => nudgeStamp(b.dataset.k, b.dataset.d),
   stampSave: () => saveStampPlace(),
+  correctPaper: b => correctPaper(b.dataset.kind, b.dataset.id),
   changeCode: () => changeCode(),
   bioOn: () => bioOn(),
   bioOff: () => bioOff(),

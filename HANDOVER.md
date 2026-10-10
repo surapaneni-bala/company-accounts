@@ -530,6 +530,12 @@ folder, which is temporary:
   folders. New uploads wait in the company folder until their record files them. The **Files** tab lists every upload in
   folder order with status, folder and link. Nothing is thrown away except the unstamped original of a cancelled paper.
 - **Deleting an employee** (admins: Delete employee; office manager: Ask to delete): their payments stay in the accounts.
+- **After an edit cancels a signed paper** (owner, 10 Oct 2026): saving opens the slip screen for the new one (`needsNewPaper`,
+  `cancelledWhyNote`); until it is made the payment shows "New slip/voucher/receipt needed". The cancelled F keeps `was`
+  ({amount, cur} signed for). **Admins may correct instead of a new signature** (owner's choice): `correctPaper` makes a 2-page
+  PDF — page 1 the paper with the new details and the stored payment photo, badge "CORRECTED — REPLACES <no>", the signature
+  box replaced by "Signed by X on <date> for <was>… Corrected by <admin> (admin): <was> → <new>" (`signNote`), the admin under
+  Approved by; page 2 the original signed paper (stamped CANCELLED). The person's signature is never put under new figures.
 - **Deleting is for good, so a deleted record's waiting files are never sent** (`forDeleted` in `uploadFiles`, which also
   removes them from the phone). Before 9 Oct test entries deleted before their upload still went to Drive.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.

@@ -60,6 +60,7 @@ const ACTIONS = {
   stamp: async () => { if (await unlock('Enter the password to change the company stamp.')) stampSheet(); },
   nudge: b => nudgeStamp(b.dataset.k, b.dataset.d),
   stampSave: () => saveStampPlace(),
+  correctPaper: b => correctPaper(b.dataset.kind, b.dataset.id),
   changeCode: () => changeCode(),
   bioOn: () => bioOn(),
   bioOff: () => bioOff(),
