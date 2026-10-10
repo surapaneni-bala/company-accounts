@@ -1,7 +1,7 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **e342bf1236** (employees, files, vouchers, app lock, statements, days not
-worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections) · script in this repo: **version 8** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
+Last updated **9 Oct 2026** · live app version **e947259cdf** (employees, files, vouchers, app lock, statements, days not
+worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections, cancelled vouchers, Drive folders, Files tab) · script in this repo: **version 9** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
 
@@ -107,6 +107,8 @@ E = { id, cur:'USD'|'SSP', amount, paidTo, reason, location, project, mode:'Cash
 R = { id, cur, amount, project (required), mode, note, at, rate, … }      T = { id, cur, amount, from, to, note, at, … }
 W = { id, name, job, site, phone, wage, cur, start:'YYYY-MM-DD', idNo, status:'active'|'left', left, openingAmount, openingNote, … }
 F = { id, fileId (Drive), name, mime, for (record id | 'settings'), type: voucher|receipt|slip|photo|attachment|profile|idphoto|letterhead, no (PV-…/RC-…), by, createdAt }
+      + cancelled, cancelledBy, stamped (a voucher/receipt/slip whose entry changed after signing; stamped = the Drive copy
+        carries the CANCELLED stamp), contact (letterhead), place (stamp)
 C = { id, kind, target, action?: 'delete'|'advance', before, after, text, by, at, status: waiting|approved|rejected, decidedBy }
 P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, at, action, id (the entry), text, by }
 ```
@@ -327,6 +329,12 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 10 Oct 2026: live app e947259cdf + sheet script v9** (`main` merged from `cancel-files`): cancelled vouchers
+(stamped in the app and in Drive), the Drive layout ("<Company> Super App" with the sheet inside, see §3), the Files tab, Delete
+employee. Checked: all tests; end to end on the release build (cancel + stamped copy + original binned, employee folder,
+replaced photo to Changes, deleted employee's folder to Deleted employees, nothing left unsynced); opens offline. Owner's
+steps: paste v9 (sheet-script.txt?v=11), Run allowFiles (files everything now and moves the sheet), New version, Update now.
+
 **RELEASED 9 Oct 2026 (late night): live app e342bf1236 + sheet script v8** (`main` merged from `drive-msg`). The owner's real
 sheet already runs this exact v8 (pasted from /test/sheet-script.txt; same bytes as the live sheet-script.txt) with Drive allowed:
 uploads work. v8: `doPost` answers its errors in words; `allowFiles` asks for every unticked permission
@@ -476,6 +484,20 @@ folder, which is temporary:
   if it answers, names the Drive permission step instead of blaming the internet.
   Script v8 goes to the root: `doPost` catches any error and answers `{ ok: false, error }` (`sheetError_`), so the phone
   shows the sheet's own message (any app version does) and Executions logs it with `console.error`.
+- **Signed papers are never changed or thrown away** (owner's choice, 9 Oct 2026). Editing what a voucher, receipt or slip
+  prints in its main lines and boxes (`signedFacts`; muted lines like project, location, a note don't count) cancels it on the
+  editing admin's phone (`cancelSigned`, hooked in `update()`): F gets `cancelled`; the entry asks for a new one (signed again,
+  new number); opened or sent from the app it carries a big CANCELLED stamp (`stampCancelled`), and an admin's phone sends a
+  stamped copy up in its place (`queueStamps`, same F id, `stamped: true`; needs script ≥ 9, which bins the unstamped original).
+- **Drive layout (script v9, owner's request 9–10 Oct 2026):** everything in "<first word of company> Super App" (the Google
+  Sheet moved in too): `Payments & receipts/YYYY-MM` (by the entry's month) and `/Cancelled`, `Employees/<Name> (W-id)` with
+  everything about one employee (profile, ID, their payments' slips, statements, photos) and its `Changes` (replaced photos,
+  cancelled or deleted slips), `Deleted employees/<Name> (W-id)` (an admin deleted them: the whole folder), `Deleted entries`,
+  `Company` (+ `Changes`). `fileHome_` works out a file's place from its record without Drive calls; `organize_` refiles
+  what each sync touched; `organizeAll_` (once per `LAYOUT`, also run by `allowFiles`) refiles everything, moves the sheet in
+  and bins emptied old folders. The **Files** tab lists every upload with status and folder. Nothing is thrown away except
+  the unstamped original of a cancelled paper. A Drive problem never stops a sync.
+- **Deleting an employee** (admins: Delete employee; office manager: Ask to delete): their payments stay in the accounts.
 - **Deleting is for good, so a deleted record's waiting files are never sent** (`forDeleted` in `uploadFiles`, which also
   removes them from the phone). Before 9 Oct test entries deleted before their upload still went to Drive.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.

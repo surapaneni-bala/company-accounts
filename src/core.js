@@ -49,8 +49,10 @@ function update(patch) {
     });
   }
   if ('company' in patch || 'pass' in patch) { dirty.add('settings'); stamped.settingsU = now; }
+  const was = S;
   S = { ...S, ...patch, ...stamped, dirty: S.link ? [...dirty] : [] };
   save(); scheduleSync();
+  if (patch.expenses || patch.credits) cancelSigned(was); // an entry changed after its voucher was signed (files.js)
 }
 
 /* ---------- helpers ---------- */
@@ -577,7 +579,7 @@ function detail(k, id) {
     <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
     ${waitingNote(id)}
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
-    ${k === 'T' || r.deleted ? '' : `<div class="two" style="margin-bottom:10px"><button class="btn ${k === 'E' ? 'out' : 'in'}" data-act="slip" data-kind="${k}" data-id="${esc(id)}">🧾 ${k === 'E' ? (r.pay ? 'Slip' : 'Voucher') : 'Receipt'}</button>${attachButton(id, '📎 Attach')}</div>`}
+    ${k === 'T' || r.deleted ? '' : `${cancelledNote(id)}<div class="two" style="margin-bottom:10px"><button class="btn ${k === 'E' ? 'out' : 'in'}" data-act="slip" data-kind="${k}" data-id="${esc(id)}">🧾 ${k === 'E' ? (r.pay ? 'Slip' : 'Voucher') : 'Receipt'}</button>${attachButton(id, '📎 Attach')}</div>`}
     <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="${k}" data-id="${esc(id)}">🗑 Ask to delete 🔒</button>` : ''}</div>
     ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}
     ${k === 'E' && r.paidTo ? `<button class="btn ghost" data-act="payeeStatement" data-name="${esc(r.paidTo)}" style="margin-top:10px">📄 All payments to ${esc(r.paidTo)}</button>` : ''}
@@ -833,7 +835,9 @@ async function deleteRecord(k, id) {
   if (!await unlock('Enter the password to delete this entry.')) return;
   const key = KIND_KEY[k];
   const r = S[key].find(x => x.id === id);
-  const by = confirmBy(`Delete ${k === 'A' ? whatIs(k, r) : `${id} — ${money(r.amount, r.cur)}`}?\n\nIt will be removed from all totals. A record stays in the Change Log.`);
+  const by = confirmBy(k === 'W'
+    ? `Delete ${whatIs(k, r)}?\n\nTheir payments stay in the accounts. The employee leaves the list, and their folder in Google Drive moves to "Deleted employees". A record stays in the Change Log.`
+    : `Delete ${k === 'A' ? whatIs(k, r) : `${id} — ${money(r.amount, r.cur)}`}?\n\nIt will be removed from all totals. A record stays in the Change Log.`);
   if (!by) return;
   update({ [key]: S[key].map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, whatIs(k, r)]], by), lastBy: by });
   closeSheet(); render(); toast('Deleted');

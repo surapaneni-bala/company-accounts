@@ -77,7 +77,9 @@ function workerDetail(id) {
     ${filesList(docs, 'Slips and statements')}
     <h3 class="subh">Payments (${pays.length})</h3>
     ${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">Nothing paid yet.</p>'}
-    ${filesBlock(id)}`);
+    ${filesBlock(id)}
+    ${can('delete') ? `<button class="btn danger" data-act="del" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Delete employee 🔒</button>`
+      : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Ask to delete employee 🔒</button>` : ''}`);
   comeBack(() => workerDetail(id));
   const photo = latestFile(id, 'profile');
   if (photo) { $('#wPhoto').dataset.photo = photo.id; loadThumbs(); }

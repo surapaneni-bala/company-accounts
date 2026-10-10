@@ -94,23 +94,101 @@ async function uploadFailure(e) {
   if (e.timedOut || !await answers(S.link.u)) return SLOW_MSG;
   return can('settings') ? DRIVE_MSG : 'the Google Sheet cannot save files yet — tell the owner (it needs permission to use Google Drive).';
 }
+/* ---------- cancelled papers: an entry changed after its voucher, receipt or slip was signed ---------- */
+// The paper no longer matches what was signed, so it is cancelled — kept as proof (the sheet renames it "CANCELLED …" into a
+// Cancelled folder; the app stamps it whenever it is opened or sent) — and a new one is made and signed again.
+const SIGNED_TYPES = ['voucher', 'receipt', 'slip'];
+// What the person signed for: the paper's main lines and boxes. Muted lines (project, location, a note, the balance after)
+// are the office's own filing, so moving an expense to a project never cancels its voucher.
+function signedFacts(k, r) {
+  try {
+    const s = k === 'R' ? receiptSpec(r, '') : r.pay ? payslipSpec(r) : voucherSpec(r);
+    return JSON.stringify([s.title, s.party, s.when, s.lines.filter(l => !l.muted), s.extra, r.amount, r.cur, stampDate(r)]);
+  } catch { return ''; }
+}
+function cancelSigned(was) {
+  const changed = new Set();
+  [['E', 'expenses'], ['R', 'credits']].forEach(([k, key]) => {
+    const old = new Map(was[key].map(r => [r.id, r]));
+    S[key].forEach(r => { const o = old.get(r.id); if (o && o !== r && !r.deleted && signedFacts(k, o) !== signedFacts(k, r)) changed.add(r.id); });
+  });
+  if (!changed.size) return;
+  const patch = { cancelled: stampSec(), cancelledBy: myName() || S.lastBy || '' };
+  [...changed].flatMap(id => filesFor(id)).filter(f => SIGNED_TYPES.includes(f.type) && !f.cancelled).forEach(f => patchFile(f, patch));
+}
+// a change to a file's record, whether it has gone up already or still waits on this phone (then it goes up with it)
+async function patchFile(f, patch) {
+  if (!f.pending) return update({ files: S.files.map(x => (x.id === f.id ? { ...x, ...patch } : x)) });
+  const rec = await fileGet(f.id);
+  if (rec) await filePut({ ...rec, ...patch });
+  outbox = outbox.map(x => (x.id === f.id ? { ...x, ...patch } : x));
+}
+const cancelledWhy = f => `Cancelled on ${fmtAbs(String(f.cancelled).slice(0, 16))}${f.cancelledBy ? ` by ${f.cancelledBy}` : ''} — the entry was changed after it was signed`;
+// a cancelled paper as opened or sent from the app: every page carries a large CANCELLED stamp and why
+async function stampCancelled(blob, f) {
+  const b = new Uint8Array(await blob.arrayBuffer()), find = (seq, from) => { for (let i = from; i <= b.length - seq.length; i++) if (seq.every((x, j) => b[i + j] === x)) return i; return -1; };
+  const pages = [];
+  for (let s = find([0xFF, 0xD8, 0xFF], 0); s >= 0; s = find([0xFF, 0xD8, 0xFF], s + 2)) { // the app's PDFs are JPEG pages
+    const e = find([0xFF, 0xD9], s) + 2;
+    if (e < s) break; // not a whole picture: leave the rest
+    const img = await imgFrom(new Blob([b.subarray(s, e)], { type: 'image/jpeg' }));
+    const c = document.createElement('canvas'), w = c.width = img.naturalWidth, h = c.height = img.naturalHeight, g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    g.save(); g.translate(w / 2, h / 2); g.rotate(-0.4);
+    g.textAlign = 'center'; g.fillStyle = g.strokeStyle = 'rgba(198,40,40,.8)';
+    const big = `800 ${Math.round(w * 0.11)}px ${SANS}`, small = `600 ${Math.round(w * 0.017)}px ${SANS}`;
+    g.font = big; const ww = g.measureText('CANCELLED').width; g.font = small; const rw = g.measureText(cancelledWhy(f)).width;
+    const bw = Math.max(ww, rw) + w * 0.06; // the frame holds both lines and, turned, stays on the page
+    g.lineWidth = w * 0.01; g.strokeRect(-bw / 2, -w * 0.11, bw, w * 0.185);
+    g.font = big; g.fillText('CANCELLED', 0, 0);
+    g.font = small; g.fillText(cancelledWhy(f), 0, w * 0.045);
+    g.restore();
+    pages.push({ data: new Uint8Array(await (await canvasJpeg(c, PDF_Q)).arrayBuffer()), w, h });
+    s = e - 2;
+  }
+  return pages.length ? new Blob([pdfPages(pages)], { type: 'application/pdf' }) : blob;
+}
+// the note on an entry whose paper was cancelled and not made again yet
+const cancelledNote = id => { const fs = filesFor(id).filter(f => SIGNED_TYPES.includes(f.type)); return fs.length && fs.every(f => f.cancelled) ? '<p class="note">🧾 The voucher was cancelled because this entry was changed after it was signed. Make a new one below — the person signs again.</p>' : ''; };
+
+// A cancelled paper already in Drive gets a stamped copy, sent up in its place (an admin's phone; the sheet bins the
+// unstamped original). Tried once per opening of the app: a file this phone can't fetch now waits for the next time.
+const stampTried = new Set();
+async function queueStamps() {
+  for (const f of live(S.files)) {
+    if (!f.cancelled || f.stamped || !SIGNED_TYPES.includes(f.type) || stampTried.has(f.id) || outbox.some(o => o.id === f.id)) continue;
+    stampTried.add(f.id);
+    try {
+      const data = await (await stampCancelled(await fileBlob(f.id), f)).arrayBuffer();
+      await filePut({ ...f, data, pending: true, stamped: true });
+      outbox = [...outbox, { ...f, stamped: true }];
+    } catch { /* not on this phone and no internet: next time the app is opened */ }
+  }
+}
 // Deleting is for good (nothing brings a record back), so files still waiting for a deleted record are never sent.
 const forDeleted = id => Object.keys(SYNC_KEYS).some(k => (S[k] || []).some(r => r.id === id && r.deleted));
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
 // ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
 async function uploadFiles() {
-  if (uploading || !S || !S.link || mustSignIn() || !outbox.length || (S.link.v || 2) < 4) return;
-  uploading = true; paintSync();
+  if (uploading || !S || !S.link || mustSignIn() || (S.link.v || 2) < 4) return;
+  uploading = true;
   try {
+    if (can('settings') && S.link.v >= 9) await queueStamps(); // the sheet bins the unstamped original from script v9
+    if (!outbox.length) return;
+    paintSync();
     for (const meta of outbox) {
-      const rec = await fileGet(meta.id);
+      let rec = await fileGet(meta.id);
       if (rec && rec.pending && forDeleted(rec.for)) await fileDel(meta.id); // its entry was deleted before it went up
       if (!rec || !rec.pending || forDeleted(rec.for)) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
+      if (rec.cancelled && !rec.stamped && SIGNED_TYPES.includes(rec.type)) { // cancelled before it went up: it goes up stamped
+        rec = { ...rec, data: await (await stampCancelled(new Blob([rec.data], { type: rec.mime }), rec)).arrayBuffer(), stamped: true };
+        await filePut(rec);
+      }
       let res;
       try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
       catch (e) { uploadErr = await uploadFailure(e); break; }
-      const { data, pending, ...d } = rec;
-      update({ files: [...S.files, { ...d, fileId: res.fileId }] });
+      const { data, pending, ...d } = rec, fresh = { ...d, fileId: res.fileId };
+      update({ files: S.files.some(x => x.id === d.id) ? S.files.map(x => (x.id === d.id ? { ...x, ...fresh } : x)) : [...S.files, fresh] });
       await filePut({ ...rec, fileId: res.fileId, pending: false });
       outbox = outbox.filter(x => x.id !== meta.id);
       uploadErr = '';
@@ -129,8 +207,9 @@ async function fileBlob(id) {
   filePut({ ...rec, data, pending: false }).catch(() => {});
   return new Blob([data], { type: res.mime });
 }
-const fileMeta = id => S.files.find(f => f.id === id) || outbox.find(f => f.id === id);
-const filesFor = (id, type) => [...live(S.files), ...outbox.map(f => ({ ...f, pending: true }))]
+// a file waiting to go up wins over its record (a stamped copy of a cancelled paper replaces the one in Drive)
+const fileMeta = id => outbox.find(f => f.id === id) || S.files.find(f => f.id === id);
+const filesFor = (id, type) => [...live(S.files).filter(f => !outbox.some(o => o.id === f.id)), ...outbox.map(f => ({ ...f, pending: true }))]
   .filter(f => f.for === id && (!type || f.type === type)).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 const latestFile = (id, type) => filesFor(id, type).pop();
 const filesBlock = id => filesList(filesFor(id).filter(f => f.type !== 'profile'));
@@ -138,7 +217,7 @@ function filesList(list, title = 'Files') {
   if (!list.length) return '';
   return `<h3 class="subh">${esc(title)} (${list.length})</h3><div class="card list inset">${list.map(f => `<button class="row" data-act="showFile" data-id="${esc(f.id)}">
     <span class="dot">${FILE_ICON[f.type] || '📎'}</span>
-    <span class="main"><span class="t"><span class="tt">${esc(f.no || FILE_NAME[f.type] || f.name)}</span>${f.pending ? '<i class="tag warn">Not uploaded yet</i>' : ''}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(f.no || FILE_NAME[f.type] || f.name)}</span>${f.cancelled ? '<i class="tag bad">Cancelled</i>' : f.pending ? '<i class="tag warn">Not uploaded yet</i>' : ''}</span>
     <span class="s">${esc([f.name, fmtAbs(String(f.createdAt).slice(0, 16)), f.by && 'by ' + f.by].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>`;
 }
 // an "attach" button: a file box styled as a button (data-type says what it is)
@@ -162,10 +241,11 @@ async function showFile(id) {
   const f = fileMeta(id);
   if (!f) return;
   let blob;
-  try { blob = await fileBlob(id); } catch (e) { return toast(e.offline ? 'No internet — this file is not on this phone yet.' : e.message); }
-  shown = { blob, name: f.name };
+  try { blob = await fileBlob(id); if (f.cancelled && !f.stamped && f.mime === 'application/pdf') blob = await stampCancelled(blob, f); } catch (e) { return toast(e.offline ? 'No internet — this file is not on this phone yet.' : e.message); }
+  shown = { blob, name: f.cancelled ? `CANCELLED ${f.name}` : f.name };
   const title = f.no || FILE_NAME[f.type] || 'File';
   openSheet(`${head(title, '', f.name)}
+    ${f.cancelled ? `<p class="note">${esc(cancelledWhy(f))}. It is kept as proof and always sent with a CANCELLED stamp.</p>` : ''}
     ${f.mime === 'application/pdf' ? '<p class="filebig">📄</p>' : `<img class="viewimg" src="${URL.createObjectURL(blob)}" alt="${esc(title)}">`}
     <button class="btn in" data-act="shareShown">📤 Send or save</button>
     ${f.pending ? `<p class="muted center">Kept on this phone, not uploaded yet: ${esc(uploadWhy())}</p>` : ''}`);
@@ -646,7 +726,7 @@ async function renderStatement(st) {
   return new Blob([pdfPages(jpegs)], { type: 'application/pdf' });
 }
 // the voucher or receipt number made for an entry, if any
-const docNo = id => (filesFor(id).filter(f => f.no).pop() || {}).no || '';
+const docNo = id => (filesFor(id).filter(f => f.no && !f.cancelled).pop() || {}).no || '';
 const sumByCur = items => CURS.filter(c => items.some(x => x.cur === c)).map(c => slipMoney(total(items.filter(x => x.cur === c)), c));
 // a statement that isn't kept: made, then offered for sending (it can be made again any time)
 async function shareStatement(st, fileName) {
@@ -791,11 +871,4 @@ async function saveStampPlace() {
   toast('Stamp position saved ✓');
 }
 // a setting kept on the latest letterhead or stamp record (the contacts, where the date goes on the stamp)
-async function setBrand(type, patch) {
-  const f = latestFile('settings', type);
-  if (f.pending) { // not uploaded yet: the setting goes up with it
-    const rec = await fileGet(f.id);
-    if (rec) await filePut({ ...rec, ...patch });
-    outbox = outbox.map(x => (x.id === f.id ? { ...x, ...patch } : x));
-  } else update({ files: S.files.map(x => (x.id === f.id ? { ...x, ...patch } : x)) });
-}
+const setBrand = (type, patch) => patchFile(latestFile('settings', type), patch);

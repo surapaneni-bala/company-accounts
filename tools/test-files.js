@@ -69,8 +69,11 @@ const html = Buffer.from('<html><script>alert(1)</script></html>').toString('bas
 assert.strictEqual(post({ op: 'upload', token: s.token, name: 'invoice.pdf.exe', mime: 'image/png', data: html }).ok, false, 'not a real picture');
 const named = post({ op: 'upload', token: s.token, name: 'invoice.pdf.exe', mime: 'image/png', data: png });
 assert.strictEqual(gas.dump().drive.files[named.fileId].name, 'invoice.pdf.png', 'the extension comes from the type');
-const folder = gas.dump().drive.folders;
-assert.ok(Object.values(folder).some(f => f.name === 'Company app files (do not share)'), 'kept in a private folder');
+// everything lives in one company folder ("<first word of the company> Super App"), the Google Sheet too
+const drv = () => gas.dump().drive;
+const pathOf = id => { const d = drv(), out = []; for (let f = d.files[id].folder; f && f !== 'root'; f = d.folders[f].parent) out.unshift(d.folders[f].name); return out.join(' / '); };
+assert.ok(pathOf(up.fileId).startsWith('Test Super App / Payments & receipts / '), 'kept in the company folder: ' + pathOf(up.fileId));
+assert.strictEqual(pathOf('SHEET'), 'Test Super App', 'the Google Sheet is moved into the company folder');
 
 const file = (id, u, uid, extra) => ({ id, k: 'F', u, d: { id, fileId: up.fileId, name: 'receipt.png', mime: 'image/png', type: 'attachment', uid, ...extra } });
 post({ token: s.token, since: 0, push: [exp('E-SK1-0001', 30, s.me.id)] });
@@ -134,6 +137,61 @@ assert.ok(!ndUp.ok && /allowFiles/.test(ndUp.error) && /DriveApp/.test(ndUp.erro
 // allowFiles proves Drive works by making the files folder: without Drive it fails in the editor, not later on the phones
 assert.throws(() => nd.allowFiles(), /DriveApp/, 'allowFiles fails loudly without Drive');
 gas.allowFiles();
-assert.ok(Object.values(gas.dump().drive.folders).some(f => f.name === 'Company app files (do not share)'), 'allowFiles makes the files folder');
+assert.strictEqual(pathOf('SHEET'), 'Test Super App', 'allowFiles files everything into the company folder');
+
+// every file in its place (see "Drive" in Code.gs), worked out from its record; nothing is thrown away
+const pdf = Buffer.from('%PDF-1.4 voucher').toString('base64'), TOP = 'Test Super App';
+const upload = (name, mime = 'image/png', data = png) => post({ op: 'upload', token: owner, name, mime, data }).fileId;
+const vId = upload('PV-OW1-0001 Shop.pdf', 'application/pdf', pdf), pId = upload('photo.png');
+const voucher = (u, extra = {}) => file('F-OW1-0100', u, 'x', { for: 'E-OW1-0100', type: 'voucher', mime: 'application/pdf', name: 'PV-OW1-0001 Shop.pdf', fileId: vId, createdAt: '2026-10-08T09:00:00', ...extra });
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [exp('E-OW1-0100', 50, 'x'), voucher(50), file('F-OW1-0101', 50, 'x', { for: 'E-OW1-0100', type: 'photo', fileId: pId })] }).refused, []);
+assert.deepStrictEqual([pathOf(vId), pathOf(pId)], [`${TOP} / Payments & receipts / 2026-10`, `${TOP} / Payments & receipts / 2026-10`], "by the payment's month");
+post({ token: owner, since: 0, push: [voucher(51, { cancelled: '2026-10-09T21:00:00', cancelledBy: 'Owner' })] });
+assert.deepStrictEqual([pathOf(vId), drv().files[vId].name], [`${TOP} / Payments & receipts / Cancelled`, 'CANCELLED PV-OW1-0001 Shop.pdf'], 'a cancelled voucher is kept, renamed');
+assert.strictEqual(pathOf(pId), `${TOP} / Payments & receipts / 2026-10`, 'the photo of an entry that only changed stays');
+// the stamped copy replaces the unstamped original, which goes to the bin
+const sId = upload('PV-OW1-0001 Shop.pdf', 'application/pdf', pdf);
+post({ token: owner, since: 0, push: [voucher(52, { cancelled: '2026-10-09T21:00:00', cancelledBy: 'Owner', stamped: true, fileId: sId })] });
+assert.deepStrictEqual([drv().files[vId].trashed, pathOf(sId), drv().files[sId].name], [true, `${TOP} / Payments & receipts / Cancelled`, 'CANCELLED PV-OW1-0001 Shop.pdf']);
+post({ token: owner, since: 0, push: [exp('E-OW1-0100', 53, 'x', { deleted: '2026-10-09T21:05:00', deletedBy: 'Owner' })] });
+assert.deepStrictEqual([pathOf(sId), pathOf(pId)], [`${TOP} / Deleted entries`, `${TOP} / Deleted entries`], "a deleted entry's files");
+// an employee: one folder with everything (profile, ID, their payments' slips); replaced photos go to Changes;
+// renamed, the folder follows; deleted by an admin, the whole folder goes to Deleted employees
+const prof1 = upload('profile.png'), prof2 = upload('profile.png'), idp = upload('id.png'), slip = upload('PV-OW1-0002 John.pdf', 'application/pdf', pdf);
+const john = (u, extra = {}) => worker('W-OW1-0100', u, 'x', { name: 'John Doe', ...extra }), JOHN = `${TOP} / Employees / John Doe (W-OW1-0100)`;
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [john(60), file('F-OW1-0110', 60, 'x', { for: 'W-OW1-0100', type: 'profile', fileId: prof1, createdAt: '2026-10-08T09:00:00' }),
+  file('F-OW1-0111', 60, 'x', { for: 'W-OW1-0100', type: 'idphoto', fileId: idp, createdAt: '2026-10-08T09:00:00' }),
+  exp('E-OW1-0102', 60, 'x', { worker: 'W-OW1-0100', pay: 'advance' }), file('F-OW1-0112', 60, 'x', { for: 'E-OW1-0102', type: 'slip', mime: 'application/pdf', name: 'PV-OW1-0002 John.pdf', fileId: slip })] }).refused, []);
+assert.deepStrictEqual([pathOf(prof1), pathOf(idp), pathOf(slip)], [JOHN, JOHN, JOHN], 'everything about one employee in their folder');
+post({ token: owner, since: 0, push: [file('F-OW1-0113', 61, 'x', { for: 'W-OW1-0100', type: 'profile', fileId: prof2, createdAt: '2026-10-09T09:00:00' })] });
+assert.deepStrictEqual([pathOf(prof1), pathOf(prof2)], [`${JOHN} / Changes`, JOHN], 'a replaced profile photo goes to Changes');
+post({ token: owner, since: 0, push: [john(62, { name: 'John D. Doe' })] });
+assert.strictEqual(pathOf(idp), `${TOP} / Employees / John D. Doe (W-OW1-0100)`, 'renamed: the folder follows');
+post({ token: owner, since: 0, push: [john(63, { name: 'John D. Doe', deleted: '2026-10-09T22:00:00', deletedBy: 'Owner' })] });
+const GONE = `${TOP} / Deleted employees / John D. Doe (W-OW1-0100)`;
+assert.deepStrictEqual([pathOf(idp), pathOf(slip), pathOf(prof1)], [GONE, GONE, `${GONE} / Changes`], 'a deleted employee: the whole folder');
+// the company letterhead: the newest in Company, older ones in Company / Changes
+const lh1 = upload('letterhead.png'), lh2 = upload('letterhead.png');
+post({ token: owner, since: 0, push: [file('F-OW1-0120', 70, 'x', { for: 'settings', type: 'letterhead', fileId: lh1, createdAt: '2026-10-09T10:00:00' }), file('F-OW1-0121', 70, 'x', { for: 'settings', type: 'letterhead', fileId: lh2, createdAt: '2026-10-09T11:00:00' })] });
+assert.deepStrictEqual([pathOf(lh1), pathOf(lh2)], [`${TOP} / Company / Changes`, `${TOP} / Company`]);
+// the Files tab lists every file with its status and folder
+const ftab = rows('Files');
+assert.ok(ftab.some(r => r[3] === 'PV-OW1-0001 Shop.pdf' && r[6] === 'Cancelled' && r[7] === 'Deleted entries' && r[9].endsWith(sId + '/view')), 'the Files tab shows the cancelled voucher of a deleted entry');
+assert.ok(ftab.some(r => r[2] === 'Profile photo' && r[6] === 'Replaced by a newer one' && r[7] === 'Deleted employees / John D. Doe (W-OW1-0100) / Changes'), 'and where a replaced photo is');
+// once per layout: everything is refiled and emptied old folders are removed
+drv().files[pId].folder = drv().files.SHEET.folder; gas.props.FILES_LAYOUT = '0';
+const oldMonth = Object.keys(drv().folders).find(k => drv().folders[k].name === TOP);
+drv().folders.oldfolder = { name: '2026-09', parent: oldMonth };
+post({ token: owner, since: 0, push: [] });
+assert.deepStrictEqual([pathOf(pId), drv().folders.oldfolder.trashed], [`${TOP} / Deleted entries`, true], 'refiled once; the emptied old folder removed');
+// the company folder follows the company's name
+post({ token: owner, since: 0, push: [{ id: 'settings', k: 'S', u: 80, d: { company: 'Acme Works Ltd', pass: { salt: 's', hash: 'h' } } }] });
+assert.strictEqual(pathOf('SHEET'), 'Acme Super App', 'renamed with the company');
+// a Drive problem (the file was removed by hand) never stops a sync
+const upX = post({ op: 'upload', token: owner, name: 'x.png', mime: 'image/png', data: png });
+post({ token: owner, since: 0, push: [exp('E-OW1-0101', 53, 'x'), file('F-OW1-0102', 53, 'x', { for: 'E-OW1-0101', fileId: upX.fileId })] });
+delete drv().files[upX.fileId];
+const gone = post({ token: owner, since: 0, push: [exp('E-OW1-0101', 54, 'x', { deleted: '2026-10-09T21:06:00', deletedBy: 'Owner' })] });
+assert.ok(gone.ok && !gone.refused.length, 'sync still works when a file cannot be moved');
 
 console.log('Employees and files: all checks passed');
