@@ -564,6 +564,11 @@ folder, which is temporary:
   on **Prepared by** when they entered the entry, on **Approved by**, and on a receipt they make in **Received by** instead of
   drawing (`receivedSign`; then Approved by stays blank), each with "Digitally signed by <name> · <date>". Admins can name
   **Checked by** (`checkedField`, remembered in `S.lastChecked`). A correction signs Prepared/Approved the same way.
+- **Against forgery** (owner, 10 Oct 2026): every signed paper gets a random check code (`newCheck`, 8 chars), printed under
+  its number and in the footer and kept on its F record (`check`); every signature on it (hand-drawn and saved) is overprinted
+  with fine text "<no> · <code>" (`sealOver`), so a lifted signature carries the wrong number. Sheet tab → **Check a paper**
+  (admins and the office manager): number + code → Genuine (and whether cancelled) / NOT GENUINE / not found, with the
+  original to compare. The saved signature is always drawn in black ink (recoloured in `mySignature`).
 - **Old versions can be deleted** (admins, `deleteOld`): a cancelled paper or replaced attachment, only when the current one
   exists (`currentOf`); the F gets `deleted` (gone from the app); its Drive copy stays under CHANGES.
 - **A file on an entry is only deleted by putting a new one in its place** (owner, 10 Oct 2026; admins): an attachment or

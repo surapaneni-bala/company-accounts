@@ -1,7 +1,7 @@
 // Keeps a copy of the app on the phone/computer so it opens with no internet.
 // The test copy is built with its own prefix (tools/build.js --test), so the two never delete each other's saved copy.
 const PREFIX = 'test-accounts-';
-const CACHE = PREFIX + 'c236fdcc7e';
+const CACHE = PREFIX + '92820162cb';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'logo-wide.png', 'watermark.png'];
 
 self.addEventListener('install', e => {

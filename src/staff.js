@@ -277,9 +277,9 @@ async function saveFinal(f) {
   btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
   try {
     const spec = workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo: framedPhoto(f) }), mine = await approvalFrom(f);
-    const st = { ...spec, approval: mine, preparedSign: mine && spec.preparedBy === mine.name ? mine : null, checkedBy: checkedFrom(f) };
+    const st = { ...spec, approval: mine, preparedSign: mine && spec.preparedBy === mine.name ? mine : null, checkedBy: checkedFrom(f), check: newCheck() };
     const blob = await renderStatement(st), name = `${st.no} ${fileSafe(w.name)} final settlement.pdf`;
-    await keepFile({ for: w.id, type: 'statement', no: st.no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
+    await keepFile({ for: w.id, type: 'statement', no: st.no, name, mime: 'application/pdf', check: st.check }, await blob.arrayBuffer());
     await keepTakenPhoto(f, w.id, st.no);
     update({ log: logWith([['Final settlement', w.id, `${w.name}: final settlement statement ${st.no} signed`]]) });
     readySheet(st.title, st.no, blob, name);
