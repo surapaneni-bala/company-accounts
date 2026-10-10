@@ -431,7 +431,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'e947259cdf'; // filled in by tools/build.js
+const APP_VERSION = '2bfc6f2c61'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1268,7 +1268,7 @@ async function deleteRecord(k, id) {
   const key = KIND_KEY[k];
   const r = S[key].find(x => x.id === id);
   const by = confirmBy(k === 'W'
-    ? `Delete ${whatIs(k, r)}?\n\nTheir payments stay in the accounts. The employee leaves the list, and their folder in Google Drive moves to "Deleted employees". A record stays in the Change Log.`
+    ? `Delete ${whatIs(k, r)}?\n\nTheir payments stay in the accounts. The employee leaves the list, and their folder in Google Drive moves to "08 DELETED EMPLOYEES". A record stays in the Change Log.`
     : `Delete ${k === 'A' ? whatIs(k, r) : `${id} — ${money(r.amount, r.cur)}`}?\n\nIt will be removed from all totals. A record stays in the Change Log.`);
   if (!by) return;
   update({ [key]: S[key].map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, whatIs(k, r)]], by), lastBy: by });
@@ -2339,7 +2339,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 9; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 10; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 const notAllowedMsg = n => `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
 const SCRIPT_URL = 'https://app.b-e-p-l.com/sheet-script.txt'; // the sheet script, published next to the app
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error

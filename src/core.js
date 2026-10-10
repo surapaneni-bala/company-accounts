@@ -836,7 +836,7 @@ async function deleteRecord(k, id) {
   const key = KIND_KEY[k];
   const r = S[key].find(x => x.id === id);
   const by = confirmBy(k === 'W'
-    ? `Delete ${whatIs(k, r)}?\n\nTheir payments stay in the accounts. The employee leaves the list, and their folder in Google Drive moves to "Deleted employees". A record stays in the Change Log.`
+    ? `Delete ${whatIs(k, r)}?\n\nTheir payments stay in the accounts. The employee leaves the list, and their folder in Google Drive moves to "08 DELETED EMPLOYEES". A record stays in the Change Log.`
     : `Delete ${k === 'A' ? whatIs(k, r) : `${id} — ${money(r.amount, r.cur)}`}?\n\nIt will be removed from all totals. A record stays in the Change Log.`);
   if (!by) return;
   update({ [key]: S[key].map(x => x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x), log: logWith([['Deleted', id, whatIs(k, r)]], by), lastBy: by });
