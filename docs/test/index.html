@@ -432,7 +432,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'cb2ba7ba7d'; // filled in by tools/build.js
+const APP_VERSION = 'afb21a2298'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -886,6 +886,7 @@ function viewSheet() {
       <section class="card pad">
         <h3>⚙️ Settings</h3>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') && signedIn() ? '' : 'hidden'}><span>My signature<br><span class="muted">On this phone only — for "Approved by", digitally signed</span></span><button class="btn small ghost" data-act="mySig">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : 'Not set'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : 'Not set — slips get a plain heading'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
@@ -1612,7 +1613,7 @@ async function correctPaper(k, id) {
   toast('Making the corrected PDF…');
   try {
     const original = await fileBlob(old.id), oldPages = await pdfJpegs(old.stamped ? original : await stampCancelled(original, old));
-    const shot = latestFile(id, 'photo');
+    const shot = filesFor(id, 'photo').filter(f => !f.removed && !f.replaced).pop();
     const photo = shot ? await fileBlob(shot.id).then(imgFrom).catch(() => null) : null;
     const type = k === 'R' ? 'receipt' : r.pay ? 'slip' : 'voucher';
     const [[no], seq] = nextIds(k === 'R' ? 'RC' : 'PV', 1, S.seq);
@@ -1620,7 +1621,7 @@ async function correctPaper(k, id) {
     const spec = k === 'R' ? receiptSpec(r, '') : r.pay ? payslipSpec(r) : voucherSpec(r);
     const me = myName() || S.lastBy || 'an admin', was = old.was ? slipMoney(old.was.amount, old.was.cur) : 'the amount on the original';
     const page1 = await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: null, photo, preparedBy: r.by, ref: r.id,
-      badge: `CORRECTED — REPLACES ${old.no || ''}`.trim(), approvedBy: me,
+      badge: `CORRECTED — REPLACES ${old.no || ''}`.trim(), approvedBy: me, approval: await mySignature().then(sig => (sig ? { sig, name: me, date: fmtDate(today()) } : null)),
       signNote: [`Signed by ${paperSigner(k, r)} on ${fmtDate(String(old.createdAt).slice(0, 10))} for ${was}.`, 'The signed original is on page 2.',
         `Corrected by ${me} (admin) on ${fmtDate(today())}:`, `${was} → ${slipMoney(r.amount, r.cur)}`] });
     const blob = new Blob([pdfPages([...await pdfJpegs(page1), ...oldPages])], { type: 'application/pdf' });
@@ -1724,7 +1725,7 @@ function filesList(list, title = 'Files') {
   if (!list.length) return '';
   return `<h3 class="subh">${esc(title)} (${list.length})</h3><div class="card list inset">${list.map(f => `<button class="row" data-act="showFile" data-id="${esc(f.id)}">
     <span class="dot">${FILE_ICON[f.type] || '📎'}</span>
-    <span class="main"><span class="t"><span class="tt">${esc(f.no || FILE_NAME[f.type] || f.name)}</span>${f.cancelled ? '<i class="tag bad">Cancelled</i>' : f.pending ? '<i class="tag warn">Not uploaded yet</i>' : ''}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(f.no || FILE_NAME[f.type] || f.name)}</span>${f.cancelled ? '<i class="tag bad">Cancelled</i>' : f.removed ? '<i class="tag">Removed</i>' : f.replaced ? '<i class="tag">Replaced</i>' : f.pending ? '<i class="tag warn">Not uploaded yet</i>' : ''}</span>
     <span class="s">${esc([f.name, fmtAbs(String(f.createdAt).slice(0, 16)), f.by && 'by ' + f.by].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>`;
 }
 // an "attach" button: a file box styled as a button (data-type says what it is)
@@ -1755,9 +1756,105 @@ async function showFile(id) {
     ${f.cancelled ? `<p class="note">${esc(cancelledWhy(f))}. It is kept as proof and always sent with a CANCELLED stamp.</p>` : ''}
     ${f.mime === 'application/pdf' ? '<p class="filebig">📄</p>' : `<img class="viewimg" src="${URL.createObjectURL(blob)}" alt="${esc(title)}">`}
     <button class="btn in" data-act="shareShown">📤 Send or save</button>
+    ${f.removed || f.replaced ? `<p class="note">${f.removed ? 'Removed' : 'Replaced by a newer one'} on ${esc(fmtAbs(String(f.removed || f.replaced).slice(0, 16)))}${f.removedBy || f.replacedBy ? ` by ${esc(f.removedBy || f.replacedBy)}` : ''}. Kept in the company Google Drive, folder CHANGES.</p>`
+      : can('edit') && CHANGEABLE.includes(f.type) ? `<div class="two" style="margin-top:10px"><label class="btn ghost">🔄 Replace<input type="file" hidden accept="image/*,application/pdf" data-replace="${esc(id)}"></label><button class="btn danger" data-act="removeFile" data-id="${esc(id)}">🗑 Remove</button></div>` : ''}
     ${f.pending ? `<p class="muted center">Kept on this phone, not uploaded yet: ${esc(uploadWhy())}</p>` : ''}`);
 }
+// An attachment or a payment photo can be replaced or removed (admins). Nothing is thrown away: the old one stays in
+// Drive, filed under CHANGES (script v12), and in the entry's list marked Replaced or Removed. Signed papers follow the
+// cancel / correct flow instead.
+const CHANGEABLE = ['attachment', 'photo'];
+async function replaceFile(input) {
+  const file = input.files[0], old = fileMeta(input.dataset.replace);
+  input.value = '';
+  if (!file || !old || !await unlock('Enter your code to replace the file.')) return;
+  try {
+    const p = await prepareFile(file);
+    await keepFile({ for: old.for, type: old.type, name: p.name, mime: p.mime, replaces: old.id }, p.data);
+    await setAside(old, 'replaced');
+    toast(`${FILE_NAME[old.type] || 'File'} replaced ✓ — the old one is kept`);
+    closeSheet();
+  } catch (e) { alert(e.message); }
+}
+async function removeFile(id) {
+  const f = fileMeta(id);
+  if (!f || !await unlock('Enter your code to remove the file.')) return;
+  if (!confirm(`Remove "${f.name}" from this entry?\n\nA copy is kept in the company Google Drive (folder CHANGES).`)) return;
+  await setAside(f, 'removed');
+  toast('Removed ✓ — a copy is kept');
+  closeSheet();
+}
+// set a file aside: one not uploaded yet is simply dropped; one in Drive is kept there and marked
+async function setAside(f, how) {
+  if (outbox.some(o => o.id === f.id)) { await fileDel(f.id).catch(() => {}); outbox = outbox.filter(o => o.id !== f.id); return; }
+  await patchFile(f, { [how]: stampSec(), [`${how}By`]: myName() || S.lastBy || '' });
+}
 const shareShown = () => shown && download(shown.blob, shown.name);
+
+/* ---------- my signature: an admin's own, kept on this phone only (never in the sheet), for "Approved by" ----------
+   Added once from a photo; the paper is made see-through (cleanStamp) and cut to the ink. It leaves the phone with the
+   other file copies when the person signs out. Each slip asks, ticked by default, whether to sign with it. */
+const mySigId = () => (signedIn() ? `mysig-${session.user.id}` : '');
+let mySigCache = null;
+async function mySignature() {
+  const id = mySigId();
+  if (!id || !can('settings')) return null;
+  if (mySigCache && mySigCache.id === id) return mySigCache.canvas;
+  const rec = await fileGet(id).catch(() => null);
+  if (!rec) return null;
+  const img = await imgFrom(new Blob([rec.data], { type: 'image/png' })), c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
+  mySigCache = { id, canvas: c };
+  return c;
+}
+async function mySigSheet() {
+  const sig = await mySignature();
+  openSheet(`${head('My signature')}
+    <p class="hint">Saved on this phone only. Vouchers, slips and receipts you make can carry it under <b>Approved by</b>, with "Digitally signed by ${esc(myName())}". Use a photo of your signature on white paper — the paper is removed.</p>
+    ${sig ? `<img class="viewimg" src="${sig.toDataURL('image/png')}" alt="My signature" style="background:#fff;padding:12px;border-radius:12px">` : '<p class="muted">No signature saved yet.</p>'}
+    <label class="btn ghost">${sig ? 'Choose a new photo' : '✍️ Choose a photo of my signature'}<input type="file" hidden accept="image/*" data-mysig></label>
+    ${sig ? '<button class="btn danger" data-act="mySigRemove" style="margin-top:10px">Remove my signature</button>' : ''}`);
+  here = mySigSheet;
+}
+async function saveMySig(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    const ink = inkOnly(cleanStamp(await imgFrom(file))); // see-through paper, cut to the ink
+    if (!ink) return alert('No signature found in that photo. Use a dark pen on white paper.');
+    const k = Math.min(1, 900 / ink.width), c = document.createElement('canvas');
+    c.width = Math.round(ink.width * k); c.height = Math.round(ink.height * k); c.getContext('2d').drawImage(ink, 0, 0, c.width, c.height);
+    await filePut({ id: mySigId(), mime: 'image/png', data: await (await new Promise(r => c.toBlob(r, 'image/png'))).arrayBuffer(), pending: false, mine: true });
+    mySigCache = null;
+    toast('Signature saved ✓');
+    mySigSheet();
+  } catch (e) { alert(e.message); }
+}
+async function removeMySig() {
+  if (!confirm('Remove your saved signature from this phone?')) return;
+  await fileDel(mySigId()).catch(() => {});
+  mySigCache = null;
+  mySigSheet();
+}
+// on a slip form: sign "Approved by" with my saved signature (shown only when there is one)
+const mySigField = () => `<label class="fld check approve-sig" hidden><input type="checkbox" name="mysig" checked> ✍️ Sign <b>Approved by</b> with my saved signature (digitally signed)</label>`;
+const showMySigField = () => mySignature().then(sig => { const l = $('#sheet .approve-sig'); if (sig && l) l.hidden = false; }).catch(() => {});
+async function approvalFrom(f) {
+  const box = f.elements.mysig;
+  if (!box || !box.checked || box.closest('label').hidden) return null;
+  const sig = await mySignature();
+  return sig ? { sig, name: myName(), date: fmtDate(today()) } : null;
+}
+// the saved signature above the "Approved by" line, and a note under it that it was signed digitally
+function drawApproved(g, x, y, w, a) {
+  if (!a || !a.sig) return;
+  const s = a.sig, k = Math.min(w / s.width, 90 / s.height, 1);
+  g.save(); g.globalCompositeOperation = 'multiply'; // like ink: the stamp under it still shows
+  g.drawImage(s, x, y - 36 - s.height * k, s.width * k, s.height * k);
+  g.restore();
+  g.fillStyle = SLIP_C.label; g.font = `italic 400 16px ${SANS}`; g.fillText(`Digitally signed by ${a.name} · ${a.date}`, x, y + 52);
+}
 
 /* ---------- signature pad ---------- */
 function sigPad(cv) {
@@ -2104,8 +2201,9 @@ async function renderSlip(s) {
   y += 200;
   const colW = (R - L) / 3;
   if (stampImg) drawStamp(g, stampImg, R - 112, y - 82, 216, s.stampDate, stampImg.place);
-  [['Prepared by', s.preparedBy || ''], ['Checked by', ''], ['Approved by', s.approvedBy || '']].forEach(([lab, name], i) => {
+  [['Prepared by', s.preparedBy || ''], ['Checked by', ''], ['Approved by', s.approvedBy || (s.approval ? s.approval.name : '')]].forEach(([lab, name], i) => {
     const x = L + i * colW;
+    if (i === 2) drawApproved(g, x, y, colW - 40, s.approval);
     g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
     g.fillRect(x, y, colW - 40, 1.5);
     slipLabel(g, lab, x, y + 30); // drawn after the stamp, so the words stay readable
@@ -2221,8 +2319,9 @@ async function renderStatement(st) {
     y += h + 120;
     const colW = W / 3;
     if (stampImg) drawStamp(g, stampImg, R - 104, y - 45, 180, st.stampDate, stampImg.place); // clear of the page number below
-    [['Prepared by', st.preparedBy || ''], ['Checked by', ''], ['Approved by', '']].forEach(([lab, name], i) => {
+    [['Prepared by', st.preparedBy || ''], ['Checked by', ''], ['Approved by', st.approval ? st.approval.name : '']].forEach(([lab, name], i) => {
       const x = L + i * colW;
+      if (i === 2) drawApproved(g, x, y, colW - 40, st.approval);
       g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
       g.fillRect(x, y, colW - 40, 1.5);
       slipLabel(g, lab, x, y + 30);
@@ -2298,12 +2397,14 @@ function slipSheet(k, id) {
       ${isR ? textField('party', 'Received from', 'Who paid the money?', '', false) : ''}
       ${sigField(who)}
       ${isR ? '' : photoField(who)}
+      ${mySigField()}
       <p class="err"></p>
       <button class="btn ${isR ? 'in' : 'out'}">Make the ${title.toLowerCase()} (PDF)</button>
     </form>
     ${needsNewPaper(id) && can('settings') && r.pay !== 'settlement' ? `<p class="hint center" style="margin-top:14px">Or, as an admin, correct the old one without a new signature: their signature stays with the amount they signed for, and you approve the change.</p>
     <button class="btn ghost" data-act="correctPaper" data-kind="${k}" data-id="${esc(id)}">✏️ Correct the old ${title.toLowerCase()} (admin)</button>` : ''}`);
   sigPad($('#sheet canvas.sig'));
+  showMySigField();
 }
 async function saveSlip(f) {
   const k = f.dataset.kind, r = S[COLL[k]].find(x => x.id === f.dataset.id), cv = $('canvas.sig', f);
@@ -2320,7 +2421,9 @@ async function saveSlip(f) {
     const spec = w ? workerStatementSpec(w, { final: true, no, sig: cv, photo, date: r.at.slice(0, 10), docs: { [r.id]: no } })
       : k === 'R' ? receiptSpec(r, clean(f.elements.party.value)) : r.pay ? payslipSpec(r) : voucherSpec(r);
     if (w) spec.signName = w.name;
-    const blob = w ? await renderStatement(spec) : await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, preparedBy: r.by, ref: r.id });
+    const approval = await approvalFrom(f);
+    if (w) spec.approval = approval;
+    const blob = w ? await renderStatement(spec) : await renderSlip({ ...spec, no, stampDate: stampDate(r), amount: r.amount, cur: r.cur, sig: cv, photo, preparedBy: r.by, ref: r.id, approval });
     const name = `${no} ${fileSafe(spec.signName || '')}.pdf`;
     await keepFile({ for: r.id, type, no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
     await keepTakenPhoto(f, r.id, no);
@@ -2420,7 +2523,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 11; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 12; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';
@@ -3518,10 +3621,12 @@ function finalSheet(id) {
     <form data-form="final" data-id="${esc(id)}">
       ${sigField(w.name)}
       ${photoField(w.name)}
+      ${mySigField()}
       <p class="err"></p>
       <button class="btn in">Make the final settlement (PDF)</button>
     </form>`);
   sigPad($('#sheet canvas.sig'));
+  showMySigField();
 }
 async function saveFinal(f) {
   const w = workerOf(f.dataset.id), cv = $('canvas.sig', f);
@@ -3529,7 +3634,7 @@ async function saveFinal(f) {
   const btn = $('button.btn', f);
   btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
   try {
-    const st = workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo: framedPhoto(f) });
+    const st = { ...workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo: framedPhoto(f) }), approval: await approvalFrom(f) };
     const blob = await renderStatement(st), name = `${st.no} ${fileSafe(w.name)} final settlement.pdf`;
     await keepFile({ for: w.id, type: 'statement', no: st.no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
     await keepTakenPhoto(f, w.id, st.no);
@@ -3954,6 +4059,9 @@ const ACTIONS = {
   nudge: b => nudgeStamp(b.dataset.k, b.dataset.d),
   stampSave: () => saveStampPlace(),
   correctPaper: b => correctPaper(b.dataset.kind, b.dataset.id),
+  mySig: async () => { if (await unlock('Enter your code to change your signature.')) mySigSheet(); },
+  mySigRemove: () => removeMySig(),
+  removeFile: b => removeFile(b.dataset.id),
   changeCode: () => changeCode(),
   bioOn: () => bioOn(),
   bioOff: () => bioOff(),
@@ -4023,6 +4131,8 @@ document.addEventListener('change', e => {
     refreshRate(t.form);
   }
   if (t.dataset.attach !== undefined) attachPicked(t);
+  if (t.dataset.mysig !== undefined) saveMySig(t);
+  if (t.dataset.replace !== undefined) replaceFile(t);
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);

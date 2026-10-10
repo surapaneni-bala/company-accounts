@@ -75,7 +75,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 11; // shown when the web app link is opened in a browser
+const VERSION = 12; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -404,8 +404,8 @@ function fileHome_(f, byId, files) {
   const owner = byId[f.for], o = owner ? owner.d : {};
   const w = owner && owner.k === 'W' ? owner : o.worker && byId[o.worker] && byId[o.worker].k === 'W' ? byId[o.worker] : null;
   const older = (f.for === 'settings' || f.type === 'profile' || f.type === 'idphoto') && files.some(g => g.id !== f.id && g.for === f.for && g.type === f.type && String(g.createdAt || '') > String(f.createdAt || ''));
-  const gone = !!o.deleted && owner.k !== 'W', old = !!f.cancelled || older;
-  const status = f.cancelled ? 'Cancelled' : older ? 'Replaced by a newer one' : gone ? 'Entry deleted' : w && w.d.deleted ? 'Employee deleted' : 'In use';
+  const gone = !!o.deleted && owner.k !== 'W', old = !!(f.cancelled || f.replaced || f.removed) || older; // old versions go to CHANGES
+  const status = f.cancelled ? 'Cancelled' : f.removed ? 'Removed' : f.replaced || older ? 'Replaced by a newer one' : gone ? 'Entry deleted' : w && w.d.deleted ? 'Employee deleted' : 'In use';
   const ext = (String(f.name).match(/\.\w+$/) || [''])[0], kind = TYPE_FOLDER[f.type];
   const name = (f.for === 'settings' || owner && owner.k === 'W') && kind && kind !== 'STATEMENTS' ? `${kind} ${String(f.createdAt || '').slice(0, 10)}${ext}`.replace(' ' + ext, ext) : '';
   const changes = old ? [FOLDER.changes] : [];
