@@ -1,6 +1,6 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **2bfc6f2c61** (employees, files, vouchers, app lock, statements, days not
+Last updated **9 Oct 2026** · live app version **554862a2ab** (employees, files, vouchers, app lock, statements, days not
 worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections, cancelled vouchers, Drive filing cabinet, Files tab) · script in this repo: **version 10** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
@@ -328,6 +328,12 @@ git commit -m "fix: …" && git push
 - Commits use the `type: description` style. No attribution lines (the owner's setting).
 
 ## 6. Where things stand (open items)
+
+**RELEASED 10 Oct 2026 (evening): live app 554862a2ab** (script still v10): a change the sheet refuses is named in the
+sync message (`recordLabel`), and an admin is no longer told "not allowed for your login". OPEN: on the owner's phone the
+sheet refuses one record — the profile photo of a new employee (its file sits loose in the company folder, so the upload worked
+but its F record was refused). Not reproduced with a fresh setup (add employee + ID + profile photo files both correctly).
+Waiting for the owner's screenshot of the new message.
 
 **RELEASED 10 Oct 2026 (later): live app 2bfc6f2c61 + sheet script v10** (`main` merged from `drive-tree`): the Drive
 filing cabinet (§3 "Drive layout"). App change: only the Delete employee wording and NEWEST_SCRIPT 10. Checked: all tests
