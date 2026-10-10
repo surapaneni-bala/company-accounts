@@ -71,32 +71,47 @@ function makeSpreadsheet(state) {
   ss.setActiveSheet = sh => { ss.active = sh; return sh; };
   ss.moveActiveSheet = pos => { ss.sheets = ss.sheets.filter(s => s !== ss.active); ss.sheets.splice(pos - 1, 0, ss.active); };
   ss.getUrl = () => 'https://docs.google.com/spreadsheets/d/LOCAL-TEST/edit';
+  ss.getId = () => 'SHEET'; // the Google Sheet is a Drive file too (see makeDrive)
   return chainable(ss);
 }
 
-// Drive: folders and files kept in memory (state.drive), enough for upload/download of photos and PDFs.
+// Drive: folders and files kept in memory (state.drive): upload/download, and filing (move, rename, bin).
 function makeDrive(drive) {
+  drive.folders = drive.folders || { root: { name: 'My Drive', parent: null } };
+  drive.files = drive.files || {};
+  if (!drive.files.SHEET) drive.files.SHEET = { folder: 'root', name: 'Accounts', mime: 'application/vnd.google-apps.spreadsheet', b64: '' };
+  const iter = list => ({ hasNext: () => list.length > 0, next: () => list.shift() });
+  const kids = (table, id) => Object.keys(drive[table]).filter(k => !drive[table][k].trashed && (table === 'folders' ? drive[table][k].parent : drive[table][k].folder) === id);
   const folder = id => ({
     getId: () => id,
     getName: () => drive.folders[id].name,
+    setName: n => { drive.folders[id].name = n; },
+    getParents: () => iter(drive.folders[id].parent ? [folder(drive.folders[id].parent)] : []),
+    moveTo: dest => { drive.folders[id].parent = dest.getId(); },
+    setTrashed: t => { drive.folders[id].trashed = !!t; },
+    getFolders: () => iter(kids('folders', id).map(folder)),
+    getFiles: () => iter(kids('files', id).map(file)),
     createFolder: name => { const nid = 'fold' + crypto.randomUUID().replace(/-/g, ''); drive.folders[nid] = { name, parent: id }; return folder(nid); },
-    getFoldersByName: name => {
-      const hits = Object.keys(drive.folders).filter(k => drive.folders[k].parent === id && drive.folders[k].name === name);
-      return { hasNext: () => hits.length > 0, next: () => folder(hits.shift()) };
-    },
-    createFile: blob => { const fid = 'file' + crypto.randomUUID().replace(/-/g, ''); drive.files[fid] = { folder: id, name: blob.getName(), mime: blob.getContentType(), b64: Buffer.from(blob.getBytes()).toString('base64') }; return { getId: () => fid }; },
+    getFoldersByName: name => iter(kids('folders', id).filter(k => drive.folders[k].name === name).map(folder)),
+    createFile: blob => { const fid = 'file' + crypto.randomUUID().replace(/-/g, ''); drive.files[fid] = { folder: id, name: blob.getName(), mime: blob.getContentType(), b64: Buffer.from(blob.getBytes()).toString('base64') }; return file(fid); },
   });
-  drive.folders = drive.folders || { root: { name: 'My Drive', parent: null } };
-  drive.files = drive.files || {};
+  const file = id => {
+    const f = drive.files[id];
+    return {
+      getId: () => id,
+      getBlob: () => newBlob([...Buffer.from(f.b64, 'base64')], f.mime, f.name),
+      getName: () => f.name,
+      setName: n => { f.name = n; },
+      getParents: () => iter([folder(f.folder)]),
+      moveTo: dest => { f.folder = dest.getId(); },
+      setTrashed: t => { f.trashed = !!t; },
+    };
+  };
   return {
     getRootFolder: () => folder('root'),
     createFolder: name => folder('root').createFolder(name),
-    getFolderById: id => { if (!drive.folders[id]) throw new Error('No item with the given ID could be found'); return folder(id); },
-    getFileById: id => {
-      const f = drive.files[id];
-      if (!f) throw new Error('No item with the given ID could be found');
-      return { getBlob: () => newBlob([...Buffer.from(f.b64, 'base64')], f.mime, f.name), getName: () => f.name, setName: n => { f.name = n; }, moveTo: folder => { f.folder = folder.getId(); } };
-    },
+    getFolderById: id => { if (!drive.folders[id] || drive.folders[id].trashed) throw new Error('No item with the given ID could be found'); return folder(id); },
+    getFileById: id => { if (!drive.files[id]) throw new Error('No item with the given ID could be found'); return file(id); },
   };
 }
 const newBlob = (bytes, mime, name) => ({ getBytes: () => bytes.slice(), getContentType: () => mime, getName: () => name });
@@ -114,7 +129,7 @@ function loadGas(code, state = {}, opts = {}) {
     ContentService: { MimeType: { JSON: 'JSON' }, createTextOutput: s => ({ setMimeType() { return this; }, getContent: () => s }) },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
-      formatDate: d => d.toISOString().slice(0, 16).replace('T', ' '),
+      formatDate: (d, tz, fmt) => (fmt === 'yyyy-MM' ? d.toISOString().slice(0, 7) : d.toISOString().slice(0, 16).replace('T', ' ')),
       DigestAlgorithm: { SHA_256: 'sha256' },
       Charset: { UTF_8: 'utf8' },
       // like Apps Script: an array of signed bytes (-128…127)

@@ -18,7 +18,7 @@ const FILE_COLS = ['fileId', 'uid'];
 // the first bytes of each kind of file allowed: a file must be what it says it is
 const MAGIC = { 'image/jpeg': [0xFF, 0xD8, 0xFF], 'image/png': [0x89, 0x50, 0x4E, 0x47], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pdf' };
-const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees'];
+const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Files'];
 // record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
 // File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …),
@@ -356,10 +356,11 @@ function folderAt_(path, cache) {
 function monthFolder_() {
   return folderAt_([FOLDER.pay, Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM')], {});
 }
+const staffName_ = w => `${String(w.d.name).replace(/[\\/]/g, '-')} (${w.id})`;
 // an employee's own folder, found by their number (a name can change), kept in Employees or Deleted employees
 function staffFolder_(w, cache) {
   if (cache[w.id]) return cache[w.id];
-  const home = folderAt_([w.d.deleted ? FOLDER.staffGone : FOLDER.staff], cache), name = `${String(w.d.name).replace(/[\\/]/g, '-')} (${w.id})`;
+  const home = folderAt_([w.d.deleted ? FOLDER.staffGone : FOLDER.staff], cache), name = staffName_(w);
   let found = null;
   [FOLDER.staff, FOLDER.staffGone].some(p => {
     for (const it = folderAt_([p], cache).getFolders(); it.hasNext();) { const f = it.next(); if (f.getName().slice(-(w.id.length + 2)) === `(${w.id})`) { found = f; return true; } }
@@ -370,17 +371,22 @@ function staffFolder_(w, cache) {
   if (!inside_(found, home)) found.moveTo(home);
   return (cache[w.id] = found);
 }
-// where a file belongs, worked out from its record and the record it is for
-function fileHome_(f, byId, files, cache) {
+// Where a file belongs and why, worked out from its record and the record it is for (no Drive calls, so the Files tab
+// shows the same): { w: the employee whose folder it is in, path: folders below that (or below the company folder), status }
+function fileHome_(f, byId, files) {
   const owner = byId[f.for], o = owner ? owner.d : {};
   const w = owner && owner.k === 'W' ? owner : o.worker && byId[o.worker] && byId[o.worker].k === 'W' ? byId[o.worker] : null;
-  const older = (f.for === 'settings' || f.type === 'profile' || f.type === 'idphoto') && files.some(g => g.id !== f.id && g.for === f.for && g.type === f.type && String(g.createdAt) > String(f.createdAt));
-  if (f.for === 'settings') return folderAt_(older ? [FOLDER.company, FOLDER.changes] : [FOLDER.company], cache);
-  if (w) { const home = staffFolder_(w, cache); return f.cancelled || older || (o.deleted && owner.k !== 'W') ? child_(home, FOLDER.changes) : home; }
-  if (o.deleted) return folderAt_([FOLDER.gone], cache);
-  if (f.cancelled) return folderAt_([FOLDER.pay, FOLDER.cancelled], cache);
-  return folderAt_([FOLDER.pay, /^\d{4}-\d{2}/.test(o.at) ? o.at.slice(0, 7) : String(f.createdAt).slice(0, 7)], cache);
+  const older = (f.for === 'settings' || f.type === 'profile' || f.type === 'idphoto') && files.some(g => g.id !== f.id && g.for === f.for && g.type === f.type && String(g.createdAt || '') > String(f.createdAt || ''));
+  const gone = o.deleted && owner.k !== 'W';
+  const status = f.cancelled ? 'Cancelled' : older ? 'Replaced by a newer one' : gone ? 'Entry deleted' : w && w.d.deleted ? 'Employee deleted' : 'In use';
+  if (f.for === 'settings') return { path: older ? [FOLDER.company, FOLDER.changes] : [FOLDER.company], status: status };
+  if (w) return { w: w, path: f.cancelled || older || gone ? [FOLDER.changes] : [], status: status };
+  if (gone) return { path: [FOLDER.gone], status: status };
+  if (f.cancelled) return { path: [FOLDER.pay, FOLDER.cancelled], status: status };
+  return { path: [FOLDER.pay, /^\d{4}-\d{2}/.test(o.at) ? o.at.slice(0, 7) : String(f.createdAt).slice(0, 7)], status: status };
 }
+const homeText_ = h => (h.w ? [h.w.d.deleted ? FOLDER.staffGone : FOLDER.staff, staffName_(h.w)] : []).concat(h.path).join(' / ');
+const homeFolder_ = (h, cache) => (h.w ? h.path.reduce(child_, staffFolder_(h.w, cache)) : folderAt_(h.path, cache));
 function placeFile_(f, folder) {
   const file = DriveApp.getFileById(f.fileId);
   if (f.cancelled && !/^CANCELLED /.test(file.getName())) file.setName('CANCELLED ' + file.getName());
@@ -397,7 +403,7 @@ function organize_(rows, touched, trash) {
   trash.forEach(id => { try { DriveApp.getFileById(id).setTrashed(true); } catch (err) { console.error('Could not bin ' + id + ': ' + err.message); } });
   recs.filter(r => r.k === 'W' && (!want || want.has(r.id))).forEach(w => { try { staffFolder_(w, cache); } catch (err) { console.error('Employee folder ' + w.id + ': ' + err.message); } });
   files.filter(f => { if (!want || want.has(f.id) || want.has(f.for)) return true; const o = byId[f.for]; return !!(o && o.d.worker && want.has(o.d.worker)); })
-    .forEach(f => { try { placeFile_(f, fileHome_(f, byId, files, cache)); } catch (err) { console.error('Could not file ' + f.id + ': ' + err.message); } });
+    .forEach(f => { try { placeFile_(f, homeFolder_(fileHome_(f, byId, files), cache)); } catch (err) { console.error('Could not file ' + f.id + ': ' + err.message); } });
 }
 // Once per layout: name the company folder, move the Google Sheet into it, file everything, remove emptied old folders.
 function organizeAll_(rows) {
@@ -612,6 +618,7 @@ function rebuild_(ss, all) {
   ledger_(ss, ctx);
   changeLog_(ss, ctx);
   employees_(ss, ctx, of('W').filter(x => !x.deleted));
+  filesTab_(ss, ctx, recs);
   // keep the tabs in a fixed order right after "Read me"
   VIEW_TABS.forEach((name, i) => {
     if (ss.getSheets()[i + 1].getName() !== name) { ss.setActiveSheet(ss.getSheetByName(name)); ss.moveActiveSheet(i + 2); }
@@ -770,6 +777,26 @@ function received_(ss, c) {
     ['Entry no.', 'Date', 'Day', 'Time', 'Project', 'Currency', 'Amount USD', 'Amount SSP', 'Received into', 'Note', 'Entered by', 'Recorded', 'Remarks', 'SSP per USD'],
     c.R.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), c.pname(x.project), x.cur, only_(x, 'USD'), only_(x, 'SSP'), accountOf_(x.mode), x.note || '', x.by || '', when_(x.createdAt), remarks_(x), x.rate || '']),
     ['', 'date', '', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 190, 75, 120, 140, 110, 200, 120, 150, 260, 110], [6, 7]);
+}
+// Every uploaded file, newest first: what it is, what it belongs to, its status and the Drive folder it is filed in.
+const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement' };
+function filesTab_(ss, c, recs) {
+  const byId = Object.create(null);
+  recs.forEach(r => { byId[r.id] = r; });
+  const files = recs.filter(r => r.k === 'F' && !r.d.deleted).map(r => r.d);
+  const what = f => {
+    const o = byId[f.for];
+    if (f.for === 'settings') return 'The company';
+    if (!o) return '';
+    const d = o.d;
+    return o.k === 'W' ? 'Employee: ' + d.name : o.k === 'E' ? (d.worker ? c.wname(d.worker) + ' — ' : '') + (d.paidTo || '') + ' — ' + (d.reason || '') : o.k === 'R' ? 'Money received — ' + c.pname(d.project) : '';
+  };
+  const rows = files.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).map(f => {
+    const h = fileHome_(f, byId, files);
+    return [when_(String(f.createdAt || '')), f.no || '', FILE_KIND[f.type] || f.type, f.name, f.for === 'settings' ? '' : f.for, what(f), h.status, homeText_(h), f.by || '', 'https://drive.google.com/file/d/' + f.fileId + '/view'];
+  });
+  dataTab_(ss, c.company, 'Files', '#0f766e', ['Uploaded', 'Number', 'Kind', 'File name', 'For entry', 'What it belongs to', 'Status', 'Folder in Drive', 'Uploaded by', 'Open'],
+    rows, [], [140, 120, 120, 240, 120, 280, 150, 300, 120, 300], null);
 }
 function moves_(ss, c) {
   dataTab_(ss, c.company, 'Cash & Bank moves', '#3b5bdb',
