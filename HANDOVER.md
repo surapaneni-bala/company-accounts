@@ -1,6 +1,6 @@
 # Handover — Company Accounts
 
-Last updated **9 Oct 2026** · live app version **5ea1c3e51c** (employees, files, vouchers, app lock, statements, days not
+Last updated **9 Oct 2026** · live app version **ade0ed2452** (employees, files, vouchers, app lock, statements, days not
 worked, logo, photo framing, B watermark, company contacts on PDFs, uploads on slow connections, cancelled vouchers, Drive filing cabinet, Files tab, office manager without money, my signature, replace/remove attachments) · script in this repo: **version 12** — the owner's real sheet must be updated to it (see [§6](#6-where-things-stand-open-items))
 
 Read this first when picking the project up. The everyday user guide is [README.md](README.md).
@@ -331,6 +331,11 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 10 Oct 2026 (latest): live app ade0ed2452** (script still v12): the saved signature wherever its owner signs
+(Prepared / Received / Approved, "Digitally signed"), admins name Checked by, old versions deletable once the current one exists.
+Checked on the release build (signed-in admin, the owner's signature): voucher and receipt flows, Checked by remembered, delete
+hidden until the new receipt exists; opens offline; all tests.
+
 **RELEASED 10 Oct 2026 (late): live app 5ea1c3e51c** (script still v12): a file on an entry is only deleted by putting a new
 one in its place (Delete and replace / Delete and make a new one). Checked on the release build: no file chosen or screen
 closed → nothing changes; replaced → old kept (paper cancelled "replaced by PV-…", filed under CHANGES); opens offline.
@@ -555,8 +560,12 @@ folder, which is temporary:
 - **Deleting an employee** (admins: Delete employee; office manager: Ask to delete): their payments stay in the accounts.
 - **My signature** (admins, owner 10 Oct 2026): Settings → My signature, from a photo (paper removed by `cleanStamp`, cut by
   `inkOnly`), kept on THIS PHONE ONLY (IndexedDB `mysig-<login id>`, dropped at sign-out with the file copies, never synced).
-  Slip / final settlement forms show "Sign Approved by with my saved signature" (ticked by default); `drawApproved` puts it
-  above the Approved-by line with "Digitally signed by <name> · <date>"; a correction uses it automatically.
+  Slip / final settlement forms show "Sign with my saved signature where I sign" (ticked by default): `drawSigned` puts it
+  on **Prepared by** when they entered the entry, on **Approved by**, and on a receipt they make in **Received by** instead of
+  drawing (`receivedSign`; then Approved by stays blank), each with "Digitally signed by <name> · <date>". Admins can name
+  **Checked by** (`checkedField`, remembered in `S.lastChecked`). A correction signs Prepared/Approved the same way.
+- **Old versions can be deleted** (admins, `deleteOld`): a cancelled paper or replaced attachment, only when the current one
+  exists (`currentOf`); the F gets `deleted` (gone from the app); its Drive copy stays under CHANGES.
 - **A file on an entry is only deleted by putting a new one in its place** (owner, 10 Oct 2026; admins): an attachment or
   payment photo → "Delete and replace" (new upload with `replaces`; the old F gets `replaced`, filed under CHANGES by script
   v12); a signed voucher/receipt/slip → "Delete and make a new one" (`replacePaper` opens the signing screen with

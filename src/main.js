@@ -64,6 +64,7 @@ const ACTIONS = {
   mySig: async () => { if (await unlock('Enter your code to change your signature.')) mySigSheet(); },
   mySigRemove: () => removeMySig(),
   replacePaper: b => replacePaper(b.dataset.id),
+  deleteOld: b => deleteOld(b.dataset.id),
   changeCode: () => changeCode(),
   bioOn: () => bioOn(),
   bioOff: () => bioOff(),

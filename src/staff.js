@@ -263,6 +263,7 @@ function finalSheet(id) {
       ${sigField(w.name)}
       ${photoField(w.name)}
       ${mySigField()}
+      ${checkedField()}
       <p class="err"></p>
       <button class="btn in">Make the final settlement (PDF)</button>
     </form>`);
@@ -275,7 +276,8 @@ async function saveFinal(f) {
   const btn = $('button.btn', f);
   btn.disabled = true; $('.err', f).textContent = 'Making the PDF…';
   try {
-    const st = { ...workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo: framedPhoto(f) }), approval: await approvalFrom(f) };
+    const spec = workerStatementSpec(w, { final: true, no: statementNo(), sig: cv, photo: framedPhoto(f) }), mine = await approvalFrom(f);
+    const st = { ...spec, approval: mine, preparedSign: mine && spec.preparedBy === mine.name ? mine : null, checkedBy: checkedFrom(f) };
     const blob = await renderStatement(st), name = `${st.no} ${fileSafe(w.name)} final settlement.pdf`;
     await keepFile({ for: w.id, type: 'statement', no: st.no, name, mime: 'application/pdf' }, await blob.arrayBuffer());
     await keepTakenPhoto(f, w.id, st.no);
