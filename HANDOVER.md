@@ -555,8 +555,12 @@ folder, which is temporary:
 - **Deleting an employee** (admins: Delete employee; office manager: Ask to delete): their payments stay in the accounts.
 - **My signature** (admins, owner 10 Oct 2026): Settings → My signature, from a photo (paper removed by `cleanStamp`, cut by
   `inkOnly`), kept on THIS PHONE ONLY (IndexedDB `mysig-<login id>`, dropped at sign-out with the file copies, never synced).
-  Slip / final settlement forms show "Sign Approved by with my saved signature" (ticked by default); `drawApproved` puts it
-  above the Approved-by line with "Digitally signed by <name> · <date>"; a correction uses it automatically.
+  Slip / final settlement forms show "Sign with my saved signature where I sign" (ticked by default): `drawSigned` puts it
+  on **Prepared by** when they entered the entry, on **Approved by**, and on a receipt they make in **Received by** instead of
+  drawing (`receivedSign`; then Approved by stays blank), each with "Digitally signed by <name> · <date>". Admins can name
+  **Checked by** (`checkedField`, remembered in `S.lastChecked`). A correction signs Prepared/Approved the same way.
+- **Old versions can be deleted** (admins, `deleteOld`): a cancelled paper or replaced attachment, only when the current one
+  exists (`currentOf`); the F gets `deleted` (gone from the app); its Drive copy stays under CHANGES.
 - **A file on an entry is only deleted by putting a new one in its place** (owner, 10 Oct 2026; admins): an attachment or
   payment photo → "Delete and replace" (new upload with `replaces`; the old F gets `replaced`, filed under CHANGES by script
   v12); a signed voucher/receipt/slip → "Delete and make a new one" (`replacePaper` opens the signing screen with
