@@ -543,6 +543,13 @@ folder, which is temporary:
   folders. New uploads wait in the company folder until their record files them. The **Files** tab lists every upload in
   folder order with status, folder and link. Nothing is thrown away except the unstamped original of a cancelled paper.
 - **Deleting an employee** (admins: Delete employee; office manager: Ask to delete): their payments stay in the accounts.
+- **My signature** (admins, owner 10 Oct 2026): Settings → My signature, from a photo (paper removed by `cleanStamp`, cut by
+  `inkOnly`), kept on THIS PHONE ONLY (IndexedDB `mysig-<login id>`, dropped at sign-out with the file copies, never synced).
+  Slip / final settlement forms show "Sign Approved by with my saved signature" (ticked by default); `drawApproved` puts it
+  above the Approved-by line with "Digitally signed by <name> · <date>"; a correction uses it automatically.
+- **Attachments and payment photos can be replaced or removed** (admins, `CHANGEABLE`): F gets `replaced`/`removed` (+By),
+  the new one `replaces`; nothing is thrown away — script v12 files old versions under CHANGES; a file not uploaded yet is
+  simply dropped. Signed papers keep the cancel/correct flow.
 - **After an edit cancels a signed paper** (owner, 10 Oct 2026): saving opens the slip screen for the new one (`needsNewPaper`,
   `cancelledWhyNote`); until it is made the payment shows "New slip/voucher/receipt needed". The cancelled F keeps `was`
   ({amount, cur} signed for). **Admins may correct instead of a new signature** (owner's choice): `correctPaper` makes a 2-page
