@@ -184,6 +184,9 @@ const oldMonth = Object.keys(drv().folders).find(k => drv().folders[k].name === 
 drv().folders.oldfolder = { name: '2026-09', parent: oldMonth };
 post({ token: owner, since: 0, push: [] });
 assert.deepStrictEqual([pathOf(pId), drv().folders.oldfolder.trashed], [`${TOP} / Deleted entries`, true], 'refiled once; the emptied old folder removed');
+// the company folder follows the company's name
+post({ token: owner, since: 0, push: [{ id: 'settings', k: 'S', u: 80, d: { company: 'Acme Works Ltd', pass: { salt: 's', hash: 'h' } } }] });
+assert.strictEqual(pathOf('SHEET'), 'Acme Super App', 'renamed with the company');
 // a Drive problem (the file was removed by hand) never stops a sync
 const upX = post({ op: 'upload', token: owner, name: 'x.png', mime: 'image/png', data: png });
 post({ token: owner, since: 0, push: [exp('E-OW1-0101', 53, 'x'), file('F-OW1-0102', 53, 'x', { for: 'E-OW1-0101', fileId: upX.fileId })] });

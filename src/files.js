@@ -151,23 +151,44 @@ async function stampCancelled(blob, f) {
 // the note on an entry whose paper was cancelled and not made again yet
 const cancelledNote = id => { const fs = filesFor(id).filter(f => SIGNED_TYPES.includes(f.type)); return fs.length && fs.every(f => f.cancelled) ? '<p class="note">🧾 The voucher was cancelled because this entry was changed after it was signed. Make a new one below — the person signs again.</p>' : ''; };
 
+// A cancelled paper already in Drive gets a stamped copy, sent up in its place (an admin's phone; the sheet bins the
+// unstamped original). Tried once per opening of the app: a file this phone can't fetch now waits for the next time.
+const stampTried = new Set();
+async function queueStamps() {
+  for (const f of live(S.files)) {
+    if (!f.cancelled || f.stamped || !SIGNED_TYPES.includes(f.type) || stampTried.has(f.id) || outbox.some(o => o.id === f.id)) continue;
+    stampTried.add(f.id);
+    try {
+      const data = await (await stampCancelled(await fileBlob(f.id), f)).arrayBuffer();
+      await filePut({ ...f, data, pending: true, stamped: true });
+      outbox = [...outbox, { ...f, stamped: true }];
+    } catch { /* not on this phone and no internet: next time the app is opened */ }
+  }
+}
 // Deleting is for good (nothing brings a record back), so files still waiting for a deleted record are never sent.
 const forDeleted = id => Object.keys(SYNC_KEYS).some(k => (S[k] || []).some(r => r.id === id && r.deleted));
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
 // ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
 async function uploadFiles() {
-  if (uploading || !S || !S.link || mustSignIn() || !outbox.length || (S.link.v || 2) < 4) return;
-  uploading = true; paintSync();
+  if (uploading || !S || !S.link || mustSignIn() || (S.link.v || 2) < 4) return;
+  uploading = true;
   try {
+    if (can('settings') && S.link.v >= 9) await queueStamps(); // the sheet bins the unstamped original from script v9
+    if (!outbox.length) return;
+    paintSync();
     for (const meta of outbox) {
-      const rec = await fileGet(meta.id);
+      let rec = await fileGet(meta.id);
       if (rec && rec.pending && forDeleted(rec.for)) await fileDel(meta.id); // its entry was deleted before it went up
       if (!rec || !rec.pending || forDeleted(rec.for)) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
+      if (rec.cancelled && !rec.stamped && SIGNED_TYPES.includes(rec.type)) { // cancelled before it went up: it goes up stamped
+        rec = { ...rec, data: await (await stampCancelled(new Blob([rec.data], { type: rec.mime }), rec)).arrayBuffer(), stamped: true };
+        await filePut(rec);
+      }
       let res;
       try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
       catch (e) { uploadErr = await uploadFailure(e); break; }
-      const { data, pending, ...d } = rec;
-      update({ files: [...S.files, { ...d, fileId: res.fileId }] });
+      const { data, pending, ...d } = rec, fresh = { ...d, fileId: res.fileId };
+      update({ files: S.files.some(x => x.id === d.id) ? S.files.map(x => (x.id === d.id ? { ...x, ...fresh } : x)) : [...S.files, fresh] });
       await filePut({ ...rec, fileId: res.fileId, pending: false });
       outbox = outbox.filter(x => x.id !== meta.id);
       uploadErr = '';
@@ -186,8 +207,9 @@ async function fileBlob(id) {
   filePut({ ...rec, data, pending: false }).catch(() => {});
   return new Blob([data], { type: res.mime });
 }
-const fileMeta = id => S.files.find(f => f.id === id) || outbox.find(f => f.id === id);
-const filesFor = (id, type) => [...live(S.files), ...outbox.map(f => ({ ...f, pending: true }))]
+// a file waiting to go up wins over its record (a stamped copy of a cancelled paper replaces the one in Drive)
+const fileMeta = id => outbox.find(f => f.id === id) || S.files.find(f => f.id === id);
+const filesFor = (id, type) => [...live(S.files).filter(f => !outbox.some(o => o.id === f.id)), ...outbox.map(f => ({ ...f, pending: true }))]
   .filter(f => f.for === id && (!type || f.type === type)).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 const latestFile = (id, type) => filesFor(id, type).pop();
 const filesBlock = id => filesList(filesFor(id).filter(f => f.type !== 'profile'));
@@ -219,7 +241,7 @@ async function showFile(id) {
   const f = fileMeta(id);
   if (!f) return;
   let blob;
-  try { blob = await fileBlob(id); if (f.cancelled && f.mime === 'application/pdf') blob = await stampCancelled(blob, f); } catch (e) { return toast(e.offline ? 'No internet — this file is not on this phone yet.' : e.message); }
+  try { blob = await fileBlob(id); if (f.cancelled && !f.stamped && f.mime === 'application/pdf') blob = await stampCancelled(blob, f); } catch (e) { return toast(e.offline ? 'No internet — this file is not on this phone yet.' : e.message); }
   shown = { blob, name: f.cancelled ? `CANCELLED ${f.name}` : f.name };
   const title = f.no || FILE_NAME[f.type] || 'File';
   openSheet(`${head(title, '', f.name)}

@@ -396,6 +396,7 @@ function placeFile_(f, folder) {
 // neighbours (a new profile photo sends the older one to Changes), an employee's folder and their payments' files.
 function organize_(rows, touched, trash) {
   if (touched && !touched.length && !trash.length) return;
+  if (touched && touched.indexOf('settings') >= 0) nameRoot_(rows); // the company's name changed
   const recs = rows.map(toRec_), byId = Object.create(null), cache = {};
   recs.forEach(r => { byId[r.id] = r; });
   const files = recs.filter(r => r.k === 'F' && !r.d.deleted).map(r => r.d), want = touched && new Set(touched);
@@ -406,11 +407,14 @@ function organize_(rows, touched, trash) {
     .forEach(f => { try { placeFile_(f, homeFolder_(fileHome_(f, byId, files), cache)); } catch (err) { console.error('Could not file ' + f.id + ': ' + err.message); } });
 }
 // Once per layout: name the company folder, move the Google Sheet into it, file everything, remove emptied old folders.
-function organizeAll_(rows) {
-  const props = PropertiesService.getScriptProperties(), name = topName_(rows);
-  props.setProperty('TOP_NAME', name);
-  const root = filesRoot_();
+function nameRoot_(rows) {
+  const name = topName_(rows), root = filesRoot_();
+  PropertiesService.getScriptProperties().setProperty('TOP_NAME', name);
   if (root.getName() !== name) root.setName(name);
+  return root;
+}
+function organizeAll_(rows) {
+  const props = PropertiesService.getScriptProperties(), root = nameRoot_(rows);
   try { const sheet = DriveApp.getFileById(SpreadsheetApp.getActive().getId()); if (!inside_(sheet, root)) sheet.moveTo(root); } catch (err) { console.error('Could not move the Google Sheet: ' + err.message); }
   organize_(rows, null, []);
   const keep = Object.keys(FOLDER).map(k => FOLDER[k]);
@@ -789,7 +793,7 @@ function filesTab_(ss, c, recs) {
     if (f.for === 'settings') return 'The company';
     if (!o) return '';
     const d = o.d;
-    return o.k === 'W' ? 'Employee: ' + d.name : o.k === 'E' ? (d.worker ? c.wname(d.worker) + ' — ' : '') + (d.paidTo || '') + ' — ' + (d.reason || '') : o.k === 'R' ? 'Money received — ' + c.pname(d.project) : '';
+    return o.k === 'W' ? 'Employee: ' + d.name : o.k === 'E' ? (d.worker ? c.wname(d.worker) : d.paidTo || '') + ' — ' + (d.reason || '') : o.k === 'R' ? 'Money received — ' + c.pname(d.project) : '';
   };
   const rows = files.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).map(f => {
     const h = fileHome_(f, byId, files);
