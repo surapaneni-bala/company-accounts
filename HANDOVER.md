@@ -173,7 +173,9 @@ P = { id, name, value, valueCur, by, createdAt, deleted }           L = { lid, a
   ended after 30 days unused, on password reset, role change or block). 5 wrong passwords → 15-minute lock.
   The last active admin can't be demoted or blocked.
 - Server rules (`view_` = what is sent, `allowed_` = what is accepted): admin everything; non-admins may only
-  add new records (store keeper: own E and L; manager: E R T P L C) — the manager **never changes an existing one** — her edits are **change requests** (kind `C`:
+  add new records (store keeper: own E and L; manager: E L C W A F — since script v11 no money: she receives no R, T, C/F about
+  them, P without value, only her own L, no sheet link; `managerView_`, RIGHTS without money/projects; her phone drops money it held,
+  `dropMoney`) — the manager **never changes an existing one** — her edits are **change requests** (kind `C`:
   `{kind, target, before, after, text, by, status: waiting|approved|rejected, decidedBy}`) that an admin
   approves (the app then applies `after` to the target) or rejects; store keeper only their own E and L (by
   `uid`). Only admins receive the company password inside S. Refused records come back in `refused` and stay
