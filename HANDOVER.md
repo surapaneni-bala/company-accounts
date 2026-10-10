@@ -333,7 +333,11 @@ git commit -m "fix: …" && git push
 sync message (`recordLabel`), and an admin is no longer told "not allowed for your login". OPEN: on the owner's phone the
 sheet refuses one record — the profile photo of a new employee (its file sits loose in the company folder, so the upload worked
 but its F record was refused). Not reproduced with a fresh setup (add employee + ID + profile photo files both correctly).
-Waiting for the owner's screenshot of the new message.
+The message named it: file "image.jpg" (F-8BM-0013). Fix on branch `refused-why`: the message says why (record
+incomplete, or the sheet has no note of uploading its Drive file — checked against `VALID`), and an admin's phone sends a
+complete-but-refused file again once per opening (`resendRefused`), so its record carries a file the sheet knows (proven on the
+mock with an unknown fileId: refused → resent → accepted → filed). Root cause still unknown (not reproduced fresh); the
+original loose file stays in the company folder for the owner to delete.
 
 **RELEASED 10 Oct 2026 (later): live app 2bfc6f2c61 + sheet script v10** (`main` merged from `drive-tree`): the Drive
 filing cabinet (§3 "Drive layout"). App change: only the Delete employee wording and NEWEST_SCRIPT 10. Checked: all tests

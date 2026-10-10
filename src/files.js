@@ -165,6 +165,20 @@ async function queueStamps() {
     } catch { /* not on this phone and no internet: next time the app is opened */ }
   }
 }
+// A complete file record the sheet refuses (an admin's: never for the login) names a Drive file the sheet has no note of
+// uploading. The file is sent again from this phone — once per opening of the app — so its record carries one it knows.
+const resent = new Set();
+async function resendRefused(ids) {
+  if (!can('settings')) return;
+  for (const f of S.files.filter(x => ids.has(x.id) && VALID.F(x) && !resent.has(x.id))) {
+    resent.add(f.id);
+    const rec = await fileGet(f.id).catch(() => null);
+    if (!rec || !rec.data) continue; // not on this phone: the message says which file it is
+    await filePut({ ...rec, pending: true });
+    outbox = [...outbox, { ...f }];
+  }
+  uploadFiles();
+}
 // Deleting is for good (nothing brings a record back), so files still waiting for a deleted record are never sent.
 const forDeleted = id => Object.keys(SYNC_KEYS).some(k => (S[k] || []).some(r => r.id === id && r.deleted));
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
