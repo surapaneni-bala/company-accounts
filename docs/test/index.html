@@ -354,6 +354,7 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .app-tile { position: relative; border: 0; cursor: pointer; text-align: left; border-radius: var(--r-lg); padding: 20px 18px 18px; min-height: 190px; display: flex; flex-direction: column; justify-content: space-between; color: #fff; box-shadow: 0 24px 50px -30px rgba(27,34,50,.9); transition: transform .2s var(--ease); overflow: hidden; }
 .app-tile:active { transform: scale(.97); }
 .app-tile.acc { background: var(--ink); background-image: repeating-linear-gradient(0deg, transparent 0 31px, rgba(255,255,255,.05) 31px 32px); }
+.app-tile.doc { background: #3730a3; background-image: radial-gradient(circle at -10% 110%, rgba(255,255,255,.18), transparent 55%); }
 .app-tile.emp { background: var(--in); background-image: radial-gradient(circle at 110% -10%, rgba(255,255,255,.22), transparent 55%); }
 .app-tile .ai { width: 58px; height: 58px; border-radius: 18px; background: rgba(255,255,255,.16); display: grid; place-items: center; }
 .app-tile .ai svg { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -433,7 +434,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'a6e7a954e9'; // filled in by tools/build.js
+const APP_VERSION = 'c03d9d277b'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -467,7 +468,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // an empty list of every kind of record (a new company, a new phone, a sign-in that starts again)
 const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
@@ -546,11 +547,12 @@ function nextIds(prefix, n, seq) {
 const logWith = (entries, by = S.lastBy || '') => [...S.log, ...entries.map(([action, id, text], i) => ({ lid: `L-${S.dev}-${Date.now().toString(36)}${i}`, at: stampSec(), action, id, text, by }))];
 
 const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved', rate: 'SSP for 1 USD',
-  to: 'Moved to', manualDate: 'Date set by hand', every: 'How often', first: 'First due', bank: 'Bank', accName: 'Account name', number: 'Account number', branch: 'Branch', swift: 'SWIFT code', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
+  to: 'Moved to', manualDate: 'Date set by hand', every: 'How often', first: 'First due', bank: 'Bank', accName: 'Account name', number: 'Account number', branch: 'Branch', swift: 'SWIFT code', title: 'Document', kind: 'Kind', owner: 'Belongs to', docNo: 'Document number', issued: 'Issued', expires: 'Expires', remind: 'Reminder (days before)', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
 function showVal(k, r) {
   const v = r[k];
   if (['amount', 'wage', 'openingAmount'].includes(k)) return v === undefined || v === '' ? '(empty)' : money(+v, r.cur);
-  if (['start', 'left', 'clearedTo', 'first'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  if (['start', 'left', 'clearedTo', 'first', 'issued', 'expires'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  if (k === 'kind' && DOC_KIND[v]) return DOC_KIND[v][1];
   if (k === 'every') return EVERY[v] || '(empty)';
   return k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : k === 'mode' ? accountOf(v) : k === 'from' ? `${v} → ${v === 'Cash' ? 'Bank' : 'Cash'}` : k === 'rate' ? (v ? plain(+v) : '(empty)') : k === 'status' ? (v === 'left' ? 'Left' : 'Working') : k === 'manualDate' ? (v ? 'yes' : 'no') : (v || '(empty)');
 }
@@ -749,12 +751,13 @@ function viewMenu() {
   const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const who = signedIn() ? session.user.name.split(' ')[0] : '';
   const staffWaiting = waiting().filter(c => c.kind === 'W').length;
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${docBanners()}
     <section class="launch">
       <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
       <div class="apps">
         <button class="app-tile acc" data-act="tab" data-tab="home"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><span><b>Accounts</b><small>Cash, bank and projects</small></span></button>
         <button class="app-tile emp" data-act="tab" data-tab="staff">${staffWaiting ? `<span class="badge">${staffWaiting} waiting</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg></span><span><b>Employees</b><small>Salaries, advances and slips</small></span></button>
+        <button class="app-tile doc" data-act="docs">${live(S.docs).some(v => docState(v).soon) ? `<span class="badge">${live(S.docs).filter(v => docState(v).soon).length} to renew</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><span><b>Documents</b><small>Licences, vehicles, IDs</small></span></button>
       </div>
     </section>`;
 }
@@ -894,6 +897,7 @@ function viewSheet() {
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
         <div class="setrow" ${can('settings') && signedIn() ? '' : 'hidden'}><span>My signature<br><span class="muted">On this phone only — for "Approved by", digitally signed</span></span><button class="btn small ghost" data-act="mySig">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : 'Not set'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') && S.link ? '' : 'hidden'}><span>Morning email<br><span class="muted">Payments due and documents expiring, every morning</span></span><button class="btn small ghost" data-act="alerts">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : 'Not set — slips get a plain heading'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
@@ -1477,8 +1481,8 @@ const MAX_FILE = 8 * 1024 * 1024; // the sheet script refuses bigger files
 const PHOTO_SIDE = 1600; // photos are shrunk on the phone: quicker to upload, still sharp on a slip
 const PDF_Q = 0.8; // slips and statements: side by side at 2× it looks the same as 0.9, and is a quarter smaller (quicker to upload)
 const TAKEN_PHOTO = [1280, 0.8]; // the payment photo as taken: a person and money, not small print — a third smaller than other photos
-const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑' };
-const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement' };
+const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑', document: '📄' };
+const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document' };
 let outbox = [];          // files waiting to upload (their details; the bytes stay in IndexedDB)
 let uploading = false, uploadErr = '';
 let shown = null;         // the file on screen, kept in memory so "Send" opens the share sheet straight from the tap
@@ -2627,10 +2631,10 @@ const SYNC_TIMEOUT_MS = 45000, SLOWEST_BPS = 4000; // a request gets 45 s plus t
 const APP_URL = 'https://app.b-e-p-l.com/test/';
 // the order is the order records are sent in: an employee before a change request about them, files last
 // (the sheet only takes a file record whose entry it already has)
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
-const KINDS_SEEN = 5; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B)
+const KINDS_SEEN = 5; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V)
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string' && okRate(d),
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && okRate(d),
@@ -2642,6 +2646,7 @@ const VALID = {
   W: d => typeof d.id === 'string' && typeof d.name === 'string' && Number.isFinite(d.wage) && CURS.includes(d.cur) && DATE_RE.test(d.start),
   G: d => typeof d.id === 'string' && typeof d.name === 'string' && typeof d.paidTo === 'string' && Number.isFinite(d.amount) && CURS.includes(d.cur) && EVERY_MONTHS.includes(d.every) && DATE_RE.test(d.first),
   B: d => typeof d.id === 'string' && typeof d.bank === 'string' && typeof d.number === 'string',
+  V: d => typeof d.id === 'string' && typeof d.title === 'string' && ['company', 'vehicle', 'personal'].includes(d.kind),
   F: d => typeof d.id === 'string' && /^[\w-]{10,100}$/.test(d.fileId) && typeof d.name === 'string' && FILE_MIMES.includes(d.mime) && SAFE_ID.test(d.for) && typeof d.type === 'string',
 };
 const DATE_RE = /^\d{4}-\d\d-\d\d$/;
@@ -2651,7 +2656,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 14; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 15; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';
@@ -4135,6 +4140,187 @@ async function deleteBank(id) {
   toast('Deleted ✓'); closeAll(); banksSheet();
 }
 
+/* ---------- the documents vault: licences, vehicle papers, passports — and when they expire ---------- */
+// A document (kind V) is its details; its scan is a file of type 'document' (kept in Drive under 05 DOCUMENTS). Renewing
+// one puts a new scan in place (the old one goes to CHANGES) and moves the dates. Company and vehicle papers are for
+// admins and the office manager; personal ones (IDs, passports) for admins only — the sheet never sends them to anyone
+// else (owner, 11 Oct 2026). The office manager may add papers; only admins change, renew or delete them.
+const DOC_KIND = { company: ['🏢', 'Company documents', 'Licences, certificates, contracts'], vehicle: ['🚚', 'Vehicle documents', 'Registration, insurance, road licence'], personal: ['🪪', 'Personal documents', 'Shareholders’ and staff IDs and passports — admins only'] };
+const DOC_OWNER = { company: ['Belongs to', 'e.g. the company, the Lologo warehouse'], vehicle: ['Vehicle', 'Number plate and type, e.g. KAA 123B truck'], personal: ['Person', 'Whose document is it?'] };
+const docOf = id => S.docs.find(v => v.id === id && !v.deleted);
+const docKinds = () => Object.keys(DOC_KIND).filter(k => k !== 'personal' || can('settings'));
+const remindOf = v => (Number.isFinite(v.remind) ? v.remind : 30);
+// how a document stands: expired, expiring within its reminder days, valid, or no expiry date
+function docState(v) {
+  if (!v.expires) return { tag: '', text: 'No expiry date', soon: false };
+  const n = daysTo(v.expires);
+  if (n < 0) return { tag: '<i class="tag bad">Expired</i>', text: `Expired ${fmtDate(v.expires)}`, soon: true };
+  if (n <= remindOf(v)) return { tag: '<i class="tag warn">Expires soon</i>', text: n === 0 ? 'Expires today' : `Expires in ${n} day${n === 1 ? '' : 's'} — ${fmtDate(v.expires)}`, soon: true };
+  return { tag: '', text: `Valid until ${fmtDate(v.expires)}`, soon: false };
+}
+const scanOf = id => filesFor(id, 'document').filter(f => !isOldVersion(f)).pop();
+
+// on the first page: what has expired or will within its reminder days, and a word about payments due
+function docBanners() {
+  if (!can('staff')) return '';
+  const due = live(S.docs).filter(v => docState(v).soon).sort((a, b) => a.expires.localeCompare(b.expires));
+  const pays = dueList().filter(([, d]) => isDueSoon(d)).length;
+  return due.slice(0, 3).map(v => `<div class="banner${daysTo(v.expires) < 0 ? '' : ' new'}"><span>${DOC_KIND[v.kind][0]} <b>${esc(v.title)}</b>${v.owner ? ` · ${esc(v.owner)}` : ''} — ${esc(docState(v).text)}</span><button class="btn small" data-act="openDoc" data-id="${esc(v.id)}">Open</button></div>`).join('')
+    + (due.length > 3 ? `<div class="banner"><span>📄 ${due.length - 3} more documents expire soon.</span><button class="btn small" data-act="docs">See all</button></div>` : '')
+    + (pays ? `<div class="banner new"><span>🔁 ${pays} regular payment${pays === 1 ? ' is' : 's are'} due or late.</span><button class="btn small" data-act="tab" data-tab="home">See</button></div>` : '');
+}
+
+function docsSheet() {
+  const all = live(S.docs);
+  openSheet(`${head('Documents', '')}
+    <p class="hint">Every paper the company must keep and renew. You get a reminder before each one expires.</p>
+    <button class="btn primary" data-act="addDoc">＋ Add a document</button>
+    ${docKinds().map(k => {
+      const list = all.filter(v => v.kind === k).sort((a, b) => (a.expires || '9').localeCompare(b.expires || '9') || a.title.localeCompare(b.title));
+      return `<h3 class="subh">${DOC_KIND[k][0]} ${DOC_KIND[k][1]} (${list.length})</h3>${list.length ? `<div class="card list inset">${list.map(docRow).join('')}</div>` : `<p class="muted">${DOC_KIND[k][2]}.</p>`}`;
+    }).join('')}`);
+  comeBack(docsSheet);
+}
+function docRow(v) {
+  const st = docState(v);
+  return `<button class="row" data-act="openDoc" data-id="${esc(v.id)}"><span class="dot">${DOC_KIND[v.kind][0]}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(v.title)}</span>${st.tag}</span><span class="s">${esc([v.owner, st.text].filter(Boolean).join(' · '))}</span></span></button>`;
+}
+function docDetail(id) {
+  const v = docOf(id);
+  if (!v) return false;
+  const st = docState(v), scan = scanOf(id), [ownerLabel] = DOC_OWNER[v.kind];
+  const facts = [['Kind', DOC_KIND[v.kind][1]], [ownerLabel, v.owner], ['Number', v.docNo], ['Issued', v.issued && fmtDate(v.issued)], ['Expires', v.expires ? fmtDate(v.expires) : 'No expiry date'], ['Reminder', v.expires ? `${remindOf(v)} days before` : ''], ['Note', v.note]];
+  openSheet(`${head(v.title, '', id)}
+    ${st.soon ? `<p class="note">⚠️ ${esc(st.text)}.${can('settings') ? ' Renew it below once you have the new one.' : ' Tell an admin.'}</p>` : ''}
+    ${scan ? `<button class="btn in" data-act="showFile" data-id="${esc(scan.id)}">📄 Open the document</button>` : '<p class="muted">No scan yet.</p>'}
+    <dl class="facts" style="margin-top:16px">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
+    ${can('settings') ? `<button class="btn out" data-act="renewDoc" data-id="${esc(id)}">🔄 Renew — the new document and its dates 🔒</button>
+      <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="editDoc" data-id="${esc(id)}">✏️ Edit 🔒</button><button class="btn danger" data-act="delDoc" data-id="${esc(id)}">🗑 Delete 🔒</button></div>` : ''}
+    ${filesList(filesFor(id, 'document').filter(isOldVersion), 'Earlier versions')}`);
+  comeBack(() => docDetail(id));
+}
+
+const dateField = (name, label, val, req) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input type="date" name="${name}" value="${esc(val || '')}" ${req ? 'required' : ''}></label>`;
+const scanField = label => `<label class="fld"><span>${label}</span><input type="file" name="scan" accept="image/*,application/pdf" required></label>`;
+function docForm(old, kind) {
+  const d = old || { kind: kind || 'company', remind: 30 }, kinds = old ? [d.kind] : docKinds();
+  openSheet(`${head(old ? 'Edit document' : 'New document', '', old?.id)}
+    <form data-form="doc" data-id="${esc(old?.id || '')}">
+      <div class="fld"><span>What kind?</span><div class="curseg">${kinds.map(k => `<label><input type="radio" name="kind" value="${k}" ${k === d.kind ? 'checked' : ''}><span><b>${DOC_KIND[k][0]} ${DOC_KIND[k][1].split(' ')[0]}</b><small>${k === 'personal' ? 'Admins only' : DOC_KIND[k][2].split(',')[0]}</small></span></label>`).join('')}</div></div>
+      ${textField('title', 'Document', 'e.g. Trading licence, Insurance, Passport', d.title)}
+      <label class="fld"><span class="ownl">${DOC_OWNER[d.kind][0]} <em>(optional)</em></span><input name="owner" value="${esc(d.owner)}" placeholder="${esc(DOC_OWNER[d.kind][1])}" maxlength="120" autocomplete="off"></label>
+      ${textField('docNo', 'Document number', '', d.docNo, false)}
+      ${dateField('issued', 'Issued on', d.issued, false)}
+      ${dateField('expires', 'Expires on', d.expires, false)}
+      <label class="fld"><span>Remind me this many days before it expires</span><input name="remind" inputmode="numeric" value="${esc(remindOf(d))}" maxlength="3" autocomplete="off"></label>
+      ${textField('note', 'Note', 'e.g. where the original paper is kept', d.note, false)}
+      ${old ? '' : scanField('Photo or PDF of the document')}
+      <p class="err"></p>
+      <button class="btn primary">${old ? 'Save changes' : 'Add document'}</button>
+    </form>`);
+}
+// the "Vehicle" / "Person" label follows the kind chosen
+function refreshDocKind(f) {
+  const k = f.elements.kind.value, [label, ph] = DOC_OWNER[k] || DOC_OWNER.company;
+  $('.ownl', f).innerHTML = `${esc(label)} <em>(optional)</em>`;
+  f.elements.owner.placeholder = ph;
+}
+function docFields(f) {
+  const v = Object.fromEntries(new FormData(f)), remind = v.remind === '' ? 30 : Number(v.remind);
+  const rec = { kind: v.kind, title: clean(v.title), owner: clean(v.owner), docNo: clean(v.docNo), issued: v.issued || '', expires: v.expires || '', remind, note: clean(v.note) };
+  if (!DOC_KIND[rec.kind] || (rec.kind === 'personal' && !can('settings'))) return [null, 'Choose what kind of document it is'];
+  if (!rec.title) return [null, 'What is the document called?', 'title'];
+  if (!Number.isInteger(remind) || remind < 0 || remind > 365) return [null, 'Type the number of days, like 30', 'remind'];
+  if (rec.issued && rec.expires && rec.expires < rec.issued) return [null, 'It cannot expire before it was issued', 'expires'];
+  return [rec];
+}
+async function saveDoc(f) {
+  const old = docOf(f.dataset.id), [rec, err, field] = docFields(f);
+  if (!rec) return formErr(f, field || null, err);
+  const by = myName() || S.lastBy || '';
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    update({ docs: S.docs.map(v => (v.id === old.id ? { ...v, ...rec, editedAt: stampSec(), editedBy: by } : v)), log: logWith([['Edited', old.id, changes.join(' ; ')]], by) });
+    toast('Changes saved ✓');
+    return closeSheet();
+  }
+  const file = f.elements.scan.files[0];
+  if (!file) return formErr(f, 'scan', 'Choose the photo or PDF of the document');
+  $('.err', f).textContent = 'Saving…';
+  let p;
+  try { p = await prepareFile(file); } catch (e) { return formErr(f, 'scan', e.message); }
+  const [[id], seq] = nextIds('V', 1, S.seq);
+  update({ docs: [...S.docs, { id, ...rec, by, createdAt: stampSec() }], seq, log: logWith([['Added', id, `Document: ${rec.title}${rec.owner ? ` (${rec.owner})` : ''}${rec.expires ? `, expires ${fmtDate(rec.expires)}` : ''}`]], by) });
+  await keepFile({ for: id, type: 'document', name: p.name, mime: p.mime }, p.data);
+  toast('Document added ✓');
+  docDetail(id);
+}
+function renewForm(id) {
+  const v = docOf(id);
+  if (!v) return;
+  openSheet(`${head(`Renew ${v.title}`, '', id)}
+    <p class="hint">The new document takes the old one's place. The old one is kept in Drive (folder CHANGES).</p>
+    <form data-form="renew" data-id="${esc(id)}">
+      ${scanField('Photo or PDF of the new document')}
+      ${dateField('issued', 'Issued on', '', false)}
+      ${dateField('expires', 'Expires on', '', !!v.expires)}
+      <p class="err"></p>
+      <button class="btn out">Renew</button>
+    </form>`);
+}
+async function saveRenew(f) {
+  const v = docOf(f.dataset.id), file = f.elements.scan.files[0], issued = f.elements.issued.value, expires = f.elements.expires.value;
+  if (!v) return;
+  if (!file) return formErr(f, 'scan', 'Choose the photo or PDF of the new document');
+  if (v.expires && expires <= v.expires) return formErr(f, 'expires', `The new one should expire after ${fmtDate(v.expires)}`);
+  $('.err', f).textContent = 'Saving…';
+  let p;
+  try { p = await prepareFile(file); } catch (e) { return formErr(f, 'scan', e.message); }
+  const old = scanOf(v.id), by = myName() || S.lastBy || '', rec = { issued: issued || '', expires: expires || '' };
+  update({ docs: S.docs.map(x => (x.id === v.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x)),
+    log: logWith([['Renewed', v.id, `${v.title}: ${v.expires ? `expired ${fmtDate(v.expires)} → ` : ''}${expires ? `expires ${fmtDate(expires)}` : 'no expiry date'}`]], by) });
+  await keepFile({ for: v.id, type: 'document', name: p.name, mime: p.mime, ...(old ? { replaces: old.id } : {}) }, p.data);
+  if (old) await setAside(old, 'replaced');
+  toast('Renewed ✓ — the old one is kept');
+  docDetail(v.id);
+}
+async function deleteDoc(id) {
+  const v = docOf(id);
+  if (!v || !await unlock('Enter the password to delete this document.')) return;
+  const by = confirmBy(`Delete "${v.title}" from the documents?\n\nIts scans move to the Drive folder DELETED ENTRIES.`);
+  if (!by) return;
+  update({ docs: S.docs.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Document: ${v.title}`]], by) });
+  toast('Deleted ✓'); closeAll(); docsSheet();
+}
+
+/* ---------- the morning email (admins): where it goes; the sheet sends it every day at about 7 ---------- */
+async function alertsSheet() {
+  openSheet(`${head('Morning email', '')}<p class="muted">Asking the Google Sheet…</p>`);
+  let res;
+  try { res = await callServer(S.link, { op: 'alerts' }); } catch (e) { return openSheet(`${head('Morning email', '')}<p class="note">${esc(e.offline ? 'No internet. Try again when it is on.' : e.message)}</p>`); }
+  const suggest = res.email || (companyContacts().find(([k]) => /mail/i.test(k)) || [])[1] || '';
+  openSheet(`${head('Morning email', '')}
+    <p class="hint">Every morning the Google Sheet emails one list: regular payments due or late, and documents about to expire. Nothing to say — no email.</p>
+    ${res.running ? '<p class="note">✅ It runs every morning at about 7.</p>' : `<p class="note">⚠️ Not running yet. In Apps Script choose <b>allowFiles</b> and press <b>Run</b> once (tick every box on Google's screen). Then come back here.</p>`}
+    <form data-form="alerts">
+      <label class="fld"><span>Send it to</span><input name="email" type="email" value="${esc(suggest)}" placeholder="e.g. office@yourcompany.com" autocomplete="off"></label>
+      <p class="err"></p>
+      <button class="btn primary">Save</button>
+    </form>
+    <button class="btn ghost" data-act="testAlerts" style="margin-top:10px">✉️ Send a test email now</button>`);
+}
+async function saveAlerts(f, test = false) {
+  const email = clean(f.elements.email.value);
+  $('.err', f).textContent = test ? 'Sending…' : 'Saving…';
+  try {
+    const res = await callServer(S.link, { op: 'alerts', email, test });
+    $('.err', f).textContent = '';
+    toast(test ? (res.sent || 'Sent ✓') : res.email ? `Saved ✓ — it goes to ${res.email}` : 'Saved ✓ — no morning email');
+  } catch (e) { formErr(f, 'email', e.offline ? 'No internet. Try again when it is on.' : e.message); }
+}
+
 /* ---------- import old entries (paste rows from a list or sheet) ---------- */
 // One entry per line: Date | Currency | Amount | Paid to | Reason | Location | Project | Paid from | Entered by
 // "Paid from" is Cash or Bank. Writing "Cash → Bank" (or "Bank → Cash") there makes the line a move
@@ -4428,9 +4614,17 @@ const ACTIONS = {
   editBank: async b => { if (await unlock('Enter the password to change this bank account.')) bankForm(bankOf(b.dataset.id)); },
   delBank: b => deleteBank(b.dataset.id),
   copyBank: b => copyBank(b),
+  docs: () => docsSheet(),
+  addDoc: () => docForm(),
+  openDoc: b => docDetail(b.dataset.id),
+  editDoc: async b => { if (await unlock('Enter the password to change this document.')) docForm(docOf(b.dataset.id)); },
+  renewDoc: async b => { if (await unlock('Enter the password to renew this document.')) renewForm(b.dataset.id); },
+  delDoc: b => deleteDoc(b.dataset.id),
+  alerts: async () => { if (await unlock('Enter the password to change the morning email.')) alertsSheet(); },
+  testAlerts: () => saveAlerts($('#sheet form[data-form=alerts]'), true),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -4485,6 +4679,7 @@ document.addEventListener('change', e => {
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
+  if (t.name === 'kind' && t.form && t.form.dataset.form === 'doc') refreshDocKind(t.form);
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }

@@ -18,14 +18,18 @@ const FILE_COLS = ['fileId', 'uid'];
 // the first bytes of each kind of file allowed: a file must be what it says it is
 const MAGIC = { 'image/jpeg': [0xFF, 0xD8, 0xFF], 'image/png': [0x89, 0x50, 0x4E, 0x47], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pdf' };
-const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Files'];
+const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Documents', 'Files'];
 // record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
 // File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …),
 // Absence (one day an employee did not work: it comes off that month's wage),
-// reGular payment (rent, internet, licence fees: due every 1, 3, 6 or 12 months), Bank account (the company's, to be paid into)
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B'];
-const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement'];
+// reGular payment (rent, internet, licence fees: due every 1, 3, 6 or 12 months), Bank account (the company's, to be paid into),
+// Vault document (a licence, a vehicle's papers, a passport…: its file is an F record of type 'document')
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V'];
+const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement', 'document'];
+// the vault's kinds of document: company and vehicle papers are for admins and the office manager; personal ones (the
+// shareholders' and staff's IDs and passports) for admins only (owner, 11 Oct 2026)
+const DOC_KINDS = ['company', 'vehicle', 'personal'];
 const BRAND_FILES = ['letterhead', 'stamp']; // the company's own: only admins set them, every login's slips carry them
 const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
 const MAX_FILE = 8 * 1024 * 1024; // bytes
@@ -66,6 +70,8 @@ const SHAPES = {
   G: d => str_(d.name) && str_(d.paidTo) && num_(d.amount) && d.amount > 0 && CURS.indexOf(d.cur) >= 0 && EVERY_MONTHS.indexOf(d.every) >= 0 && DATE_RE.test(d.first)
     && (d.mode === undefined || ACCOUNTS.indexOf(d.mode) >= 0) && (d.project === undefined || str_(d.project)),
   B: d => str_(d.bank) && d.bank.length > 0 && str_(d.number) && d.number.length > 0 && ['accName', 'cur', 'branch', 'swift', 'note'].every(k => d[k] === undefined || str_(d[k])),
+  V: d => str_(d.title) && d.title.length > 0 && DOC_KINDS.indexOf(d.kind) >= 0 && ['issued', 'expires'].every(k => !d[k] || DATE_RE.test(d[k]))
+    && (d.remind === undefined || (num_(d.remind) && d.remind >= 0 && d.remind <= 365)) && ['owner', 'docNo', 'note'].every(k => d[k] === undefined || str_(d[k])),
 };
 const EVERY_MONTHS = [1, 3, 6, 12];
 const num_ = v => typeof v === 'number' && isFinite(v);
@@ -81,7 +87,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 14; // shown when the web app link is opened in a browser
+const VERSION = 15; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -180,7 +186,7 @@ function sync_(req) {
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role !== 'admin' ? '' : ss.getUrl(), kinds: KINDS, // the sheet shows every balance
-    pull: result.pull.map(r => view_(user, r)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F'))), refused: result.refused, me: user ? public_(user) : null,
+    pull: result.pull.map(r => view_(user, r, personalDocs_(result.rows))).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V'))), refused: result.refused, me: user ? public_(user) : null,
     logins: !!user || users_().length > 0, warning: warning,
   };
 }
@@ -199,11 +205,12 @@ function who_(req) {
 }
 
 // What each login receives. Store keepers get only their own entries; only admins get the company password.
-function view_(user, rec) {
+// secret = the personal documents (their files are admins' only too): personalDocs_(rows)
+function view_(user, rec, secret) {
   if (!user || user.role === 'admin') return rec;
   if (rec.k === 'S') return { id: rec.id, k: rec.k, u: rec.u, d: { company: rec.d.company } };
   if (rec.k === 'B') return rec; // the company's bank details are for everyone to give to clients (no balances)
-  if (user.role === 'manager') return managerView_(user, rec);
+  if (user.role === 'manager') return (rec.k === 'V' && rec.d.kind === 'personal') || (rec.k === 'F' && secret && secret[rec.d.for]) ? null : managerView_(user, rec);
   if (rec.k === 'F' && BRAND_FILES.indexOf(rec.d.type) >= 0) return rec; // everyone's vouchers carry the letterhead and stamp
   return (rec.k === 'E' || rec.k === 'L' || rec.k === 'F') && rec.d.uid === user.id ? rec : null;
 }
@@ -225,7 +232,7 @@ function allowed_(user, p, before) {
   if (before) return false; // only admins change what is already there (an office manager's edit is a change request)
   if (p.d.uid !== user.id || p.d.deleted) return false; // a new record carries its sender's login and isn't born deleted
   if (p.k === 'F' && BRAND_FILES.indexOf(p.d.type) >= 0) return false; // the company letterhead and stamp: admins only
-  if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0));
+  if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A', 'V'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0)) && (p.k !== 'V' || p.d.kind !== 'personal');
   return p.k === 'E' || p.k === 'L' || p.k === 'F'; // store keeper: own expenses, notes and their receipts
 }
 
@@ -250,7 +257,7 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     if (i !== undefined && Number(out[i][2]) >= u) return; // already have this copy or a newer one (e.g. sent again after a lost reply)
     const before = i === undefined ? null : JSON.parse(out[i][4]);
     if (!allowed_(user || null, p, before)) { refused.push(p.id); return; }
-    if (codeOnly && (p.k === 'W' || p.k === 'F')) { refused.push(p.id); return; }
+    if (codeOnly && (p.k === 'W' || p.k === 'F' || p.k === 'V')) { refused.push(p.id); return; }
     const t = p.k === 'C' ? index[p.d.target] : 0;
     if (t === undefined || (p.k === 'C' && out[t][1] !== p.d.kind)) { refused.push(p.id); return; } // a change request needs its entry
     // an edit must leave its entry valid: approving it can never produce a record the sheet would refuse
@@ -262,7 +269,8 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     if (p.k === 'A' && limited && (index[p.d.worker] === undefined || out[index[p.d.worker]][1] !== 'W')) { refused.push(p.id); return; } // a day not worked belongs to an employee
     if (p.k === 'F' && limited) { // a file belongs to a record the sender may see (a store keeper: their own)
       const f = index[p.d.for];
-      if (f === undefined || (user.role === 'store' && JSON.parse(out[f][4]).uid !== user.id)) { refused.push(p.id); return; }
+      const o = f === undefined ? null : JSON.parse(out[f][4]);
+      if (!o || (user.role === 'store' && o.uid !== user.id) || (out[f][1] === 'V' && o.kind === 'personal')) { refused.push(p.id); return; }
     }
     const d = limited ? Object.assign({}, p.d, { by: user.name }) : p.d; // signed by the login that sent it
     seq += 1;
@@ -296,6 +304,11 @@ const WRONG_LOGIN = 'Wrong username or password. After 5 wrong tries, wait 15 mi
 
 function account_(req) {
   if (req.op === 'upload' || req.op === 'file' || req.op === 'original') return files_(req);
+  if (req.op === 'alerts') { // admins (or, before logins, a phone with the company code)
+    const who = who_(req);
+    if (who.error) return { ok: false, error: who.error, code: who.code };
+    return (who.user ? who.user.role === 'admin' : !users_().length) ? alerts_(req) : { ok: false, error: 'Only an admin can do this.' };
+  }
   if (req.op === 'login') return login_(req);
   if (req.op === 'setup') return setupLogins_(req);
   const me = req.token ? sessionUser_(String(req.token)) : null;
@@ -331,7 +344,7 @@ function files_(req) {
   }
   if (req.op === 'original') return original_(who.user, String(req.id || ''));
   const row = readAll_(syncTab_(SpreadsheetApp.getActive())).filter(r => r[0] === String(req.id) && r[1] === 'F')[0];
-  const rec = row && view_(who.user, toRec_(row));
+  const rec = row && view_(who.user, toRec_(row), personalDocs_(readAll_(syncTab_(SpreadsheetApp.getActive()))));
   if (!rec) return { ok: false, error: 'This file is not available to you.' };
   const blob = DriveApp.getFileById(rec.d.fileId).getBlob();
   return { ok: true, fileId: rec.d.fileId, name: rec.d.name, mime: rec.d.mime, data: Utilities.base64Encode(blob.getBytes()) };
@@ -353,6 +366,12 @@ function original_(user, id) {
     return { ok: true, fileId: ids[i] };
   }
   return { ok: false, error: 'The original of ' + f.no + ' is no longer in the Google Drive bin (Drive keeps it for 30 days).' };
+}
+// the ids of the personal documents in the vault (ids map to true): their files go to admins only
+function personalDocs_(rows) {
+  const out = Object.create(null);
+  rows.forEach(r => { if (r[1] === 'V') { try { if (JSON.parse(r[4]).kind === 'personal') out[r[0]] = true; } catch (err) { /* a damaged record is shown to nobody but admins */ out[r[0]] = true; } } });
+  return out;
 }
 function uploads_() {
   const map = Object.create(null);
@@ -376,7 +395,8 @@ function uploads_() {
    Where a file goes follows from its record (fileHome_, no Drive calls), so any later change refiles it. Nothing is thrown
    away, except the unstamped original of a cancelled paper once its stamped copy is in. A Drive problem never stops a sync. */
 const LAYOUT = '2'; // bump when the layout changes: every sheet then refiles everything once
-const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
+const DOC_FOLDER = { company: 'COMPANY', vehicle: 'VEHICLES', personal: 'PERSONAL' };
+const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', docs: '05 DOCUMENTS', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
 const TYPE_FOLDER = { idphoto: 'ID DOCUMENT', profile: 'PROFILE PHOTO', statement: 'STATEMENTS', letterhead: 'LETTERHEAD', stamp: 'STAMP' };
 const MONTHS_ = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
 const upper_ = s => String(s || '').replace(/[\\/]/g, '-').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 60);
@@ -443,6 +463,10 @@ function fileHome_(f, byId, files) {
     return { w: w, path: (old || gone ? [FOLDER.changes] : []).concat(sub), name: name, status: status };
   }
   if (!owner) return { path: [FOLDER.pay, FOLDER.other], name: name, status: status };
+  if (owner.k === 'V') { // the vault: one folder per document, its older versions under CHANGES
+    const doc = [DOC_FOLDER[o.kind] || FOLDER.other, idSeg_(upper_(o.title), owner.id)];
+    return { path: (gone ? [FOLDER.gone, FOLDER.docs] : [FOLDER.docs].concat(changes)).concat(doc), name: `${upper_(o.title)} ${String(f.createdAt || '').slice(0, 10)}${ext}`, status: status };
+  }
   const section = owner.k === 'R' ? FOLDER.received : FOLDER.pay;
   const who = owner.k === 'R' ? (byId[o.project] ? byId[o.project].d.name : 'GENERAL') : o.paidTo || o.reason;
   const entry = dated_(day).concat([idSeg_(`${day} ${upper_(who)}`, owner.id)]);
@@ -450,7 +474,7 @@ function fileHome_(f, byId, files) {
 }
 const homeText_ = h => (h.w ? [h.w.d.deleted ? FOLDER.staffGone : FOLDER.staff, staffName_(h.w)] : []).concat(h.path).map(segName_).join(' / ');
 const homeFolder_ = (h, cache) => (h.w ? h.path.reduce(child_, staffFolder_(h.w, cache)) : folderAt_(h.path, cache));
-const SECTIONS = [FOLDER.pay, FOLDER.received, FOLDER.staff, FOLDER.company, FOLDER.staffGone, FOLDER.gone];
+const SECTIONS = [FOLDER.pay, FOLDER.received, FOLDER.staff, FOLDER.company, FOLDER.docs, FOLDER.staffGone, FOLDER.gone];
 // folders a move left empty go to the bin, up to the sections (the sections and the company folder always stay)
 function tidyUp_(folder, rootId) {
   while (folder && folder.getId() !== rootId && SECTIONS.indexOf(folder.getName()) < 0 && !folder.getFiles().hasNext() && !folder.getFolders().hasNext()) {
@@ -507,6 +531,7 @@ function organizeAll_(rows) {
 // Then it files everything into the company folder (the Google Sheet too): if Drive is still not allowed, it fails here.
 function allowFiles() {
   ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  if (!hasMorning_()) ScriptApp.newTrigger('morningEmail').timeBased().everyDays(1).atHour(7).create(); // the morning email, at about 7
   organizeAll_(readAll_(syncTab_(SpreadsheetApp.getActive())));
   Logger.log(`Drive access is allowed, and everything is filed in the folder ${filesRoot_().getName()} (the Google Sheet too). Now: Deploy → Manage deployments → ✏️ → New version → Deploy.`);
 }
@@ -705,6 +730,7 @@ function rebuild_(ss, all) {
   employees_(ss, ctx, of('W').filter(x => !x.deleted));
   regulars_(ss, ctx, of('G').filter(x => !x.deleted));
   banks_(ss, ctx, of('B').filter(x => !x.deleted));
+  docs_(ss, ctx, of('V').filter(x => !x.deleted), recs);
   filesTab_(ss, ctx, recs);
   // keep the tabs in a fixed order right after "Read me"
   VIEW_TABS.forEach((name, i) => {
@@ -866,7 +892,7 @@ function received_(ss, c) {
     ['', 'date', '', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 190, 75, 120, 140, 110, 200, 120, 150, 260, 110], [6, 7]);
 }
 // Every uploaded file: what it is, what it belongs to, its status and the Drive folder it is filed in.
-const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement' };
+const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document' };
 function filesTab_(ss, c, recs) {
   const byId = Object.create(null);
   recs.forEach(r => { byId[r.id] = r; });
@@ -876,7 +902,7 @@ function filesTab_(ss, c, recs) {
     if (f.for === 'settings') return 'The company';
     if (!o) return '';
     const d = o.d;
-    return o.k === 'W' ? 'Employee: ' + d.name : o.k === 'E' ? (d.worker ? c.wname(d.worker) : d.paidTo || '') + ' — ' + (d.reason || '') : o.k === 'R' ? 'Money received — ' + c.pname(d.project) : '';
+    return o.k === 'V' ? 'Document: ' + d.title : o.k === 'W' ? 'Employee: ' + d.name : o.k === 'E' ? (d.worker ? c.wname(d.worker) : d.paidTo || '') + ' — ' + (d.reason || '') : o.k === 'R' ? 'Money received — ' + c.pname(d.project) : '';
   };
   // in the order of the folders in Drive, so the tab reads like the filing cabinet
   const rows = files.map(f => {
@@ -956,6 +982,68 @@ function regulars_(ss, c, regs) {
 function banks_(ss, c, banks) {
   dataTab_(ss, c.company, 'Bank accounts', '#0e7490', ['No.', 'Bank', 'Account name', 'Account number', 'Currency', 'Branch', 'SWIFT code', 'Note'],
     banks.map(b => [b.id, b.bank, b.accName || '', b.number, b.cur || '', b.branch || '', b.swift || '', b.note || '']), [], [110, 220, 240, 180, 80, 160, 120, 260], null);
+}
+/* ---------- the vault: documents and when they expire ---------- */
+const DOC_TEXT = { company: 'Company', vehicle: 'Vehicle', personal: 'Personal' };
+const daysBetween_ = (a, b) => Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 864e5);
+const remindOf_ = v => (num_(v.remind) ? v.remind : 30);
+function docState_(v, t) {
+  if (!v.expires) return { text: 'No expiry date', left: '' };
+  const left = daysBetween_(t, v.expires);
+  return { left: left, text: left < 0 ? 'Expired' : left === 0 ? 'Expires today' : left <= remindOf_(v) ? 'Expires soon' : 'Valid' };
+}
+function docs_(ss, c, docs, recs) {
+  const t = today_(), file = Object.create(null);
+  recs.filter(r => r.k === 'F' && r.d.type === 'document' && !r.d.deleted && !r.d.replaced && !r.d.removed).forEach(r => { file[r.d.for] = r.d.fileId; });
+  dataTab_(ss, c.company, 'Documents', '#4338ca', ['No.', 'Document', 'Kind', 'Belongs to', 'Number', 'Issued', 'Expires', 'Days left', 'Status', 'Remind days before', 'Note', 'Open'],
+    docs.map(v => { const s = docState_(v, t); return [v.id, v.title, DOC_TEXT[v.kind], v.owner || '', v.docNo || '', v.issued || '', v.expires || '', s.left, s.text, remindOf_(v), v.note || '', file[v.id] ? 'https://drive.google.com/file/d/' + file[v.id] + '/view' : '']; }),
+    ['', '', '', '', '', 'date', 'date'], [110, 220, 90, 180, 140, 105, 105, 80, 110, 90, 220, 300], null);
+}
+
+/* ---------- the morning email: what needs doing today ---------- */
+// Sent by a daily trigger (allowFiles sets it up) to the address an admin chose in the app (Settings → Morning email).
+// Payments: due in 3 days, today, or late (every morning until paid). Documents: on their reminder day, 7 days and 1 day
+// before, the day they expire, then every Monday while expired. Nothing to say: no email.
+function alertLines_(recs, t) {
+  const live = k => recs.filter(r => r.k === k && SHAPES[k](r.d) && !r.d.deleted).map(r => r.d);
+  const E = live('E'), lines = [];
+  live('G').forEach(g => {
+    const d = regularDue_(g, E.filter(x => x.regular === g.id && x.period).map(x => x.period), t), left = daysBetween_(t, d.next);
+    if (d.late) lines.push('LATE: ' + g.name + ' — ' + g.cur + ' ' + g.amount + ' to ' + g.paidTo + ' (' + d.late + ' unpaid, oldest due ' + d.next + ')');
+    else if (left === 0 || left === 3) lines.push('Due ' + (left ? 'in 3 days' : 'today') + ': ' + g.name + ' — ' + g.cur + ' ' + g.amount + ' to ' + g.paidTo + ' (' + d.next + ')');
+  });
+  const monday = new Date(Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10))).getUTCDay() === 1;
+  live('V').filter(v => v.expires).forEach(v => {
+    const left = daysBetween_(t, v.expires), who = v.owner ? ' (' + v.owner + ')' : '';
+    if (left < 0 && monday) lines.push('EXPIRED: ' + v.title + who + ' — expired on ' + v.expires);
+    else if (left >= 0 && [remindOf_(v), 7, 1, 0].indexOf(left) >= 0) lines.push((left ? 'Expires in ' + left + ' day' + (left === 1 ? '' : 's') : 'Expires TODAY') + ': ' + v.title + who + ' (' + v.expires + ')');
+  });
+  return lines;
+}
+function morningEmail(test) {
+  const to = PropertiesService.getScriptProperties().getProperty('ALERT_EMAIL');
+  if (!to) return 'No address: an admin sets it in the app (Settings → Morning email).';
+  const recs = readAll_(syncTab_(SpreadsheetApp.getActive())).map(toRec_), lines = alertLines_(recs, today_());
+  if (!lines.length && test !== true) return 'Nothing to do today.';
+  const company = (recs.filter(r => r.k === 'S').map(r => r.d.company)[0]) || 'Company';
+  MailApp.sendEmail({ to: to, subject: company + (lines.length ? ' — ' + lines.length + ' thing' + (lines.length === 1 ? '' : 's') + ' to do today' : ' — test: the morning email works'),
+    body: (lines.length ? lines.join('\n') : 'Nothing is due or expiring today. This is the test you asked for.') + '\n\nOpen the app: ' + APP_URL_ });
+  return 'Sent to ' + to + '.';
+}
+const APP_URL_ = 'https://app.b-e-p-l.com/';
+const hasMorning_ = () => ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'morningEmail');
+// an admin chooses where the morning email goes ('' = none), or asks for a test now
+function alerts_(req) {
+  const props = PropertiesService.getScriptProperties();
+  if (typeof req.email === 'string') {
+    const email = req.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'That is not an email address.' };
+    if (email) props.setProperty('ALERT_EMAIL', email); else props.deleteProperty('ALERT_EMAIL');
+  }
+  let running = false;
+  try { running = hasMorning_(); } catch (err) { running = false; } // not allowed yet: allowFiles has not been run since script 15
+  const sent = req.test ? morningEmail(true) : '';
+  return { ok: true, email: props.getProperty('ALERT_EMAIL') || '', running: running, sent: sent };
 }
 function changeLog_(ss, c) {
   dataTab_(ss, c.company, 'Change Log', COLOR.muted, ['When', 'Action', 'Entry', 'By', 'Details'],
