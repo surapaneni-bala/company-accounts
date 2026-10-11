@@ -33,7 +33,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // an empty list of every kind of record (a new company, a new phone, a sign-in that starts again)
 const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
@@ -112,7 +112,7 @@ function nextIds(prefix, n, seq) {
 const logWith = (entries, by = S.lastBy || '') => [...S.log, ...entries.map(([action, id, text], i) => ({ lid: `L-${S.dev}-${Date.now().toString(36)}${i}`, at: stampSec(), action, id, text, by }))];
 
 const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved', rate: 'SSP for 1 USD',
-  to: 'Moved to', manualDate: 'Date set by hand', every: 'How often', first: 'First due', bank: 'Bank', accName: 'Account name', number: 'Account number', branch: 'Branch', swift: 'SWIFT code', title: 'Document', kind: 'Kind', owner: 'Belongs to', docNo: 'Document number', issued: 'Issued', expires: 'Expires', remind: 'Reminder (days before)', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
+  to: 'Moved to', manualDate: 'Date set by hand', every: 'How often', first: 'First due', bank: 'Bank', accName: 'Account name', number: 'Account number', branch: 'Branch', swift: 'SWIFT code', title: 'Document', kind: 'Kind', owner: 'Belongs to', docNo: 'Document number', issued: 'Issued', expires: 'Expires', remind: 'Reminder (days before)', address: 'Address', tin: 'TIN', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
 function showVal(k, r) {
   const v = r[k];
   if (['amount', 'wage', 'openingAmount'].includes(k)) return v === undefined || v === '' ? '(empty)' : money(+v, r.cur);
@@ -323,6 +323,7 @@ function viewMenu() {
         <button class="app-tile acc" data-act="tab" data-tab="home"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><span><b>Accounts</b><small>Cash, bank and projects</small></span></button>
         <button class="app-tile emp" data-act="tab" data-tab="staff">${staffWaiting ? `<span class="badge">${staffWaiting} waiting</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg></span><span><b>Employees</b><small>Salaries, advances and slips</small></span></button>
         <button class="app-tile doc" data-act="docs">${live(S.docs).some(v => docState(v).soon) ? `<span class="badge">${live(S.docs).filter(v => docState(v).soon).length} to renew</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><span><b>Documents</b><small>Licences, vehicles, IDs</small></span></button>
+        ${can('settings') ? `<button class="app-tile inv" data-act="sales">${live(S.invoices).some(x => x.type === 'invoice' && invState(x).state === 'overdue') ? `<span class="badge">${live(S.invoices).filter(x => x.type === 'invoice' && invState(x).state === 'overdue').length} overdue</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span><span><b>Invoices</b><small>Quotations, clients, what is owed</small></span></button>` : ''}
       </div>
     </section>`;
 }
@@ -492,14 +493,16 @@ function expenseForm(old, preset) {
       <button class="btn out">${old ? saveLabel() : 'Save expense'}</button>
     </form>${datalists()}`);
 }
-function creditForm(old, presetProject) {
-  const d = old || { cur: defCur(), amount: '', project: presetProject || S.lastProject || '', mode: 'Bank', note: '' };
+// preset: a new entry filled in (a payment for an invoice: which one)
+function creditForm(old, presetProject, preset) {
+  const d = old || { cur: defCur(), amount: '', project: presetProject || S.lastProject || '', mode: 'Bank', note: '', ...preset };
   openSheet(`${head(old ? 'Edit money received' : 'Money received', 'in', old?.id)}
     <form data-form="credit" data-id="${esc(old?.id || '')}">
+      ${!old && d.invoice ? `<p class="note">${esc(d.hint)}</p><input type="hidden" name="invoice" value="${esc(d.invoice)}">` : ''}
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${rateField(d.cur, d.rate)}
-      ${projectSelect(d.project, false)}
+      ${projectSelect(d.project, !!d.invoice)}
       ${accountChips(d.mode, 'Received into')}
       ${textField('note', 'Note', 'e.g. 2nd installment', d.note, false)}
       ${whenField(old?.at, !!old)}
@@ -737,7 +740,7 @@ function saveCredit(f) {
   if (amount === null) return formErr(f, 'amount', 'Type a correct amount, like 50000');
   const by = clean(v.by);
   const [project, projects, seq0] = projectFromForm(v);
-  if (!project) return formErr(f, 'newProject', 'Type the new project name');
+  if (project === null || project === undefined) return formErr(f, 'newProject', 'Type the new project name'); // '' = general: only offered for an invoice's payment
   if (!by) return formErr(f, 'by', 'Type your name');
   const cur = formCur(f), rate = rateFrom(f, cur);
   if (rate === null) return formErr(f, 'rate', RATE_ERR);
@@ -753,7 +756,7 @@ function saveCredit(f) {
   } else {
     const [[id], seq] = nextIds('R', 1, S.seq);
     update({
-      credits: [...S.credits, { id, ...rec, by, createdAt: stampSec() }], seq, lastProject: project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
+      credits: [...S.credits, { id, ...rec, ...(invOf(v.invoice) ? { invoice: v.invoice } : {}), by, createdAt: stampSec() }], seq, lastProject: project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
       log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('R', rec)}`]], by) : S.log,
     });
     toast(`Saved ✓ ${money(amount, rec.cur)} received`);

@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ TextEncoder });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue };', ctx);
-const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue } = ctx.api;
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState };', ctx);
+const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState } = ctx.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 
 /* ---------- days on a 30-day month: joining and leaving days both count, day 31 counts as day 30 ---------- */
@@ -115,5 +115,18 @@ assert.deepStrictEqual(plain(regularDue(rent, ['2026-09-01', '2026-10-01'], '202
 assert.deepStrictEqual(plain(regularDue(rent, ['2026-09-01', '2026-10-01', '2026-11-01'], '2026-10-11')), { next: '2026-12-01', late: 0 }, 'paid ahead');
 assert.deepStrictEqual(plain(regularDue({ first: '2026-09-05', every: 1 }, ['2026-09-01', '2026-10-01'], '2026-10-11')), { next: '2026-11-05', late: 0 }, 'the due day moved from the 1st to the 5th: payments still count for their month');
 assert.deepStrictEqual(plain(regularDue({ first: '2026-01-10', every: 12 }, ['2026-01-10'], '2026-10-11')), { next: '2027-01-10', late: 0 }, 'a yearly licence');
+
+/* ---------- invoices: lines, tax, what is paid and what is left ---------- */
+const inv = { id: 'I-1', cur: 'USD', due: '2026-10-20', tax: 0, items: [{ t: 'Cement 42.5', qty: 3, unit: 'bags', price: 19.99 }, { t: 'Delivery', qty: 1, price: 50 }] };
+assert.deepStrictEqual(plain(invoiceTotals(inv)), { sub: 109.97, tax: 0, total: 109.97 }, 'quantity × price to the cent (3 × 19.99 is 59.97, not 59.970000001)');
+assert.deepStrictEqual(plain(invoiceTotals({ ...inv, tax: 18 })), { sub: 109.97, tax: 19.79, total: 129.76 }, 'tax on the sum, rounded to the cent');
+const paid = (amount, extra = {}) => ({ invoice: 'I-1', cur: 'USD', amount, ...extra });
+assert.deepStrictEqual(plain(invoiceState(inv, [], '2026-10-11')), { total: 109.97, paid: 0, due: 109.97, state: 'unpaid' });
+assert.strictEqual(invoiceState(inv, [paid(50)], '2026-10-11').state, 'part', 'part paid');
+assert.deepStrictEqual(plain(invoiceState(inv, [paid(50), paid(59.97)], '2026-10-11')), { total: 109.97, paid: 109.97, due: 0, state: 'paid' });
+assert.strictEqual(invoiceState(inv, [paid(50)], '2026-10-21').state, 'overdue', 'past the due date with money still owed');
+assert.strictEqual(invoiceState(inv, [paid(500)], '2026-10-21').due, 0, 'paid more: nothing owed');
+assert.strictEqual(invoiceState(inv, [paid(50, { deleted: 'x' }), paid(50, { cur: 'SSP' }), paid(50, { invoice: 'I-2' })], '2026-10-11').paid, 0, 'a deleted entry, another currency or another invoice does not count');
+assert.strictEqual(invoiceState({ ...inv, cancelled: '2026-10-12T10:00' }, [], '2026-10-30').state, 'cancelled');
 
 console.log('Pay maths, words and PDF: all checks passed');

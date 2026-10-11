@@ -18,15 +18,17 @@ const FILE_COLS = ['fileId', 'uid'];
 // the first bytes of each kind of file allowed: a file must be what it says it is
 const MAGIC = { 'image/jpeg': [0xFF, 0xD8, 0xFF], 'image/png': [0x89, 0x50, 0x4E, 0x47], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pdf' };
-const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Documents', 'Files'];
+const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Documents', 'Invoices', 'Files'];
 // record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
 // File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …),
 // Absence (one day an employee did not work: it comes off that month's wage),
 // reGular payment (rent, internet, licence fees: due every 1, 3, 6 or 12 months), Bank account (the company's, to be paid into),
-// Vault document (a licence, a vehicle's papers, a passport…: its file is an F record of type 'document')
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V'];
-const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement', 'document'];
+// Vault document (a licence, a vehicle's papers, a passport…: its file is an F record of type 'document'),
+// Klient (who invoices and quotations go to) and Invoice (an invoice or a quotation: its PDF is an F record) — admins only
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 'K', 'I'];
+const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement', 'document', 'invoice', 'quote'];
+const SALES_KINDS = ['K', 'I']; // what clients are charged and owe: admins only (owner, 11 Oct 2026)
 // the vault's kinds of document: company and vehicle papers are for admins and the office manager; personal ones (the
 // shareholders' and staff's IDs and passports) for admins only (owner, 11 Oct 2026)
 const DOC_KINDS = ['company', 'vehicle', 'personal'];
@@ -72,6 +74,11 @@ const SHAPES = {
   B: d => str_(d.bank) && d.bank.length > 0 && str_(d.number) && d.number.length > 0 && ['accName', 'cur', 'branch', 'swift', 'note'].every(k => d[k] === undefined || str_(d[k])),
   V: d => str_(d.title) && d.title.length > 0 && DOC_KINDS.indexOf(d.kind) >= 0 && ['issued', 'expires'].every(k => !d[k] || DATE_RE.test(d[k]))
     && (d.remind === undefined || (num_(d.remind) && d.remind >= 0 && d.remind <= 365)) && ['owner', 'docNo', 'note'].every(k => d[k] === undefined || str_(d[k])),
+  K: d => str_(d.name) && d.name.length > 0 && ['phone', 'address', 'tin', 'note'].every(k => d[k] === undefined || str_(d[k])),
+  I: d => ['invoice', 'quote'].indexOf(d.type) >= 0 && str_(d.no) && d.no.length > 0 && SAFE_ID.test(d.client) && DATE_RE.test(d.date) && (!d.due || DATE_RE.test(d.due))
+    && CURS.indexOf(d.cur) >= 0 && Array.isArray(d.items) && d.items.length > 0 && d.items.length <= 100
+    && d.items.every(it => isObj_(it) && str_(it.t) && num_(it.qty) && it.qty > 0 && num_(it.price) && it.price >= 0 && (it.unit === undefined || str_(it.unit)))
+    && (d.tax === undefined || (num_(d.tax) && d.tax >= 0 && d.tax <= 100)) && ['bank', 'from'].every(k => !d[k] || SAFE_ID.test(d[k])) && ['notes', 'project'].every(k => d[k] === undefined || str_(d[k])),
 };
 const EVERY_MONTHS = [1, 3, 6, 12];
 const num_ = v => typeof v === 'number' && isFinite(v);
@@ -79,7 +86,8 @@ const num_ = v => typeof v === 'number' && isFinite(v);
 const extras_ = d => (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (d.worker === undefined || SAFE_ID.test(d.worker))
   && (d.pay === undefined || ['salary', 'advance', 'settlement'].indexOf(d.pay) >= 0) && (d.month === undefined || /^\d{4}-\d\d$/.test(d.month))
   && (d.daysOff === undefined || (num_(d.daysOff) && d.daysOff >= 0 && d.daysOff <= 31)) && (d.approval === undefined || SAFE_ID.test(d.approval))
-  && (d.regular === undefined || SAFE_ID.test(d.regular)) && (d.period === undefined || DATE_RE.test(d.period)); // a regular payment, and the due date it pays
+  && (d.regular === undefined || SAFE_ID.test(d.regular)) && (d.period === undefined || DATE_RE.test(d.period)) // a regular payment, and the due date it pays
+  && (d.invoice === undefined || SAFE_ID.test(d.invoice)); // money received for an invoice
 const str_ = v => typeof v === 'string';
 const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
@@ -87,7 +95,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 15; // shown when the web app link is opened in a browser
+const VERSION = 16; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -219,7 +227,8 @@ function view_(user, rec, secret) {
 // (the log names amounts received). Without money in and moves, no balance can be worked out from what she holds.
 const MONEY_KINDS = ['R', 'T'];
 function managerView_(user, rec) {
-  if (MONEY_KINDS.indexOf(rec.k) >= 0) return null;
+  if (MONEY_KINDS.indexOf(rec.k) >= 0 || SALES_KINDS.indexOf(rec.k) >= 0) return null;
+  if (rec.k === 'F' && /^[IK]-/.test(String(rec.d.for))) return null; // invoice and quotation PDFs
   if (rec.k === 'P') { const d = Object.assign({}, rec.d); delete d.value; delete d.valueCur; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
   if (rec.k === 'C' && MONEY_KINDS.indexOf(rec.d.kind) >= 0) return null;
   if (rec.k === 'F' && /^[RT]-/.test(String(rec.d.for))) return null;
@@ -304,10 +313,11 @@ const WRONG_LOGIN = 'Wrong username or password. After 5 wrong tries, wait 15 mi
 
 function account_(req) {
   if (req.op === 'upload' || req.op === 'file' || req.op === 'original') return files_(req);
-  if (req.op === 'alerts') { // admins (or, before logins, a phone with the company code)
+  if (req.op === 'alerts' || req.op === 'number') { // admins (or, before logins, a phone with the company code)
     const who = who_(req);
     if (who.error) return { ok: false, error: who.error, code: who.code };
-    return (who.user ? who.user.role === 'admin' : !users_().length) ? alerts_(req) : { ok: false, error: 'Only an admin can do this.' };
+    if (!(who.user ? who.user.role === 'admin' : !users_().length)) return { ok: false, error: 'Only an admin can do this.' };
+    return req.op === 'alerts' ? alerts_(req) : nextInvoiceNo_();
   }
   if (req.op === 'login') return login_(req);
   if (req.op === 'setup') return setupLogins_(req);
@@ -367,6 +377,13 @@ function original_(user, id) {
   }
   return { ok: false, error: 'The original of ' + f.no + ' is no longer in the Google Drive bin (Drive keeps it for 30 days).' };
 }
+// Invoices are numbered by the sheet, in one unbroken series for the whole company (phones may be offline, so they can't
+// count by themselves). Each request takes the next number, under the script lock that every request holds.
+function nextInvoiceNo_() {
+  const props = PropertiesService.getScriptProperties(), n = Number(props.getProperty('INVOICE_SEQ') || 0) + 1;
+  props.setProperty('INVOICE_SEQ', String(n));
+  return { ok: true, no: 'INV-' + ('000' + n).slice(-4) };
+}
 // the ids of the personal documents in the vault (ids map to true): their files go to admins only
 function personalDocs_(rows) {
   const out = Object.create(null);
@@ -396,7 +413,7 @@ function uploads_() {
    away, except the unstamped original of a cancelled paper once its stamped copy is in. A Drive problem never stops a sync. */
 const LAYOUT = '2'; // bump when the layout changes: every sheet then refiles everything once
 const DOC_FOLDER = { company: 'COMPANY', vehicle: 'VEHICLES', personal: 'PERSONAL' };
-const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', docs: '05 DOCUMENTS', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
+const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', docs: '05 DOCUMENTS', invoices: '06 INVOICES', quotes: '07 QUOTATIONS', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
 const TYPE_FOLDER = { idphoto: 'ID DOCUMENT', profile: 'PROFILE PHOTO', statement: 'STATEMENTS', letterhead: 'LETTERHEAD', stamp: 'STAMP' };
 const MONTHS_ = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
 const upper_ = s => String(s || '').replace(/[\\/]/g, '-').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 60);
@@ -463,6 +480,10 @@ function fileHome_(f, byId, files) {
     return { w: w, path: (old || gone ? [FOLDER.changes] : []).concat(sub), name: name, status: status };
   }
   if (!owner) return { path: [FOLDER.pay, FOLDER.other], name: name, status: status };
+  if (owner.k === 'I') { // invoices and quotations by year and month, named by number and client; a cancelled one under CHANGES
+    const k = byId[o.client], who = k && k.k === 'K' ? k.d.name : '';
+    return { path: [o.type === 'quote' ? FOLDER.quotes : FOLDER.invoices].concat(changes, dated_(String(o.date || ''))), name: `${o.no} ${upper_(who)}${ext}`.replace(' ' + ext, ext), status: status };
+  }
   if (owner.k === 'V') { // the vault: one folder per document, its older versions under CHANGES
     const doc = [DOC_FOLDER[o.kind] || FOLDER.other, idSeg_(upper_(o.title), owner.id)];
     return { path: (gone ? [FOLDER.gone, FOLDER.docs] : [FOLDER.docs].concat(changes)).concat(doc), name: `${upper_(o.title)} ${String(f.createdAt || '').slice(0, 10)}${ext}`, status: status };
@@ -474,7 +495,7 @@ function fileHome_(f, byId, files) {
 }
 const homeText_ = h => (h.w ? [h.w.d.deleted ? FOLDER.staffGone : FOLDER.staff, staffName_(h.w)] : []).concat(h.path).map(segName_).join(' / ');
 const homeFolder_ = (h, cache) => (h.w ? h.path.reduce(child_, staffFolder_(h.w, cache)) : folderAt_(h.path, cache));
-const SECTIONS = [FOLDER.pay, FOLDER.received, FOLDER.staff, FOLDER.company, FOLDER.docs, FOLDER.staffGone, FOLDER.gone];
+const SECTIONS = [FOLDER.pay, FOLDER.received, FOLDER.staff, FOLDER.company, FOLDER.docs, FOLDER.invoices, FOLDER.quotes, FOLDER.staffGone, FOLDER.gone];
 // folders a move left empty go to the bin, up to the sections (the sections and the company folder always stay)
 function tidyUp_(folder, rootId) {
   while (folder && folder.getId() !== rootId && SECTIONS.indexOf(folder.getName()) < 0 && !folder.getFiles().hasNext() && !folder.getFolders().hasNext()) {
@@ -731,6 +752,7 @@ function rebuild_(ss, all) {
   regulars_(ss, ctx, of('G').filter(x => !x.deleted));
   banks_(ss, ctx, of('B').filter(x => !x.deleted));
   docs_(ss, ctx, of('V').filter(x => !x.deleted), recs);
+  invoices_(ss, ctx, of('I').filter(x => !x.deleted), of('K'));
   filesTab_(ss, ctx, recs);
   // keep the tabs in a fixed order right after "Read me"
   VIEW_TABS.forEach((name, i) => {
@@ -892,7 +914,7 @@ function received_(ss, c) {
     ['', 'date', '', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 190, 75, 120, 140, 110, 200, 120, 150, 260, 110], [6, 7]);
 }
 // Every uploaded file: what it is, what it belongs to, its status and the Drive folder it is filed in.
-const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document' };
+const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document', invoice: 'Invoice', quote: 'Quotation' };
 function filesTab_(ss, c, recs) {
   const byId = Object.create(null);
   recs.forEach(r => { byId[r.id] = r; });
@@ -902,7 +924,7 @@ function filesTab_(ss, c, recs) {
     if (f.for === 'settings') return 'The company';
     if (!o) return '';
     const d = o.d;
-    return o.k === 'V' ? 'Document: ' + d.title : o.k === 'W' ? 'Employee: ' + d.name : o.k === 'E' ? (d.worker ? c.wname(d.worker) : d.paidTo || '') + ' — ' + (d.reason || '') : o.k === 'R' ? 'Money received — ' + c.pname(d.project) : '';
+    return o.k === 'I' ? (d.type === 'quote' ? 'Quotation ' : 'Invoice ') + d.no : o.k === 'V' ? 'Document: ' + d.title : o.k === 'W' ? 'Employee: ' + d.name : o.k === 'E' ? (d.worker ? c.wname(d.worker) : d.paidTo || '') + ' — ' + (d.reason || '') : o.k === 'R' ? 'Money received — ' + c.pname(d.project) : '';
   };
   // in the order of the folders in Drive, so the tab reads like the filing cabinet
   const rows = files.map(f => {
@@ -998,6 +1020,23 @@ function docs_(ss, c, docs, recs) {
   dataTab_(ss, c.company, 'Documents', '#4338ca', ['No.', 'Document', 'Kind', 'Belongs to', 'Number', 'Issued', 'Expires', 'Days left', 'Status', 'Remind days before', 'Note', 'Open'],
     docs.map(v => { const s = docState_(v, t); return [v.id, v.title, DOC_TEXT[v.kind], v.owner || '', v.docNo || '', v.issued || '', v.expires || '', s.left, s.text, remindOf_(v), v.note || '', file[v.id] ? 'https://drive.google.com/file/d/' + file[v.id] + '/view' : '']; }),
     ['', '', '', '', '', 'date', 'date'], [110, 220, 90, 180, 140, 105, 105, 80, 110, 90, 220, 300], null);
+}
+
+/* ---------- invoices and quotations: the same sums as the app (src/calc.js invoiceTotals, invoiceState) ---------- */
+function invoiceState_(inv, credits, t) {
+  const sub = inv.items.reduce((s, it) => s + Math.round(it.qty * it.price * 100), 0), tax = inv.tax > 0 ? Math.round(sub * inv.tax / 100) : 0, total = sub + tax;
+  const paid = credits.filter(c => c.invoice === inv.id && c.cur === inv.cur).reduce((s, c) => s + cents_(c.amount), 0), due = Math.max(0, total - paid);
+  const state = inv.cancelled ? 'Cancelled' : inv.type === 'quote' ? 'Quotation' : due === 0 ? 'Paid' : inv.due && inv.due < t ? 'Overdue' : paid ? 'Part paid' : 'Unpaid';
+  return { total: total / 100, paid: paid / 100, due: inv.type === 'quote' || inv.cancelled ? 0 : due / 100, state: state };
+}
+function invoices_(ss, c, invs, clients) {
+  const t = today_(), name = Object.create(null);
+  clients.forEach(k => { name[k.id] = k.name; });
+  dataTab_(ss, c.company, 'Invoices', '#9d174d', ['Number', 'Kind', 'Client', 'Date', 'Due / valid until', 'Currency', 'Total', 'Paid', 'Still owed', 'Status', 'Entry no.'],
+    invs.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).map(inv => {
+      const s = invoiceState_(inv, c.R, t);
+      return [inv.no, inv.type === 'quote' ? 'Quotation' : 'Invoice', name[inv.client] || '', inv.date, inv.due || '', inv.cur, s.total, s.paid, s.due, s.state, inv.id];
+    }), ['', '', '', 'date', 'date', '', 'num', 'num', 'num'], [110, 100, 220, 105, 120, 80, 120, 120, 120, 100, 120], null);
 }
 
 /* ---------- the morning email: what needs doing today ---------- */

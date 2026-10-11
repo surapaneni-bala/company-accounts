@@ -44,6 +44,21 @@ function regularDue(g, periods, today) {
   return { next, late };
 }
 
+/* ---------- invoices and quotations ---------- */
+// The money on an invoice: each line is quantity × unit price to the cent; tax (a percentage, 0 = none) on their sum.
+function invoiceTotals(inv) {
+  const sub = inv.items.reduce((t, it) => t + Math.round(it.qty * it.price * 100), 0), tax = inv.tax > 0 ? Math.round(sub * inv.tax / 100) : 0;
+  return { sub: sub / 100, tax: tax / 100, total: (sub + tax) / 100 };
+}
+// What has been received for it (money received entries that name it, in its currency) and what is still owed.
+function invoiceState(inv, credits, today) {
+  const total = invoiceTotals(inv).total;
+  const paid = credits.filter(c => c.invoice === inv.id && !c.deleted && c.cur === inv.cur).reduce((t, c) => t + Math.round(c.amount * 100), 0);
+  const due = Math.max(0, Math.round(total * 100) - paid) / 100;
+  const state = inv.cancelled ? 'cancelled' : due === 0 ? 'paid' : inv.due && inv.due < today ? 'overdue' : paid ? 'part' : 'unpaid';
+  return { total, paid: paid / 100, due, state };
+}
+
 // An employee's account: wage earned month by month (less days not worked: the dated ones recorded for them, plus
 // the number older salary payments carried),
 // minus everything paid to them (salary, advances, final settlement), plus the balance from before the app

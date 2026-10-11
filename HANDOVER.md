@@ -331,6 +331,11 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**TEST COPY 11 Oct 2026 (branch `office`, not live): regular payments + bank accounts (v14), documents vault + morning
+email (v15), invoices & quotations + clients (v16).** Checked on the mock sheet end to end at 375 and 320 px; all tests. On
+"update live": merge `office`, build, push; owner pastes v16, runs allowFiles (Drive + Mail + the trigger), New version, then
+Settings → Morning email.
+
 **RELEASED 10 Oct 2026 (night, latest): live app c8a6b632f9 + script v13** (from `keep-voucher`; test copy edb5544d3d). Bank → Cash (or any edit that
 leaves the money and the person alone) no longer cancels a signed paper; admins can undo a cancel (the original comes back
 out of the Drive bin). Checked end to end on the mock sheet: Bank → Cash kept PV valid; $250 → $300 cancelled it (no undo
@@ -601,6 +606,19 @@ folder, which is temporary:
   PDF — page 1 the paper with the new details and the stored payment photo, badge "CORRECTED — REPLACES <no>", the signature
   box replaced by "Signed by X on <date> for <was>… Corrected by <admin> (admin): <was> → <new>" (`signNote`), the admin under
   Approved by; page 2 the original signed paper (stamped CANCELLED). The person's signature is never put under new figures.
+- **Regular payments, bank accounts, documents, invoices** (owner, 11 Oct 2026; script v14–v16). New kinds: **G** regular
+  payment (`src/regular.js`; due dates `dueOn`/`regularDue` in calc.js, mirrored in Code.gs `regularDue_`; paying one is an
+  expense with `regular` + `period`, so nothing is stored about what was paid), **B** company bank account (`src/banks.js`;
+  everyone sees them, admins edit; Copy / wa.me / Share), **V** vault document (`src/vault.js`; kinds company / vehicle /
+  personal — personal ones and their scans never reach a non-admin: `personalDocs_` → `view_`, also for the `file` op;
+  scans are F type `document` in Drive `05 DOCUMENTS/<KIND>/<TITLE> (V-…)`, renewing sets the old scan `replaced` → CHANGES),
+  **K** client and **I** invoice/quotation (`src/invoices.js`; admins only — `SALES_KINDS`; invoices numbered by the sheet's
+  op `number` in one series `INV-0001…` (needs internet), quotations `QT-<dev>-…` offline; never edited — cancelled and
+  copied; totals `invoiceTotals`/`invoiceState` in calc.js, mirrored in `invoiceState_`; payments are R entries with
+  `invoice`, which may have no project; PDFs via `renderStatement` (wrap columns, `notes`, `approvals`), filed in
+  `06 INVOICES` / `07 QUOTATIONS` by year and month). **Morning email**: `allowFiles` creates a daily `morningEmail` trigger;
+  admins set the address with op `alerts` (Settings → Morning email, with a test send); `alertLines_` picks what to say.
+  `noRecords()` (core.js) is the one list of record kinds for new companies, sign-ins and migration.
 - **Deleting is for good, so a deleted record's waiting files are never sent** (`forDeleted` in `uploadFiles`, which also
   removes them from the phone). Before 9 Oct test entries deleted before their upload still went to Drive.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.

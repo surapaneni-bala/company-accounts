@@ -7,8 +7,8 @@ const MAX_FILE = 8 * 1024 * 1024; // the sheet script refuses bigger files
 const PHOTO_SIDE = 1600; // photos are shrunk on the phone: quicker to upload, still sharp on a slip
 const PDF_Q = 0.8; // slips and statements: side by side at 2× it looks the same as 0.9, and is a quarter smaller (quicker to upload)
 const TAKEN_PHOTO = [1280, 0.8]; // the payment photo as taken: a person and money, not small print — a third smaller than other photos
-const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑', document: '📄' };
-const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document' };
+const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑', document: '📄', invoice: '🧾', quote: '📝' };
+const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document', invoice: 'Invoice', quote: 'Quotation' };
 let outbox = [];          // files waiting to upload (their details; the bytes stay in IndexedDB)
 let uploading = false, uploadErr = '';
 let shown = null;         // the file on screen, kept in memory so "Send" opens the share sheet straight from the tap
@@ -395,7 +395,8 @@ function checkPaper(f) {
   const no = clean(f.elements.no.value).toUpperCase(), code = clean(f.elements.code.value).toUpperCase().replace(/[^0-9A-Z]/g, '');
   const p = live(S.files).filter(x => String(x.no || '').toUpperCase() === no).pop(), box = $('.check-result', f);
   if (!p) { box.innerHTML = `<p class="note">❌ No paper ${esc(no)} was made in the app — or it hasn't reached this phone yet (sync, then check again).</p>`; return; }
-  const en = entryOf(p.for), w = workerOf(p.for), about = en ? whatIs(en[0], en[1]) : w ? `Employee ${w.name}` : p.for;
+  const en = entryOf(p.for), w = workerOf(p.for), inv = invOf(p.for), k = inv && clientOf(inv.client);
+  const about = en ? whatIs(en[0], en[1]) : w ? `Employee ${w.name}` : inv ? `${inv.type === 'quote' ? 'Quotation' : 'Invoice'} for ${k ? k.name : '—'}, ${money(invoiceTotals(inv).total, inv.cur)}, dated ${fmtDate(inv.date)}` : p.for;
   const open = `<button type="button" class="btn ghost" data-act="showFile" data-id="${esc(p.id)}" style="margin-top:8px">Open the original to compare</button>`;
   if (!p.check) { box.innerHTML = `<p class="note">ℹ️ ${esc(no)} was made before check codes. Compare the paper with the original.</p><p class="muted">${esc(about)}</p>${open}`; return; }
   if (code !== p.check.replace('-', '')) { box.innerHTML = `<p class="note">⚠️ <b>NOT GENUINE:</b> the check code does not match ${esc(no)}. The real one is for: ${esc(about)}.</p>${open}`; return; }
@@ -870,11 +871,13 @@ async function renderSlip(s) {
 }
 
 /* ---------- statements: every entry for one person or project, on as many pages as it takes ---------- */
-/* st = { title, no, date, info: [[label, value]], sections: [{ title, cols: [{ h, w, right }], rows: [[cell]], total: [label, value] }],
-          summary: [[label, value, strong]], verdict: { text, good } | null, sign: { label, name, sig, photo } | null, preparedBy, ref } */
+/* st = { title, no, date, info: [[label, value]], sections: [{ title, cols: [{ h, w, right, wrap }], rows: [[cell]], total: [label, value] }],
+          summary: [[label, value, strong]], verdict: { text, good } | null, notes: [[heading, [line]]] | null,
+          sign: { label, name, sig, photo } | null, approvals: true (prepared/checked/approved and the stamp, no signature box),
+          preparedBy, preparedSign, checkedBy, approval, stampDate, check, ref } */
 const fitText = (g, t, w) => { t = String(t ?? ''); if (g.measureText(t).width <= w) return t; while (t && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; };
 async function renderStatement(st) {
-  const [lh, stampImg, logo, wm] = await Promise.all([letterheadImage(), st.sign ? brandImage('stamp') : null, wideLogo(), watermark()]);
+  const [lh, stampImg, logo, wm] = await Promise.all([letterheadImage(), st.sign || st.approvals ? brandImage('stamp') : null, wideLogo(), watermark()]);
   const C = SLIP_C, L = 90, R = SLIP_W - 90, W = R - L, top = lh ? 268 : 200, limit = SLIP_H - 80, pages = [];
   let g, y;
   const page = () => {
@@ -918,15 +921,17 @@ async function renderStatement(st) {
     headRow();
     if (!sec.rows.length) { g.fillStyle = C.label; g.font = `italic 22px ${SANS}`; g.fillText('Nothing yet.', L + 14, y + 30); y += 44; }
     sec.rows.forEach((row, ri) => {
-      if (y + 40 > limit - 60) { page(); headRow(); }
-      if (ri % 2) { g.fillStyle = C.stripe; g.fillRect(L, y, W, 40); }
-      row.forEach((cell, i) => {
+      // a wrap column takes as many lines as its text needs, and the row grows with it
+      const cells = row.map((cell, i) => { const c = sec.cols[i]; g.font = `${c.right ? 600 : 500} 22px ${SANS}`; return c.wrap ? wrapText(g, String(cell ?? ''), c.w - 28) : [fitText(g, cell, c.w - 28)]; });
+      const rh = 40 + (Math.max(1, ...cells.map(c => c.length)) - 1) * 30;
+      if (y + rh > limit - 60) { page(); headRow(); }
+      if (ri % 2) { g.fillStyle = C.stripe; g.fillRect(L, y, W, rh); }
+      cells.forEach((lines, i) => {
         const c = sec.cols[i];
         g.fillStyle = C.ink; g.font = `${c.right ? 600 : 500} 22px ${SANS}`;
-        const t = fitText(g, cell, c.w - 28);
-        if (c.right) { g.textAlign = 'right'; g.fillText(t, xs[i] + c.w - 14, y + 27); g.textAlign = 'left'; } else g.fillText(t, xs[i] + 14, y + 27);
+        lines.forEach((t, li) => { if (c.right) { g.textAlign = 'right'; g.fillText(t, xs[i] + c.w - 14, y + 27 + li * 30); g.textAlign = 'left'; } else g.fillText(t, xs[i] + 14, y + 27 + li * 30); });
       });
-      y += 40;
+      y += rh;
     });
     if (sec.total) {
       g.fillStyle = C.navy; g.fillRect(L, y, W, 1.5);
@@ -952,7 +957,17 @@ async function renderStatement(st) {
     g.fillStyle = tone; g.font = `700 30px ${SANS}`; spaced(g, st.verdict.text, L + W / 2, y + 49, 2, 'center');
     y += 100;
   }
-  if (st.sign && y + 200 + 120 + 40 > limit) page();
+  // notes under the totals (an invoice's bank details and terms): a heading, then its lines, wrapped to the page
+  for (const [heading, lines] of st.notes || []) {
+    g.font = `500 22px ${SANS}`;
+    const text = lines.flatMap(l => wrapText(g, l, W - 20));
+    if (y + 40 + text.length * 32 > limit) page();
+    slipLabel(g, heading, L, y + 24);
+    g.fillStyle = C.ink; g.font = `500 22px ${SANS}`; text.forEach((t, i) => g.fillText(t, L, y + 58 + i * 32));
+    y += 58 + text.length * 32 + 10;
+  }
+  if ((st.sign || st.approvals) && y + (st.sign ? 320 : 140) + 40 > limit) page();
+  if (st.approvals && !st.sign) y += 110; // room above the lines for the names and saved signatures
   if (st.sign) {
     const s = st.sign, h = 200, split = s.photo ? L + 660 : R;
     g.strokeStyle = C.navy; g.lineWidth = 2.5; g.strokeRect(L, y, W, h);
@@ -964,6 +979,8 @@ async function renderStatement(st) {
     g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; g.fillText(s.name, L + 24, lineY + 30);
     g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText('Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
     y += h + 120;
+  }
+  if (st.sign || st.approvals) {
     const colW = W / 3;
     if (stampImg) drawStamp(g, stampImg, R - 104, y - 45, 180, st.stampDate, stampImg.place); // clear of the page number below
     [['Prepared by', st.preparedBy || '', st.preparedSign], ['Checked by', st.checkedBy || '', null], ['Approved by', st.approval ? st.approval.name : '', st.approval]].forEach(([lab, name, sign], i) => {
