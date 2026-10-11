@@ -303,6 +303,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 /* files, signatures, slips */
 label.btn { display: block; text-align: center; }
+a.btn { display: flex; align-items: center; justify-content: center; text-align: center; color: inherit; text-decoration: none; box-sizing: border-box; }
 .sig { display: block; width: 100%; height: 200px; touch-action: none; background: #fff; border: 2px dashed #CFC6B4; border-radius: var(--r-sm); }
 .viewimg { display: block; width: 100%; border-radius: var(--r-sm); margin-bottom: 14px; background: var(--paper); }
 .filebig { font-size: 64px; text-align: center; margin: 10px 0; }
@@ -432,7 +433,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'edb5544d3d'; // filled in by tools/build.js
+const APP_VERSION = 'a6e7a954e9'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -466,8 +467,10 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
+// an empty list of every kind of record (a new company, a new phone, a sign-in that starts again)
+const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
 // A new record made by a signed-in person also carries their login (uid); edits keep the original one.
 function update(patch) {
   const now = Date.now(), dirty = new Set(S.dirty || []), stamped = {};
@@ -543,11 +546,12 @@ function nextIds(prefix, n, seq) {
 const logWith = (entries, by = S.lastBy || '') => [...S.log, ...entries.map(([action, id, text], i) => ({ lid: `L-${S.dev}-${Date.now().toString(36)}${i}`, at: stampSec(), action, id, text, by }))];
 
 const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved', rate: 'SSP for 1 USD',
-  to: 'Moved to', manualDate: 'Date set by hand', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
+  to: 'Moved to', manualDate: 'Date set by hand', every: 'How often', first: 'First due', bank: 'Bank', accName: 'Account name', number: 'Account number', branch: 'Branch', swift: 'SWIFT code', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
 function showVal(k, r) {
   const v = r[k];
   if (['amount', 'wage', 'openingAmount'].includes(k)) return v === undefined || v === '' ? '(empty)' : money(+v, r.cur);
-  if (['start', 'left', 'clearedTo'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  if (['start', 'left', 'clearedTo', 'first'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  if (k === 'every') return EVERY[v] || '(empty)';
   return k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : k === 'mode' ? accountOf(v) : k === 'from' ? `${v} → ${v === 'Cash' ? 'Bank' : 'Cash'}` : k === 'rate' ? (v ? plain(+v) : '(empty)') : k === 'status' ? (v === 'left' ? 'Left' : 'Working') : k === 'manualDate' ? (v ? 'yes' : 'no') : (v || '(empty)');
 }
 function diff(a, b) { return Object.keys(LABELS).filter(k => k in b && String(a[k] ?? '') !== String(b[k] ?? '')).map(k => `${LABELS[k]}: ${showVal(k, a)} → ${showVal(k, b)}`); }
@@ -774,7 +778,7 @@ function viewHome() {
   const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? 'Expenses — the balances are kept by the admins.' : 'Your expenses — only you and the office see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
@@ -795,6 +799,7 @@ function viewHome() {
     <div class="mini"><small>Spent today</small>${lines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
     <div class="mini"><small>Spent this month</small>${lines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
   </div>
+  <div class="two" style="margin-top:12px">${can('staff') ? `<button class="btn ghost" data-act="regulars">🔁 Regular payments</button>` : ''}<button class="btn ghost" data-act="banks">🏦 Company bank details</button></div>
   <div class="sec-head" style="margin-top:22px"><h2 class="sec">Recent</h2><button class="btn small ghost" data-act="tab" data-tab="hist">See all →</button></div>
   ${recent.length ? `<div class="card list">${recent.map(([x, k]) => itemRow(x, k, true)).join('')}</div>` : empty('Nothing here yet', 'Tap <b>Add expense</b> or <b>Money received</b> to start.')}`;
 }
@@ -897,10 +902,12 @@ function viewSheet() {
 }
 
 /* ---------- forms ---------- */
-function expenseForm(old) {
-  const d = old || { cur: defCur(), amount: '', paidTo: '', reason: '', location: S.lastLoc || '', project: S.lastExpProject || '', mode: S.lastMode || 'Cash' };
+// preset: a new expense filled in (paying a regular payment: which one, and the due date it pays)
+function expenseForm(old, preset) {
+  const d = old || { cur: defCur(), amount: '', paidTo: '', reason: '', location: S.lastLoc || '', project: S.lastExpProject || '', mode: S.lastMode || 'Cash', ...preset };
   openSheet(`${head(old ? 'Edit expense' : 'Add expense', 'out', old?.id)}
     <form data-form="expense" data-id="${esc(old?.id || '')}">
+      ${!old && d.regular ? `<p class="note">${esc(d.hint)}</p><input type="hidden" name="regular" value="${esc(d.regular)}"><input type="hidden" name="period" value="${esc(d.period)}">` : ''}
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${rateField(d.cur, d.rate)}
@@ -1071,7 +1078,7 @@ function saveExpense(f) {
   } else {
     const [[id], seq] = nextIds('E', 1, S.seq);
     update({
-      expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq,
+      expenses: [...S.expenses, { id, ...rec, ...(regularOf(v.regular) && DATE_RE.test(v.period) ? { regular: v.regular, period: v.period } : {}), by, createdAt: stampSec(), batch: null }], seq,
       log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('E', rec)}`]], by) : S.log,
       lastLoc: rec.location, lastMode: rec.mode, lastExpProject: rec.project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
     });
@@ -1263,7 +1270,7 @@ async function doSetup(f) {
   const v = Object.fromEntries(new FormData(f));
   if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
   const salt = randHex();
-  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
+  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, ...noRecords(), kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
   save();
   navigator.storage?.persist?.();
   render(); scrollTo(0, 0); toast('All set! Add your first entry.');
@@ -1354,6 +1361,29 @@ function inWage(p, cur) {
 }
 
 const dayAfter = d => { const [y, m, dd] = d.split('-').map(Number), t = new Date(Date.UTC(y, m - 1, dd + 1)); return t.toISOString().slice(0, 10); };
+
+/* ---------- regular payments: rent, internet, licence fees ---------- */
+const EVERY_MONTHS = [1, 3, 6, 12];
+// The k-th due date of a payment due every `every` months from `first`, on the same day of the month (or the month's last
+// day when it is shorter: from the 31st it falls on 30 April and 28 February, and is back on the 31st in May).
+function dueOn(first, every, k) {
+  const [y, m, d] = first.split('-').map(Number), t = new Date(Date.UTC(y, m - 1 + k * every, 1));
+  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+}
+// Where a regular payment stands today: the oldest due date not paid yet (next), and how many due dates before today are
+// unpaid (late). periods = the due dates its payments were for; a payment counts for the stretch it falls in, so moving
+// the due day (the 1st to the 5th) keeps the months already paid.
+function regularDue(g, periods, today) {
+  let next = '', late = 0;
+  for (let k = 0; k < 1200; k++) {
+    const d = dueOn(g.first, g.every, k), end = dueOn(g.first, g.every, k + 1);
+    if (periods.some(p => p >= d.slice(0, 7) + '-01' && p < end.slice(0, 7) + '-01')) continue;
+    if (!next) next = d;
+    if (d < today) late++; else break;
+  }
+  return { next, late };
+}
 
 // An employee's account: wage earned month by month (less days not worked: the dated ones recorded for them, plus
 // the number older salary payments carried),
@@ -2597,10 +2627,10 @@ const SYNC_TIMEOUT_MS = 45000, SLOWEST_BPS = 4000; // a request gets 45 s plus t
 const APP_URL = 'https://app.b-e-p-l.com/test/';
 // the order is the order records are sent in: an employee before a change request about them, files last
 // (the sheet only takes a file record whose entry it already has)
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
-const KINDS_SEEN = 4; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A)
+const KINDS_SEEN = 5; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B)
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string' && okRate(d),
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && okRate(d),
@@ -2610,6 +2640,8 @@ const VALID = {
   C: d => typeof d.id === 'string' && SAFE_ID.test(d.target) && ['E', 'R', 'T', 'P', 'W', 'A'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string' && AT_RE.test(d.at),
   A: d => typeof d.id === 'string' && SAFE_ID.test(d.worker) && DATE_RE.test(d.date),
   W: d => typeof d.id === 'string' && typeof d.name === 'string' && Number.isFinite(d.wage) && CURS.includes(d.cur) && DATE_RE.test(d.start),
+  G: d => typeof d.id === 'string' && typeof d.name === 'string' && typeof d.paidTo === 'string' && Number.isFinite(d.amount) && CURS.includes(d.cur) && EVERY_MONTHS.includes(d.every) && DATE_RE.test(d.first),
+  B: d => typeof d.id === 'string' && typeof d.bank === 'string' && typeof d.number === 'string',
   F: d => typeof d.id === 'string' && /^[\w-]{10,100}$/.test(d.fileId) && typeof d.name === 'string' && FILE_MIMES.includes(d.mime) && SAFE_ID.test(d.for) && typeof d.type === 'string',
 };
 const DATE_RE = /^\d{4}-\d\d-\d\d$/;
@@ -2619,7 +2651,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 13; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 14; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';
@@ -2916,7 +2948,7 @@ async function doJoin(f) {
     return formErr(f, null, /^No internet/.test(e.message) ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
   }
   if (!(res.pull || []).some(p => p.k === 'S')) return formErr(f, null, 'That Google Sheet has no company yet. Connect the main computer first.');
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
+  S = { v: 2, company: '', pass: null, ...noRecords(), kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
   applyPull(res.pull);
   S = { ...S, link: { ...S.link, since: res.seq } };
   save(); navigator.storage?.persist?.();
@@ -2937,7 +2969,7 @@ async function joinSignedIn(f, link, username, password) {
     const offline = /^No internet/.test(e.message);
     return formErr(f, offline ? null : 'password', offline ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
   }
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev, dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { u: link.u, k: '', since: 0, sheet: '', logins: true } };
+  S = { v: 2, company: '', pass: null, ...noRecords(), kindsSeen: KINDS_SEEN, seq: {}, dev, dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { u: link.u, k: '', since: 0, sheet: '', logins: true } };
   await signedInAs(res, password);
   navigator.storage?.persist?.();
   history.replaceState(null, '', location.pathname);
@@ -2970,7 +3002,7 @@ async function disconnect() {
 function migrate(s) {
   const dev = s.dev || newDev();
   const relearn = s.link && (s.kindsSeen || 1) < KINDS_SEEN;
-  return { ...s, dev, transfers: s.transfers || [], changes: s.changes || [], workers: s.workers || [], absences: s.absences || [], files: s.files || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, kindsSeen: KINDS_SEEN,
+  return { ...s, dev, ...Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, s[k] || []])), dirty: s.dirty || [], settingsU: s.settingsU || 1, kindsSeen: KINDS_SEEN,
     link: relearn ? { ...s.link, since: 0 } : (s.link || null), log: s.log.map((l, i) => l.lid ? l : { ...l, lid: `L-${dev}-old${i}` }) };
 }
 
@@ -2987,7 +3019,6 @@ const RIGHTS = {
   manager: ['add', 'suggest', 'date', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval; no money (balances)
   store: ['add'],
 };
-const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [] };
 
 // { token, user: { id, name, username, role }, check: { salt, hash } } — or { out: true, why } once signed out
 let session = loadSession();
@@ -3041,7 +3072,7 @@ async function signOut() {
   saveSession({ out: true }); // the sign-in screen shows at once, so nothing new can be added meanwhile
   closeAll(); render(); dropFileCopies();
   try { await callServer(S.link, { op: 'logout', token }); } catch { /* already signed out on the sheet: fine */ }
-  if (!S.dirty.length) { S = { ...S, ...NOTHING_SEEN, link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
+  if (!S.dirty.length) { S = { ...S, ...noRecords(), link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
   render();
 }
 
@@ -3898,6 +3929,212 @@ function payslipSpec(r) {
     extra: [...(salary ? [['Paid on', slipDay(r)]] : []), ['Paid from', accountOf(r.mode)], ...rateRow(r), ['Employee no.', w.id]], signLabel: 'Received by', signName: w.name };
 }
 
+/* ---------- regular payments: rent, internet, licence fees ---------- */
+// A regular payment (kind G) is something paid again every 1, 3, 6 or 12 months. Paying it is an ordinary expense that
+// names it (regular) and the due date it pays (period), so nothing about what was paid is stored on it: where it stands
+// is worked out from those expenses (calc.js regularDue). Admins set them up; the office manager pays them too.
+const EVERY = { 1: 'Every month', 3: 'Every 3 months', 6: 'Every 6 months', 12: 'Every year' };
+const DUE_SOON_DAYS = 7; // ponytail: a week's notice for all of them; a setting per payment if the owner wants one
+const regularOf = id => S.regulars.find(g => g.id === id && !g.deleted);
+const dueOf = g => regularDue(g, live(S.expenses).filter(e => e.regular === g.id && e.period).map(e => e.period), today());
+const daysTo = d => Math.round((Date.parse(d) - Date.parse(today())) / 864e5);
+const isDueSoon = due => !!due.next && daysTo(due.next) <= DUE_SOON_DAYS;
+function dueText({ next, late }) {
+  const n = daysTo(next);
+  if (late > 1) return `${late} payments late — the oldest was due ${fmtDate(next)}`;
+  if (n < 0) return `${-n} day${n === -1 ? '' : 's'} late — due ${fmtDate(next)}`;
+  return n === 0 ? 'Due today' : n === 1 ? 'Due tomorrow' : n <= DUE_SOON_DAYS ? `Due in ${n} days — ${fmtDay(next)}` : `Next due ${fmtDate(next)}`;
+}
+// what one payment covers: "October 2026", or "1 Oct 2026 – 31 Dec 2026"
+function periodText(g, d) {
+  if (g.every === 1) return monthName(d.slice(0, 7));
+  const k = Math.round(((+d.slice(0, 4) - +g.first.slice(0, 4)) * 12 + (+d.slice(5, 7) - +g.first.slice(5, 7))) / g.every);
+  return `${fmtDate(d)} – ${fmtDate(dayBefore(dueOn(g.first, g.every, k + 1)))}`;
+}
+const dueList = () => live(S.regulars).map(g => [g, dueOf(g)]).sort((a, b) => (a[1].next || '9').localeCompare(b[1].next || '9'));
+
+// at the top of Accounts: what is due within a week, or late
+function regularBanners() {
+  if (!can('staff')) return '';
+  const due = dueList().filter(([, d]) => isDueSoon(d));
+  return due.slice(0, 3).map(([g, d]) => `<div class="banner${daysTo(d.next) < 0 ? '' : ' new'}"><span>🔁 <b>${esc(g.name)}</b> · ${money(g.amount, g.cur)} to ${esc(g.paidTo)} — ${esc(dueText(d))}</span><button class="btn small" data-act="payRegular" data-id="${esc(g.id)}">Pay</button></div>`).join('')
+    + (due.length > 3 ? `<div class="banner"><span>🔁 ${due.length - 3} more regular payments are due.</span><button class="btn small" data-act="regulars">See all</button></div>` : '');
+}
+
+function regularsSheet() {
+  const list = dueList();
+  openSheet(`${head('Regular payments', 'out')}
+    <p class="hint">Rent, internet, licence fees… Each one shows here a week before it is due. <b>Pay</b> fills in the expense for you.</p>
+    ${can('settings') ? '<button class="btn out" data-act="addRegular">＋ Add a regular payment 🔒</button>' : ''}
+    ${list.length ? `<div class="card list inset" style="margin-top:14px">${list.map(([g, d]) => regularRow(g, d)).join('')}</div>`
+      : `<div style="height:14px"></div>${empty('None yet', can('settings') ? 'Add each one once: what it is, who is paid, how much and how often.' : 'An admin adds them.')}`}`);
+  comeBack(regularsSheet);
+}
+function regularRow(g, d) {
+  const n = d.next ? daysTo(d.next) : 99;
+  return `<button class="row out" data-act="openRegular" data-id="${esc(g.id)}"><span class="dot">🔁</span>
+    <span class="main"><span class="t"><span class="tt">${esc(g.name)}</span>${n < 0 ? '<i class="tag bad">Late</i>' : n <= DUE_SOON_DAYS ? '<i class="tag warn">Due soon</i>' : ''}</span>
+    <span class="s">${esc([g.paidTo, EVERY[g.every], dueText(d)].join(' · '))}</span></span>
+    <span class="amt">${money(g.amount, g.cur)}</span></button>`;
+}
+function regularDetail(id) {
+  const g = regularOf(id);
+  if (!g) return false;
+  const d = dueOf(g), pays = live(S.expenses).filter(e => e.regular === id).sort((a, b) => byAt(b, a));
+  const facts = [['Paid to', g.paidTo], ['How often', EVERY[g.every]], ['First due', fmtDate(g.first)], ['Usually paid from', accountOf(g.mode)], ['Project', g.project && projName(g.project)], ['Note', g.note]];
+  openSheet(`${head(g.name, 'out', id)}
+    <div class="dbig out">${money(g.amount, g.cur)}</div>
+    <p class="note">${esc(dueText(d))}: ${esc(periodText(g, d.next))}.</p>
+    <button class="btn out" data-act="payRegular" data-id="${esc(id)}">💵 Pay ${esc(periodText(g, d.next))}</button>
+    <dl class="facts" style="margin-top:16px">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
+    ${can('settings') ? `<div class="two"><button class="btn ghost" data-act="editRegular" data-id="${esc(id)}">✏️ Edit 🔒</button><button class="btn danger" data-act="delRegular" data-id="${esc(id)}">🗑 Delete 🔒</button></div>` : ''}
+    <h3 class="subh">Paid so far (${pays.length})</h3>
+    ${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">Nothing paid in the app yet.</p>'}`);
+  comeBack(() => regularDetail(id));
+}
+// paying one: the expense form, filled in, for the oldest due date not paid yet
+function payRegular(id) {
+  const g = regularOf(id), d = g && dueOf(g);
+  if (!d || !d.next) return;
+  expenseForm(null, { cur: g.cur, amount: g.amount, paidTo: g.paidTo, reason: `${g.name} — ${periodText(g, d.next)}`, location: '', project: g.project || '', mode: g.mode, regular: g.id, period: d.next,
+    hint: `🔁 ${g.name}, ${periodText(g, d.next)} (due ${fmtDate(d.next)}). Change the amount if it is different this time.` });
+}
+
+function regularForm(old) {
+  const d = old || { cur: defCur(), amount: '', every: 1, first: today(), mode: 'Bank', project: '' };
+  openSheet(`${head(old ? 'Edit regular payment' : 'New regular payment', 'out', old?.id)}
+    <form data-form="regular" data-id="${esc(old?.id || '')}">
+      ${textField('name', 'What is it?', 'e.g. Land rent, Internet, Trading licence', d.name)}
+      ${textField('paidTo', 'Paid to', 'Who is paid?', d.paidTo)}
+      ${curChips(d.cur)}
+      ${amountField(d.amount, d.cur).replace(' autofocus', '')}
+      <div class="fld"><span>How often? Every…</span><div class="curseg">${EVERY_MONTHS.map(n => `<label><input type="radio" name="every" value="${n}" ${n === +d.every ? 'checked' : ''}><span><b>${n === 12 ? '1 year' : `${n} month${n === 1 ? '' : 's'}`}</b></span></label>`).join('')}</div></div>
+      <label class="fld"><span>${old ? 'First due date <em>(changing it moves every due date)</em>' : 'When is it due next?'}</span><input type="date" name="first" value="${esc(d.first)}" required></label>
+      ${accountChips(d.mode, 'Usually paid from')}
+      ${projectSelect(d.project, true)}
+      ${textField('note', 'Note', 'e.g. contract number', d.note, false)}
+      <p class="err"></p>
+      <button class="btn out">${old ? 'Save changes' : 'Add regular payment'}</button>
+    </form>${datalists()}`);
+}
+function saveRegular(f) {
+  const v = Object.fromEntries(new FormData(f)), old = regularOf(f.dataset.id), amount = parseAmount(v.amount), every = +v.every;
+  if (!clean(v.name)) return formErr(f, 'name', 'What is it? e.g. Land rent');
+  if (!clean(v.paidTo)) return formErr(f, 'paidTo', 'Who is paid?');
+  if (amount === null) return formErr(f, 'amount', 'Type a correct amount, like 500');
+  if (!EVERY[every]) return formErr(f, null, 'Choose how often');
+  if (!DATE_RE.test(v.first)) return formErr(f, 'first', 'Choose the date it is due');
+  const rec = { name: clean(v.name), paidTo: clean(v.paidTo), cur: formCur(f), amount, every, first: v.first, mode: v.mode === 'Cash' ? 'Cash' : 'Bank', project: v.project || '', note: clean(v.note) };
+  const by = myName() || S.lastBy || '';
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    update({ regulars: S.regulars.map(g => (g.id === old.id ? { ...g, ...rec, editedAt: stampSec(), editedBy: by } : g)), log: logWith([['Edited', old.id, changes.join(' ; ')]], by) });
+    toast('Changes saved ✓');
+    return closeSheet();
+  }
+  const [[id], seq] = nextIds('G', 1, S.seq);
+  update({ regulars: [...S.regulars, { id, ...rec, by, createdAt: stampSec() }], seq,
+    log: logWith([['Added', id, `Regular payment: ${rec.name} — ${money(amount, rec.cur)} to ${rec.paidTo}, ${EVERY[every].toLowerCase()} from ${fmtDate(rec.first)}`]], by) });
+  toast('Regular payment added ✓');
+  render(); regularsSheet();
+}
+async function deleteRegular(id) {
+  const g = regularOf(id);
+  if (!g || !await unlock('Enter the password to delete this regular payment.')) return;
+  const by = confirmBy(`Delete the regular payment "${g.name}"?\n\nWhat was already paid stays in the accounts. It just stops reminding you.`);
+  if (!by) return;
+  update({ regulars: S.regulars.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Regular payment: ${g.name}`]], by) });
+  toast('Deleted ✓'); closeAll(); render();
+}
+
+/* ---------- the company's bank accounts: copied or sent to a client in one tap ---------- */
+// A bank account (kind B) is only the details someone needs to pay the company — never a balance. Everyone with the app
+// can open them (owner, 11 Oct 2026); only admins add or change them. The real details are typed into the app, so they
+// live in the company Google Sheet and never in this code.
+const bankOf = id => S.banks.find(b => b.id === id && !b.deleted);
+const bankList = () => live(S.banks).sort((a, b) => a.bank.localeCompare(b.bank) || String(a.cur).localeCompare(String(b.cur)));
+const bankLines = b => [['Bank', b.bank], ['Account name', b.accName], ['Account number', b.number], ['Currency', b.cur], ['Branch', b.branch], ['SWIFT code', b.swift], ['', b.note]].filter(([, v]) => v);
+// the text that is copied or sent: what a client types into their bank to pay
+const bankText = list => `${S.company || 'Company'} — bank details\n\n${list.map(b => bankLines(b).map(([k, v]) => (k ? `${k}: ${v}` : v)).join('\n')).join('\n\n')}`;
+const waLink = text => `https://wa.me/?text=${encodeURIComponent(text)}`;
+const shareButtons = (text, act, id) => `<div class="two" style="margin-top:12px"><button class="btn in" data-act="${act}" data-id="${esc(id)}">📋 Copy</button>
+  <a class="btn ghost" href="${esc(waLink(text))}" target="_blank" rel="noopener">💬 Send on WhatsApp</a></div>
+  ${navigator.share ? `<button class="btn ghost" data-act="${act}" data-id="${esc(id)}" data-share="1" style="margin-top:10px">📤 Share another way</button>` : ''}`;
+
+function banksSheet() {
+  const list = bankList();
+  openSheet(`${head('Company bank details', 'in')}
+    <p class="hint">For anyone paying the company. Tap an account to copy it or send it on WhatsApp.</p>
+    ${list.length ? `<div class="card list inset">${list.map(b => `<button class="row in" data-act="openBank" data-id="${esc(b.id)}"><span class="dot">🏦</span>
+      <span class="main"><span class="t"><span class="tt">${esc(b.bank)}</span>${b.cur ? `<i class="tag">${esc(b.cur)}</i>` : ''}</span><span class="s">${esc([b.accName, b.number].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>
+      ${list.length > 1 ? `<h3 class="subh">All ${list.length} accounts together</h3>${shareButtons(bankText(list), 'copyBank', 'all')}` : ''}`
+      : empty('No bank accounts yet', can('settings') ? 'Add each company account once.' : 'An admin adds them.')}
+    ${can('settings') ? '<button class="btn ghost" data-act="addBank" style="margin-top:16px">＋ Add a bank account 🔒</button>' : ''}`);
+  comeBack(banksSheet);
+}
+function bankDetail(id) {
+  const b = bankOf(id);
+  if (!b) return false;
+  openSheet(`${head(b.bank, 'in', b.cur || '')}
+    <dl class="facts">${bankLines(b).map(([k, v]) => `<div><dt>${k || 'Note'}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    ${shareButtons(bankText([b]), 'copyBank', id)}
+    ${can('settings') ? `<div class="two" style="margin-top:18px"><button class="btn ghost" data-act="editBank" data-id="${esc(id)}">✏️ Edit 🔒</button><button class="btn danger" data-act="delBank" data-id="${esc(id)}">🗑 Delete 🔒</button></div>` : ''}`);
+  comeBack(() => bankDetail(id));
+}
+async function copyBank(btn) {
+  const text = bankText(btn.dataset.id === 'all' ? bankList() : [bankOf(btn.dataset.id)].filter(Boolean));
+  if (btn.dataset.share) return navigator.share({ text }).catch(() => {});
+  try { await navigator.clipboard.writeText(text); toast('Bank details copied ✓ Paste them in WhatsApp, SMS or email'); }
+  catch { prompt('Copy the bank details:', text); } // no clipboard here: the text is selected to copy by hand
+}
+
+const CUR_SUGGEST = ['USD', 'SSP', 'UGX', 'KES', 'EUR'];
+function bankForm(old) {
+  const d = old || { accName: S.company || '', cur: 'USD' };
+  openSheet(`${head(old ? 'Edit bank account' : 'New bank account', 'in', old?.id)}
+    <form data-form="bank" data-id="${esc(old?.id || '')}">
+      ${textField('bank', 'Bank', 'e.g. the bank’s full name', d.bank)}
+      ${textField('accName', 'Account name', 'As the bank writes it', d.accName)}
+      ${textField('number', 'Account number', '', d.number)}
+      <label class="fld"><span>Currency of the account</span><input name="cur" value="${esc(d.cur)}" list="dl-cur" maxlength="10" autocomplete="off" autocapitalize="characters" required></label>
+      <datalist id="dl-cur">${CUR_SUGGEST.map(c => `<option value="${c}">`).join('')}</datalist>
+      ${textField('branch', 'Branch', 'e.g. Juba main branch', d.branch, false)}
+      ${textField('swift', 'SWIFT code', 'For payments from abroad', d.swift, false)}
+      ${textField('note', 'Anything else', 'e.g. IBAN, sort code, mobile money number', d.note, false)}
+      <p class="err"></p>
+      <button class="btn in">${old ? 'Save changes' : 'Add bank account'}</button>
+    </form>`);
+}
+function saveBank(f) {
+  const v = Object.fromEntries(new FormData(f)), old = bankOf(f.dataset.id);
+  const rec = { bank: clean(v.bank), accName: clean(v.accName), number: clean(v.number), cur: clean(v.cur).toUpperCase(), branch: clean(v.branch), swift: clean(v.swift).toUpperCase(), note: clean(v.note) };
+  if (!rec.bank) return formErr(f, 'bank', 'Which bank?');
+  if (!rec.accName) return formErr(f, 'accName', 'Type the account name');
+  if (!rec.number) return formErr(f, 'number', 'Type the account number');
+  if (!rec.cur) return formErr(f, 'cur', 'Which currency is the account in?');
+  const by = myName() || S.lastBy || '';
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    update({ banks: S.banks.map(b => (b.id === old.id ? { ...b, ...rec, editedAt: stampSec(), editedBy: by } : b)), log: logWith([['Edited', old.id, changes.join(' ; ')]], by) });
+    toast('Changes saved ✓');
+    return closeSheet();
+  }
+  const [[id], seq] = nextIds('B', 1, S.seq);
+  update({ banks: [...S.banks, { id, ...rec, by, createdAt: stampSec() }], seq, log: logWith([['Added', id, `Bank account: ${rec.bank} (${rec.cur})`]], by) });
+  toast('Bank account added ✓');
+  banksSheet();
+}
+async function deleteBank(id) {
+  const b = bankOf(id);
+  if (!b || !await unlock('Enter the password to delete this bank account.')) return;
+  const by = confirmBy(`Delete ${b.bank} (${b.cur}) from the company bank details?`);
+  if (!by) return;
+  update({ banks: S.banks.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Bank account: ${b.bank} (${b.cur})`]], by) });
+  toast('Deleted ✓'); closeAll(); banksSheet();
+}
+
 /* ---------- import old entries (paste rows from a list or sheet) ---------- */
 // One entry per line: Date | Currency | Amount | Paid to | Reason | Location | Project | Paid from | Entered by
 // "Paid from" is Cash or Bank. Writing "Cash → Bank" (or "Bank → Cash") there makes the line a move
@@ -4179,9 +4416,21 @@ const ACTIONS = {
   workerStatement: b => workerStatement(b.dataset.id),
   projectStatement: b => projectStatement(b.dataset.id),
   payeeStatement: b => payeeStatement(b.dataset.name),
+  regulars: () => regularsSheet(),
+  addRegular: async () => { if (await unlock('Enter the password to add a regular payment.')) regularForm(); },
+  openRegular: b => regularDetail(b.dataset.id),
+  editRegular: async b => { if (await unlock('Enter the password to change this regular payment.')) regularForm(regularOf(b.dataset.id)); },
+  delRegular: b => deleteRegular(b.dataset.id),
+  payRegular: b => payRegular(b.dataset.id),
+  banks: () => banksSheet(),
+  addBank: async () => { if (await unlock('Enter the password to add a bank account.')) bankForm(); },
+  openBank: b => bankDetail(b.dataset.id),
+  editBank: async b => { if (await unlock('Enter the password to change this bank account.')) bankForm(bankOf(b.dataset.id)); },
+  delBank: b => deleteBank(b.dataset.id),
+  copyBank: b => copyBank(b),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
