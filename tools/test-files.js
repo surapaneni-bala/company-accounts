@@ -230,6 +230,50 @@ const regRow = rows('Regular payments').find(r => r[0] === 'G-OW1-0001');
 assert.deepStrictEqual([regRow[9], regRow[11]], ['2026-02-01', 1], 'next due after January is paid; paid once');
 assert.ok(rows('Bank accounts').some(r => r[0] === 'B-OW1-0001' && r[3] === '0011223344'), 'the Bank accounts tab');
 
+/* ---------- the vault: company and vehicle papers for admins and the office manager, personal ones for admins only ---------- */
+const doc = (id, u, uid, extra = {}) => ({ id, k: 'V', u, d: { id, title: 'Trading licence', kind: 'company', expires: '2027-01-10', remind: 30, uid, ...extra } });
+const docFile = (id, forId, u, uid, fileId, extra = {}) => file(id, u, uid, { for: forId, type: 'document', fileId, name: 'scan.pdf', mime: 'application/pdf', createdAt: '2026-10-11T09:00:00', ...extra });
+const lic = upload('scan.pdf', 'application/pdf', pdf), pass = upload('scan.pdf', 'application/pdf', pdf);
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [doc('V-OW1-0001', 110, 'x'), doc('V-OW1-0002', 110, 'x', { title: 'Passport', kind: 'personal', owner: 'Test Shareholder' }), doc('V-OW1-0003', 110, 'x', { kind: 'boat' }), doc('V-OW1-0004', 110, 'x', { expires: 'next year' }),
+  docFile('F-OW1-0400', 'V-OW1-0001', 110, 'x', lic), docFile('F-OW1-0401', 'V-OW1-0002', 110, 'x', pass)] }).refused.sort(), ['V-OW1-0003', 'V-OW1-0004'], 'a kind the vault knows; a real expiry date');
+const mPull = post({ token: m.token, since: 0, push: [] }).pull.map(p => p.id);
+assert.ok(mPull.includes('V-OW1-0001') && mPull.includes('F-OW1-0400'), 'the office manager sees company papers and their files');
+assert.ok(!mPull.includes('V-OW1-0002') && !mPull.includes('F-OW1-0401'), 'but not a personal document, nor its file');
+assert.strictEqual(post({ op: 'file', token: m.token, id: 'F-OW1-0401' }).ok, false, 'nor can she fetch its file');
+assert.strictEqual(post({ op: 'file', token: owner, id: 'F-OW1-0401' }).ok, true, 'an admin can');
+assert.ok(!post({ token: s.token, since: 0, push: [] }).pull.some(p => p.k === 'V'), 'the store keeper sees no documents');
+const vehM = upload('car.pdf', 'application/pdf', pdf);
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [doc('V-AG1-0001', 111, m.me.id, { title: 'Truck insurance', kind: 'vehicle', owner: 'TEST 123A' }), doc('V-AG1-0002', 111, m.me.id, { kind: 'personal' })] }).refused, ['V-AG1-0002'], 'she adds vehicle papers, not personal ones');
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [doc('V-AG1-0001', 112, m.me.id, { title: 'Changed' })] }).refused, ['V-AG1-0001'], 'only admins change a document');
+// filed in Drive: 05 DOCUMENTS / <kind> / <TITLE> (V-…), named by the day it was added; a renewal sends the old one to CHANGES
+assert.deepStrictEqual([pathOf(lic), drv().files[lic].name], [`${TOP} / 05 DOCUMENTS / COMPANY / TRADING LICENCE (V-OW1-0001)`, 'TRADING LICENCE 2026-10-11.pdf']);
+assert.strictEqual(pathOf(pass), `${TOP} / 05 DOCUMENTS / PERSONAL / PASSPORT (V-OW1-0002)`);
+const lic2 = upload('scan2.pdf', 'application/pdf', pdf);
+post({ token: owner, since: 0, push: [doc('V-OW1-0001', 113, 'x', { expires: '2028-01-10' }), docFile('F-OW1-0402', 'V-OW1-0001', 113, 'x', lic2, { replaces: 'F-OW1-0400', createdAt: '2026-10-12T09:00:00' }), docFile('F-OW1-0400', 'V-OW1-0001', 113, 'x', lic, { replaced: '2026-10-12T09:00:00' })] });
+assert.deepStrictEqual([pathOf(lic2), pathOf(lic)], [`${TOP} / 05 DOCUMENTS / COMPANY / TRADING LICENCE (V-OW1-0001)`, `${TOP} / 05 DOCUMENTS / CHANGES / COMPANY / TRADING LICENCE (V-OW1-0001)`], 'renewed: the new one in place, the old one under CHANGES');
+assert.ok(rows('Documents').some(r => r[0] === 'V-OW1-0001' && r[6] === '2028-01-10' && r[8] === 'Valid' && String(r[11]).endsWith(lic2 + '/view')), 'the Documents tab links the current file');
+
+/* ---------- the morning email ---------- */
+assert.strictEqual(post({ op: 'alerts', token: m.token, email: 'x@example.com' }).ok, false, 'only an admin chooses where it goes');
+assert.strictEqual(post({ op: 'alerts', token: owner, email: 'not an email' }).ok, false);
+gas.allowFiles();
+assert.deepStrictEqual(post({ op: 'alerts', token: owner, email: 'office@example.com' }), { ok: true, email: 'office@example.com', running: true, sent: '' }, 'allowFiles started the morning trigger');
+gas.allowFiles();
+assert.strictEqual(gas.triggers.length, 1, 'only once');
+const tday = new Date().toISOString().slice(0, 10), inDays = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+post({ token: owner, since: 0, push: [doc('V-OW1-0005', 120, 'x', { title: 'Road licence', kind: 'vehicle', owner: 'TEST 999B', expires: inDays(7) }), doc('V-OW1-0006', 120, 'x', { title: 'Fire certificate', expires: inDays(12) }),
+  reg('G-OW1-0003', 120, { name: 'Internet', paidTo: 'ISP', amount: 120, first: tday })] });
+gas.mails.length = 0;
+gas.morningEmail();
+const mail = gas.mails[0];
+assert.strictEqual(mail.to, 'office@example.com');
+assert.ok(/LATE: Land rent/.test(mail.body) && /Due today: Internet/.test(mail.body) && /Expires in 7 days: Road licence \(TEST 999B\)/.test(mail.body), 'late rent, internet due today, a road licence a week before');
+assert.ok(!/Fire certificate/.test(mail.body), 'not every day of the reminder: 12 days is no reminder day');
+gas.mails.length = 0;
+post({ op: 'alerts', token: owner, email: '' });
+gas.morningEmail();
+assert.strictEqual(gas.mails.length, 0, 'no address: no email');
+
 // the company folder follows the company's name
 post({ token: owner, since: 0, push: [{ id: 'settings', k: 'S', u: 80, d: { company: 'Acme Works Ltd', pass: { salt: 's', hash: 'h' } } }] });
 assert.strictEqual(pathOf('SHEET'), 'ACME SUPER APP', 'renamed with the company');

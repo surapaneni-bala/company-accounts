@@ -123,6 +123,7 @@ function loadGas(code, state = {}, opts = {}) {
   const props = { ...(state.props || {}) };
   const drive = state.drive || {};
   const ss = makeSpreadsheet(state);
+  const mails = [], triggers = state.triggers || [];
   const sandbox = {
     SpreadsheetApp: { getActive: () => ss, BorderStyle: { SOLID: 'SOLID', SOLID_MEDIUM: 'SOLID_MEDIUM' } },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) },
@@ -130,7 +131,7 @@ function loadGas(code, state = {}, opts = {}) {
     ContentService: { MimeType: { JSON: 'JSON' }, createTextOutput: s => ({ setMimeType() { return this; }, getContent: () => s }) },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
-      formatDate: (d, tz, fmt) => (fmt === 'yyyy-MM' ? d.toISOString().slice(0, 7) : d.toISOString().slice(0, 16).replace('T', ' ')),
+      formatDate: (d, tz, fmt) => (fmt === 'yyyy-MM' ? d.toISOString().slice(0, 7) : fmt === 'yyyy-MM-dd' ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace('T', ' ')),
       DigestAlgorithm: { SHA_256: 'sha256' },
       Charset: { UTF_8: 'utf8' },
       // like Apps Script: an array of signed bytes (-128…127)
@@ -143,12 +144,17 @@ function loadGas(code, state = {}, opts = {}) {
     Session: { getScriptTimeZone: () => 'UTC' },
     Logger: { log: () => {} },
     console: { log: () => {}, error: () => {} },
-    ScriptApp: { AuthMode: { FULL: 'FULL' }, requireAllScopes: () => {} },
+    ScriptApp: {
+      AuthMode: { FULL: 'FULL' }, requireAllScopes: () => {},
+      getProjectTriggers: () => triggers.map(t => ({ getHandlerFunction: () => t.fn })),
+      newTrigger: fn => { const t = { fn }; const b = { timeBased: () => b, everyDays: n => { t.days = n; return b; }, atHour: h => { t.hour = h; return b; }, create: () => { triggers.push(t); return t; } }; return b; },
+    },
+    MailApp: { sendEmail: m => { mails.push(m); } },
   };
   vm.createContext(sandbox);
-  const api = vm.runInContext(`${code}\n;({ setup, doGet, doPost, allowFiles: typeof allowFiles === 'function' ? allowFiles : null })`, sandbox);
-  const dump = () => ({ props, drive, sheets: ss.getSheets().map(s => ({ name: s.getName(), grid: s.grid, hidden: s.hidden })) });
-  return { ...api, ss, props, dump };
+  const api = vm.runInContext(`${code}\n;({ setup, doGet, doPost, allowFiles: typeof allowFiles === 'function' ? allowFiles : null, morningEmail: typeof morningEmail === 'function' ? morningEmail : null })`, sandbox);
+  const dump = () => ({ props, drive, triggers, sheets: ss.getSheets().map(s => ({ name: s.getName(), grid: s.grid, hidden: s.hidden })) });
+  return { ...api, ss, props, dump, mails, triggers };
 }
 
 module.exports = { loadGas };

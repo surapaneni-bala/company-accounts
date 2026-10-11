@@ -95,9 +95,17 @@ const ACTIONS = {
   editBank: async b => { if (await unlock('Enter the password to change this bank account.')) bankForm(bankOf(b.dataset.id)); },
   delBank: b => deleteBank(b.dataset.id),
   copyBank: b => copyBank(b),
+  docs: () => docsSheet(),
+  addDoc: () => docForm(),
+  openDoc: b => docDetail(b.dataset.id),
+  editDoc: async b => { if (await unlock('Enter the password to change this document.')) docForm(docOf(b.dataset.id)); },
+  renewDoc: async b => { if (await unlock('Enter the password to renew this document.')) renewForm(b.dataset.id); },
+  delDoc: b => deleteDoc(b.dataset.id),
+  alerts: async () => { if (await unlock('Enter the password to change the morning email.')) alertsSheet(); },
+  testAlerts: () => saveAlerts($('#sheet form[data-form=alerts]'), true),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -152,6 +160,7 @@ document.addEventListener('change', e => {
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
+  if (t.name === 'kind' && t.form && t.form.dataset.form === 'doc') refreshDocKind(t.form);
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }

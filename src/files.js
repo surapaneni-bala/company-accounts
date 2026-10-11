@@ -7,8 +7,8 @@ const MAX_FILE = 8 * 1024 * 1024; // the sheet script refuses bigger files
 const PHOTO_SIDE = 1600; // photos are shrunk on the phone: quicker to upload, still sharp on a slip
 const PDF_Q = 0.8; // slips and statements: side by side at 2× it looks the same as 0.9, and is a quarter smaller (quicker to upload)
 const TAKEN_PHOTO = [1280, 0.8]; // the payment photo as taken: a person and money, not small print — a third smaller than other photos
-const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑' };
-const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement' };
+const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑', document: '📄' };
+const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document' };
 let outbox = [];          // files waiting to upload (their details; the bytes stay in IndexedDB)
 let uploading = false, uploadErr = '';
 let shown = null;         // the file on screen, kept in memory so "Send" opens the share sheet straight from the tap

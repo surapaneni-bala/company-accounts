@@ -33,7 +33,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // an empty list of every kind of record (a new company, a new phone, a sign-in that starts again)
 const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
@@ -112,11 +112,12 @@ function nextIds(prefix, n, seq) {
 const logWith = (entries, by = S.lastBy || '') => [...S.log, ...entries.map(([action, id, text], i) => ({ lid: `L-${S.dev}-${Date.now().toString(36)}${i}`, at: stampSec(), action, id, text, by }))];
 
 const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved', rate: 'SSP for 1 USD',
-  to: 'Moved to', manualDate: 'Date set by hand', every: 'How often', first: 'First due', bank: 'Bank', accName: 'Account name', number: 'Account number', branch: 'Branch', swift: 'SWIFT code', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
+  to: 'Moved to', manualDate: 'Date set by hand', every: 'How often', first: 'First due', bank: 'Bank', accName: 'Account name', number: 'Account number', branch: 'Branch', swift: 'SWIFT code', title: 'Document', kind: 'Kind', owner: 'Belongs to', docNo: 'Document number', issued: 'Issued', expires: 'Expires', remind: 'Reminder (days before)', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
 function showVal(k, r) {
   const v = r[k];
   if (['amount', 'wage', 'openingAmount'].includes(k)) return v === undefined || v === '' ? '(empty)' : money(+v, r.cur);
-  if (['start', 'left', 'clearedTo', 'first'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  if (['start', 'left', 'clearedTo', 'first', 'issued', 'expires'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  if (k === 'kind' && DOC_KIND[v]) return DOC_KIND[v][1];
   if (k === 'every') return EVERY[v] || '(empty)';
   return k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : k === 'mode' ? accountOf(v) : k === 'from' ? `${v} → ${v === 'Cash' ? 'Bank' : 'Cash'}` : k === 'rate' ? (v ? plain(+v) : '(empty)') : k === 'status' ? (v === 'left' ? 'Left' : 'Working') : k === 'manualDate' ? (v ? 'yes' : 'no') : (v || '(empty)');
 }
@@ -315,12 +316,13 @@ function viewMenu() {
   const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const who = signedIn() ? session.user.name.split(' ')[0] : '';
   const staffWaiting = waiting().filter(c => c.kind === 'W').length;
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${docBanners()}
     <section class="launch">
       <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
       <div class="apps">
         <button class="app-tile acc" data-act="tab" data-tab="home"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><span><b>Accounts</b><small>Cash, bank and projects</small></span></button>
         <button class="app-tile emp" data-act="tab" data-tab="staff">${staffWaiting ? `<span class="badge">${staffWaiting} waiting</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg></span><span><b>Employees</b><small>Salaries, advances and slips</small></span></button>
+        <button class="app-tile doc" data-act="docs">${live(S.docs).some(v => docState(v).soon) ? `<span class="badge">${live(S.docs).filter(v => docState(v).soon).length} to renew</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><span><b>Documents</b><small>Licences, vehicles, IDs</small></span></button>
       </div>
     </section>`;
 }
@@ -460,6 +462,7 @@ function viewSheet() {
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
         <div class="setrow" ${can('settings') && signedIn() ? '' : 'hidden'}><span>My signature<br><span class="muted">On this phone only — for "Approved by", digitally signed</span></span><button class="btn small ghost" data-act="mySig">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : 'Not set'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') && S.link ? '' : 'hidden'}><span>Morning email<br><span class="muted">Payments due and documents expiring, every morning</span></span><button class="btn small ghost" data-act="alerts">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : 'Not set — slips get a plain heading'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
