@@ -21,6 +21,29 @@ function inWage(p, cur) {
 
 const dayAfter = d => { const [y, m, dd] = d.split('-').map(Number), t = new Date(Date.UTC(y, m - 1, dd + 1)); return t.toISOString().slice(0, 10); };
 
+/* ---------- regular payments: rent, internet, licence fees ---------- */
+const EVERY_MONTHS = [1, 3, 6, 12];
+// The k-th due date of a payment due every `every` months from `first`, on the same day of the month (or the month's last
+// day when it is shorter: from the 31st it falls on 30 April and 28 February, and is back on the 31st in May).
+function dueOn(first, every, k) {
+  const [y, m, d] = first.split('-').map(Number), t = new Date(Date.UTC(y, m - 1 + k * every, 1));
+  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+}
+// Where a regular payment stands today: the oldest due date not paid yet (next), and how many due dates before today are
+// unpaid (late). periods = the due dates its payments were for; a payment counts for the stretch it falls in, so moving
+// the due day (the 1st to the 5th) keeps the months already paid.
+function regularDue(g, periods, today) {
+  let next = '', late = 0;
+  for (let k = 0; k < 1200; k++) {
+    const d = dueOn(g.first, g.every, k), end = dueOn(g.first, g.every, k + 1);
+    if (periods.some(p => p >= d.slice(0, 7) + '-01' && p < end.slice(0, 7) + '-01')) continue;
+    if (!next) next = d;
+    if (d < today) late++; else break;
+  }
+  return { next, late };
+}
+
 // An employee's account: wage earned month by month (less days not worked: the dated ones recorded for them, plus
 // the number older salary payments carried),
 // minus everything paid to them (salary, advances, final settlement), plus the balance from before the app

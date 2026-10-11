@@ -214,6 +214,22 @@ const PAY4 = `${TOP} / 01 PAYMENTS / 2026 / 2026-10 OCTOBER / 2026-10-08 SHOP (E
 assert.deepStrictEqual([drv().files[v2].trashed, pathOf(v2), drv().files[v2].name, drv().files[s2].trashed], [false, PAY4, 'PV-OW1-0003 Shop.pdf', true], 'in use again, not renamed CANCELLED; the stamped copy in the bin');
 assert.strictEqual(post({ op: 'original', token: owner, id: 'F-OW1-0200' }).ok, false, 'nothing more to bring back');
 assert.strictEqual(post({ op: 'file', token: owner, id: 'F-OW1-0200' }).fileId, v2, 'a fetched file says which Drive file it is');
+/* ---------- regular payments and the company's bank accounts ---------- */
+const reg = (id, u, extra = {}) => ({ id, k: 'G', u, d: { id, name: 'Land rent', paidTo: 'Landlord', amount: 500, cur: 'USD', every: 1, first: '2026-01-01', mode: 'Bank', ...extra } });
+const bank = (id, u, extra = {}) => ({ id, k: 'B', u, d: { id, bank: 'Test Bank', accName: 'Test Builders Ltd', number: '0011223344', cur: 'USD', ...extra } });
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [reg('G-OW1-0001', 100), bank('B-OW1-0001', 100), reg('G-OW1-0002', 100, { every: 2 }), bank('B-OW1-0002', 100, { number: '' })] }).refused.sort(),
+  ['B-OW1-0002', 'G-OW1-0002'], 'an admin adds them; every 1, 3, 6 or 12 months; an account has a number');
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [reg('G-AG1-0001', 101, { uid: m.me.id }), bank('B-AG1-0001', 101, { uid: m.me.id })] }).refused.sort(), ['B-AG1-0001', 'G-AG1-0001'], 'the office manager does not');
+assert.deepStrictEqual(post({ token: s.token, since: 0, push: [bank('B-SK1-0001', 101, { uid: s.me.id })] }).refused, ['B-SK1-0001'], 'nor the store keeper');
+const kindsFor = t => post({ token: t, since: 0, push: [] }).pull.map(p => p.k);
+assert.ok(kindsFor(m.token).includes('G') && kindsFor(m.token).includes('B'), 'the office manager sees the regular payments (she pays them) and the bank details');
+assert.ok(!kindsFor(s.token).includes('G') && kindsFor(s.token).includes('B'), 'the store keeper sees only the bank details');
+// paying one: an expense that names it and the due date it pays; the tab works out the next due date
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [exp('E-OW1-0300', 102, 'x', { regular: 'G-OW1-0001', period: '2026-01-01' }), exp('E-OW1-0301', 102, 'x', { regular: 'G-OW1-0001', period: 'January' })] }).refused, ['E-OW1-0301'], 'the period is a date');
+const regRow = rows('Regular payments').find(r => r[0] === 'G-OW1-0001');
+assert.deepStrictEqual([regRow[9], regRow[11]], ['2026-02-01', 1], 'next due after January is paid; paid once');
+assert.ok(rows('Bank accounts').some(r => r[0] === 'B-OW1-0001' && r[3] === '0011223344'), 'the Bank accounts tab');
+
 // the company folder follows the company's name
 post({ token: owner, since: 0, push: [{ id: 'settings', k: 'S', u: 80, d: { company: 'Acme Works Ltd', pass: { salt: 's', hash: 'h' } } }] });
 assert.strictEqual(pathOf('SHEET'), 'ACME SUPER APP', 'renamed with the company');

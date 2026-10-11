@@ -83,9 +83,21 @@ const ACTIONS = {
   workerStatement: b => workerStatement(b.dataset.id),
   projectStatement: b => projectStatement(b.dataset.id),
   payeeStatement: b => payeeStatement(b.dataset.name),
+  regulars: () => regularsSheet(),
+  addRegular: async () => { if (await unlock('Enter the password to add a regular payment.')) regularForm(); },
+  openRegular: b => regularDetail(b.dataset.id),
+  editRegular: async b => { if (await unlock('Enter the password to change this regular payment.')) regularForm(regularOf(b.dataset.id)); },
+  delRegular: b => deleteRegular(b.dataset.id),
+  payRegular: b => payRegular(b.dataset.id),
+  banks: () => banksSheet(),
+  addBank: async () => { if (await unlock('Enter the password to add a bank account.')) bankForm(); },
+  openBank: b => bankDetail(b.dataset.id),
+  editBank: async b => { if (await unlock('Enter the password to change this bank account.')) bankForm(bankOf(b.dataset.id)); },
+  delBank: b => deleteBank(b.dataset.id),
+  copyBank: b => copyBank(b),
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);

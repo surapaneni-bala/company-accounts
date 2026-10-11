@@ -18,12 +18,13 @@ const FILE_COLS = ['fileId', 'uid'];
 // the first bytes of each kind of file allowed: a file must be what it says it is
 const MAGIC = { 'image/jpeg': [0xFF, 0xD8, 0xFF], 'image/png': [0x89, 0x50, 0x4E, 0x47], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pdf' };
-const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Files'];
+const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Files'];
 // record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
 // File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …),
-// Absence (one day an employee did not work: it comes off that month's wage)
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A'];
+// Absence (one day an employee did not work: it comes off that month's wage),
+// reGular payment (rent, internet, licence fees: due every 1, 3, 6 or 12 months), Bank account (the company's, to be paid into)
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B'];
 const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement'];
 const BRAND_FILES = ['letterhead', 'stamp']; // the company's own: only admins set them, every login's slips carry them
 const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
@@ -62,12 +63,17 @@ const SHAPES = {
     && ['active', 'left'].indexOf(d.status || 'active') >= 0 && (!d.left || DATE_RE.test(d.left)) && (d.openingAmount === undefined || num_(d.openingAmount))
     && (!d.clearedTo || DATE_RE.test(d.clearedTo)),
   F: d => /^[A-Za-z0-9_-]{10,100}$/.test(d.fileId) && str_(d.name) && FILE_MIMES.indexOf(d.mime) >= 0 && SAFE_ID.test(d.for) && FILE_TYPES.indexOf(d.type) >= 0,
+  G: d => str_(d.name) && str_(d.paidTo) && num_(d.amount) && d.amount > 0 && CURS.indexOf(d.cur) >= 0 && EVERY_MONTHS.indexOf(d.every) >= 0 && DATE_RE.test(d.first)
+    && (d.mode === undefined || ACCOUNTS.indexOf(d.mode) >= 0) && (d.project === undefined || str_(d.project)),
+  B: d => str_(d.bank) && d.bank.length > 0 && str_(d.number) && d.number.length > 0 && ['accName', 'cur', 'branch', 'swift', 'note'].every(k => d[k] === undefined || str_(d[k])),
 };
+const EVERY_MONTHS = [1, 3, 6, 12];
 const num_ = v => typeof v === 'number' && isFinite(v);
 // optional fields on money records: the SSP rate of the day, and the employee a payment belongs to
 const extras_ = d => (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (d.worker === undefined || SAFE_ID.test(d.worker))
   && (d.pay === undefined || ['salary', 'advance', 'settlement'].indexOf(d.pay) >= 0) && (d.month === undefined || /^\d{4}-\d\d$/.test(d.month))
-  && (d.daysOff === undefined || (num_(d.daysOff) && d.daysOff >= 0 && d.daysOff <= 31)) && (d.approval === undefined || SAFE_ID.test(d.approval));
+  && (d.daysOff === undefined || (num_(d.daysOff) && d.daysOff >= 0 && d.daysOff <= 31)) && (d.approval === undefined || SAFE_ID.test(d.approval))
+  && (d.regular === undefined || SAFE_ID.test(d.regular)) && (d.period === undefined || DATE_RE.test(d.period)); // a regular payment, and the due date it pays
 const str_ = v => typeof v === 'string';
 const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
@@ -75,7 +81,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 13; // shown when the web app link is opened in a browser
+const VERSION = 14; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -196,6 +202,7 @@ function who_(req) {
 function view_(user, rec) {
   if (!user || user.role === 'admin') return rec;
   if (rec.k === 'S') return { id: rec.id, k: rec.k, u: rec.u, d: { company: rec.d.company } };
+  if (rec.k === 'B') return rec; // the company's bank details are for everyone to give to clients (no balances)
   if (user.role === 'manager') return managerView_(user, rec);
   if (rec.k === 'F' && BRAND_FILES.indexOf(rec.d.type) >= 0) return rec; // everyone's vouchers carry the letterhead and stamp
   return (rec.k === 'E' || rec.k === 'L' || rec.k === 'F') && rec.d.uid === user.id ? rec : null;
@@ -696,6 +703,8 @@ function rebuild_(ss, all) {
   ledger_(ss, ctx);
   changeLog_(ss, ctx);
   employees_(ss, ctx, of('W').filter(x => !x.deleted));
+  regulars_(ss, ctx, of('G').filter(x => !x.deleted));
+  banks_(ss, ctx, of('B').filter(x => !x.deleted));
   filesTab_(ss, ctx, recs);
   // keep the tabs in a fixed order right after "Read me"
   VIEW_TABS.forEach((name, i) => {
@@ -915,6 +924,38 @@ function employees_(ss, c, workers) {
     ['Employee no.', 'Name', 'Job', 'Site', 'Phone', 'Monthly wage', 'Currency', 'Started', 'Status', 'Left on', 'Paid USD', 'Paid SSP', 'ID number'],
     workers.map(w => [w.id, w.name, w.job || '', w.site || '', w.phone || '', w.wage, w.cur, w.start, w.status === 'left' ? 'Left' : 'Working', w.left || '', paid[w.id + 'USD'] || 0, paid[w.id + 'SSP'] || 0, w.idNo || '']),
     ['', '', '', '', '', 'num', '', 'date', '', 'date', 'USD', 'SSP'], [110, 170, 130, 120, 120, 110, 80, 105, 90, 105, 110, 120, 130], [10, 11]);
+}
+/* ---------- regular payments: the same sums as the app (src/calc.js dueOn, regularDue) ---------- */
+function dueOn_(first, every, k) {
+  const y = Number(first.slice(0, 4)), m = Number(first.slice(5, 7)), d = Number(first.slice(8, 10)), t = new Date(Date.UTC(y, m - 1 + k * every, 1));
+  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return t.getUTCFullYear() + '-' + ('0' + (t.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + Math.min(d, last)).slice(-2);
+}
+function regularDue_(g, periods, today) {
+  let next = '', late = 0;
+  for (let k = 0; k < 1200; k++) {
+    const d = dueOn_(g.first, g.every, k), end = dueOn_(g.first, g.every, k + 1);
+    if (periods.some(p => p >= d.slice(0, 7) + '-01' && p < end.slice(0, 7) + '-01')) continue;
+    if (!next) next = d;
+    if (d < today) late++; else break;
+  }
+  return { next: next, late: late };
+}
+const today_ = () => Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+const EVERY_TEXT = { 1: 'Every month', 3: 'Every 3 months', 6: 'Every 6 months', 12: 'Every year' };
+function regulars_(ss, c, regs) {
+  const t = today_();
+  dataTab_(ss, c.company, 'Regular payments', '#b45309',
+    ['No.', 'What', 'Paid to', 'How often', 'Currency', 'Amount', 'Usually paid from', 'Project', 'First due', 'Next due', 'Status', 'Times paid', 'Last paid'],
+    regs.map(g => {
+      const pays = c.E.filter(x => x.regular === g.id), d = regularDue_(g, pays.map(x => x.period).filter(Boolean), t);
+      const status = d.late ? d.late + ' late' : d.next === t ? 'Due today' : 'OK';
+      return [g.id, g.name, g.paidTo, EVERY_TEXT[g.every], g.cur, g.amount, g.mode || '', g.project ? c.pname(g.project) : '', g.first, d.next, status, pays.length, pays.length ? ymd_(pays[pays.length - 1].at) : ''];
+    }), ['', '', '', '', '', 'num', '', '', 'date', 'date'], [110, 180, 170, 120, 80, 110, 120, 160, 105, 105, 90, 90, 105], null);
+}
+function banks_(ss, c, banks) {
+  dataTab_(ss, c.company, 'Bank accounts', '#0e7490', ['No.', 'Bank', 'Account name', 'Account number', 'Currency', 'Branch', 'SWIFT code', 'Note'],
+    banks.map(b => [b.id, b.bank, b.accName || '', b.number, b.cur || '', b.branch || '', b.swift || '', b.note || '']), [], [110, 220, 240, 180, 80, 160, 120, 260], null);
 }
 function changeLog_(ss, c) {
   dataTab_(ss, c.company, 'Change Log', COLOR.muted, ['When', 'Action', 'Entry', 'By', 'Details'],
