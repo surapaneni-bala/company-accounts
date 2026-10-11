@@ -77,7 +77,7 @@ function regularForm(old) {
       ${textField('paidTo', 'Paid to', 'Who is paid?', d.paidTo)}
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur).replace(' autofocus', '')}
-      <div class="fld"><span>How often?</span><div class="curseg">${Object.entries(EVERY).map(([n, t]) => `<label><input type="radio" name="every" value="${n}" ${+n === +d.every ? 'checked' : ''}><span><b>${t}</b></span></label>`).join('')}</div></div>
+      <div class="fld"><span>How often? Every…</span><div class="curseg">${EVERY_MONTHS.map(n => `<label><input type="radio" name="every" value="${n}" ${n === +d.every ? 'checked' : ''}><span><b>${n === 12 ? '1 year' : `${n} month${n === 1 ? '' : 's'}`}</b></span></label>`).join('')}</div></div>
       <label class="fld"><span>${old ? 'First due date <em>(changing it moves every due date)</em>' : 'When is it due next?'}</span><input type="date" name="first" value="${esc(d.first)}" required></label>
       ${accountChips(d.mode, 'Usually paid from')}
       ${projectSelect(d.project, true)}

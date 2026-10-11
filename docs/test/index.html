@@ -303,6 +303,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 /* files, signatures, slips */
 label.btn { display: block; text-align: center; }
+a.btn { display: flex; align-items: center; justify-content: center; text-align: center; color: inherit; text-decoration: none; box-sizing: border-box; }
 .sig { display: block; width: 100%; height: 200px; touch-action: none; background: #fff; border: 2px dashed #CFC6B4; border-radius: var(--r-sm); }
 .viewimg { display: block; width: 100%; border-radius: var(--r-sm); margin-bottom: 14px; background: var(--paper); }
 .filebig { font-size: 64px; text-align: center; margin: 10px 0; }
@@ -432,7 +433,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '5601197d09'; // filled in by tools/build.js
+const APP_VERSION = 'a6e7a954e9'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -4007,7 +4008,7 @@ function regularForm(old) {
       ${textField('paidTo', 'Paid to', 'Who is paid?', d.paidTo)}
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur).replace(' autofocus', '')}
-      <div class="fld"><span>How often?</span><div class="curseg">${Object.entries(EVERY).map(([n, t]) => `<label><input type="radio" name="every" value="${n}" ${+n === +d.every ? 'checked' : ''}><span><b>${t}</b></span></label>`).join('')}</div></div>
+      <div class="fld"><span>How often? Every…</span><div class="curseg">${EVERY_MONTHS.map(n => `<label><input type="radio" name="every" value="${n}" ${n === +d.every ? 'checked' : ''}><span><b>${n === 12 ? '1 year' : `${n} month${n === 1 ? '' : 's'}`}</b></span></label>`).join('')}</div></div>
       <label class="fld"><span>${old ? 'First due date <em>(changing it moves every due date)</em>' : 'When is it due next?'}</span><input type="date" name="first" value="${esc(d.first)}" required></label>
       ${accountChips(d.mode, 'Usually paid from')}
       ${projectSelect(d.project, true)}
