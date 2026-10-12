@@ -331,11 +331,19 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 12 Oct 2026 (later): live app 5b46a137d8**: the Install bar shows on every Android phone from the start; when
+Chrome has not offered yet (it waits for a tap and ~30 s on the page; other browsers never offer) the button opens the steps.
+
 **RELEASED 12 Oct 2026: live app 3ab4b0f498** (script unchanged, v13): an **Install** banner on Android — the app catches
 Chrome's `beforeinstallprompt` and one tap opens Chrome's install box (owner's POCO C71 showed no Add to Home screen). Chrome
 reported no installability errors for the live app (`Page.getInstallabilityErrors`); the welcome page now explains the
 fallback: open in Chrome (not WhatsApp's browser), ⋮ → Install app, and on Xiaomi/Redmi/POCO allow Chrome's **Home screen
 shortcuts** permission. Checked on the live address in real Chrome: offered, banner shown; tap → prompt; opens offline.
+
+**TEST COPY 11 Oct 2026 (branch `office`, not live): regular payments + bank accounts (v14), documents vault + morning
+email (v15), invoices & quotations + clients (v16).** Checked on the mock sheet end to end at 375 and 320 px; all tests. On
+"update live": merge `office`, build, push; owner pastes v16, runs allowFiles (Drive + Mail + the trigger), New version, then
+Settings → Morning email.
 
 **RELEASED 10 Oct 2026 (night, latest): live app c8a6b632f9 + script v13** (from `keep-voucher`; test copy edb5544d3d). Bank → Cash (or any edit that
 leaves the money and the person alone) no longer cancels a signed paper; admins can undo a cancel (the original comes back
@@ -607,6 +615,19 @@ folder, which is temporary:
   PDF — page 1 the paper with the new details and the stored payment photo, badge "CORRECTED — REPLACES <no>", the signature
   box replaced by "Signed by X on <date> for <was>… Corrected by <admin> (admin): <was> → <new>" (`signNote`), the admin under
   Approved by; page 2 the original signed paper (stamped CANCELLED). The person's signature is never put under new figures.
+- **Regular payments, bank accounts, documents, invoices** (owner, 11 Oct 2026; script v14–v16). New kinds: **G** regular
+  payment (`src/regular.js`; due dates `dueOn`/`regularDue` in calc.js, mirrored in Code.gs `regularDue_`; paying one is an
+  expense with `regular` + `period`, so nothing is stored about what was paid), **B** company bank account (`src/banks.js`;
+  everyone sees them, admins edit; Copy / wa.me / Share), **V** vault document (`src/vault.js`; kinds company / vehicle /
+  personal — personal ones and their scans never reach a non-admin: `personalDocs_` → `view_`, also for the `file` op;
+  scans are F type `document` in Drive `05 DOCUMENTS/<KIND>/<TITLE> (V-…)`, renewing sets the old scan `replaced` → CHANGES),
+  **K** client and **I** invoice/quotation (`src/invoices.js`; admins only — `SALES_KINDS`; invoices numbered by the sheet's
+  op `number` in one series `INV-0001…` (needs internet), quotations `QT-<dev>-…` offline; never edited — cancelled and
+  copied; totals `invoiceTotals`/`invoiceState` in calc.js, mirrored in `invoiceState_`; payments are R entries with
+  `invoice`, which may have no project; PDFs via `renderStatement` (wrap columns, `notes`, `approvals`), filed in
+  `06 INVOICES` / `07 QUOTATIONS` by year and month). **Morning email**: `allowFiles` creates a daily `morningEmail` trigger;
+  admins set the address with op `alerts` (Settings → Morning email, with a test send); `alertLines_` picks what to say.
+  `noRecords()` (core.js) is the one list of record kinds for new companies, sign-ins and migration.
 - **Deleting is for good, so a deleted record's waiting files are never sent** (`forDeleted` in `uploadFiles`, which also
   removes them from the phone). Before 9 Oct test entries deleted before their upload still went to Drive.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.
