@@ -38,6 +38,7 @@ const ACTIONS = {
   importOld: () => importSheet(),
   howUpdate: () => howUpdateSheet(),
   updateApp: () => updateApp(),
+  installApp: () => installApp(),
   assignPick: b => assignSheet(b.dataset.id),
   pickAll: b => { const f = b.closest('form'); $$('.pick:not([hidden]) input', f).forEach(i => (i.checked = true)); updatePick(f); },
   pickNone: b => { const f = b.closest('form'); $$('input[name=pick]', f).forEach(i => (i.checked = false)); updatePick(f); },

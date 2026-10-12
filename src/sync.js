@@ -367,7 +367,7 @@ async function inviteSheet() {
   openSheet(`${head('Add a phone')}
     <ol class="steps">
       <li>Send this link to the phone (WhatsApp or email).</li>
-      <li>On the phone, open the link. <b>iPhone:</b> in Safari tap <b>Share → Add to Home Screen</b>. <b>Android:</b> in Chrome tap <b>⋮ → Add to Home screen</b>.</li>
+      <li>On the phone, open the link. <b>iPhone:</b> in Safari tap <b>Share → Add to Home Screen</b>. <b>Android:</b> in Chrome tap <b>Install</b> at the top (or ⋮ → <b>Install app</b>).</li>
       <li>Open <b>Accounts</b> from the home screen and tap <b>Join my company</b>. If the link is not filled in already, paste it.${S.link.logins ? ' Then type the username and password you gave them.' : ''}</li>
     </ol>
     <label class="fld"><span>Invite link</span><input id="inviteLink" readonly value="${esc(inviteLink())}"></label>
