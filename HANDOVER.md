@@ -331,6 +331,11 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 12 Oct 2026: live app 3ab4b0f498** (script unchanged, v13): an **Install** banner on Android — the app catches
+Chrome's `beforeinstallprompt` and one tap opens Chrome's install box (owner's POCO C71 showed no Add to Home screen). Chrome
+reported no installability errors for the live app (`Page.getInstallabilityErrors`); the welcome page now explains the
+fallback: open in Chrome (not WhatsApp's browser), ⋮ → Install app, and on Xiaomi/Redmi/POCO allow Chrome's **Home screen
+shortcuts** permission. Checked on the live address in real Chrome: offered, banner shown; tap → prompt; opens offline.
 **TEST COPY 11 Oct 2026 (branch `office`, not live): regular payments + bank accounts (v14), documents vault + morning
 email (v15), invoices & quotations + clients (v16).** Checked on the mock sheet end to end at 375 and 320 px; all tests. On
 "update live": merge `office`, build, push; owner pastes v16, runs allowFiles (Drive + Mail + the trigger), New version, then
