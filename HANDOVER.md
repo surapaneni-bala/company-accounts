@@ -331,6 +331,17 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 12 Oct 2026 (evening): live app 24aef99955 + brookfield.apk** — the owner's POCO C71 (Agnes's phone) is an
+**Android Go** phone (`ro.config.low_ram=true`, home screen `com.gogo.launcher` with no CONFIRM_PIN_SHORTCUT handler):
+Chrome can neither install a web app nor add a shortcut there, so it shows no Add to Home screen at all (checked over USB with
+adb). Fix: a Trusted Web Activity APK (`docs/brookfield.apk`, package `com.bepl.brookfield`, minSdk 24, 1.2 MB) built with
+Bubblewrap 1.25.0 in `~/brookfield-android/twa` (JDK 17, Android 36, build-tools 36.1.0 — `buildToolsVersion` set by hand in
+app/build.gradle; the newest cmdline-tools need an extra "Android CLI" download, so the parts were fetched directly). The
+signing key and its password are in `private/android/` — **never lose them**: updates must be signed with the same key.
+`docs/.well-known/assetlinks.json` (+ `docs/.nojekyll`) makes it open full-screen; Google's statements:list returns it.
+The Install steps end with "Unable to add to home screen? Download the app (APK) here". To update the APK: bump
+appVersionCode in twa-manifest.json, `bubblewrap update`, re-add buildToolsVersion, `bubblewrap build`, copy to docs/.
+
 **RELEASED 12 Oct 2026 (later): live app 5b46a137d8**: the Install bar shows on every Android phone from the start; when
 Chrome has not offered yet (it waits for a tap and ~30 s on the page; other browsers never offer) the button opens the steps.
 
