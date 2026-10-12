@@ -95,7 +95,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 16; // shown when the web app link is opened in a browser
+const VERSION = 17; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -180,7 +180,7 @@ function sync_(req) {
   const rows = readAll_(sh);
   // once the company has logins, a phone with only the company code (an old invite link) gets no staff records or files
   const codeOnly = !user && users_().length > 0;
-  const result = merge_(rows, req.push, Number(req.since) || 0, user, uploads_(), codeOnly);
+  const result = merge_(rows, req.push, Number(req.since) || 0, user, uploads_(), codeOnly), hidden = hiddenFor_(result.rows, user);
   let warning = '';
   if (result.changed) {
     sh.getRange(2, 1, result.rows.length, 5).setValues(result.rows);
@@ -194,7 +194,7 @@ function sync_(req) {
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role !== 'admin' ? '' : ss.getUrl(), kinds: KINDS, // the sheet shows every balance
-    pull: result.pull.map(r => view_(user, r, personalDocs_(result.rows))).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V'))), refused: result.refused, me: user ? public_(user) : null,
+    pull: result.pull.map(r => view_(user, r, hidden)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V'))), refused: result.refused, me: user ? public_(user) : null,
     logins: !!user || users_().length > 0, warning: warning,
   };
 }
@@ -213,12 +213,13 @@ function who_(req) {
 }
 
 // What each login receives. Store keepers get only their own entries; only admins get the company password.
-// secret = the personal documents (their files are admins' only too): personalDocs_(rows)
-function view_(user, rec, secret) {
+// hidden = what the office manager may not have (hiddenFor_): personal documents, other people's expenses, and their files
+// and change requests
+function view_(user, rec, hidden) {
   if (!user || user.role === 'admin') return rec;
   if (rec.k === 'S') return { id: rec.id, k: rec.k, u: rec.u, d: { company: rec.d.company } };
   if (rec.k === 'B') return rec; // the company's bank details are for everyone to give to clients (no balances)
-  if (user.role === 'manager') return (rec.k === 'V' && rec.d.kind === 'personal') || (rec.k === 'F' && secret && secret[rec.d.for]) ? null : managerView_(user, rec);
+  if (user.role === 'manager') return (rec.k === 'V' && rec.d.kind === 'personal') || (hidden && hidden[rec.k === 'F' ? rec.d.for : rec.k === 'C' ? rec.d.target : rec.id]) ? null : managerView_(user, rec);
   if (rec.k === 'F' && BRAND_FILES.indexOf(rec.d.type) >= 0) return rec; // everyone's vouchers carry the letterhead and stamp
   return (rec.k === 'E' || rec.k === 'L' || rec.k === 'F') && rec.d.uid === user.id ? rec : null;
 }
@@ -226,6 +227,20 @@ function view_(user, rec, secret) {
 // no cash ↔ bank moves, no project values, no files or change requests about those, and only her own Change Log lines
 // (the log names amounts received). Without money in and moves, no balance can be worked out from what she holds.
 const MONEY_KINDS = ['R', 'T'];
+// Her expenses are her own (owner, 12 Oct 2026): she gets the ones she entered, and an admin's only when it pays an employee
+// or a regular payment (rent…), for the Employees and Regular payments screens. Personal documents in the vault (IDs,
+// passports) are admins' only, with their scans. Ids map to true; null for other logins.
+function hiddenFor_(rows, user) {
+  if (!user || user.role !== 'manager') return null;
+  const out = Object.create(null);
+  rows.forEach(r => {
+    if (r[1] !== 'E' && r[1] !== 'V') return;
+    let d = null;
+    try { d = JSON.parse(r[4]); } catch (err) { out[r[0]] = true; return; } // a damaged record: admins only
+    if (r[1] === 'V' ? d.kind === 'personal' : d.uid !== user.id && !d.worker && !d.regular) out[r[0]] = true;
+  });
+  return out;
+}
 function managerView_(user, rec) {
   if (MONEY_KINDS.indexOf(rec.k) >= 0 || SALES_KINDS.indexOf(rec.k) >= 0) return null;
   if (rec.k === 'F' && /^[IK]-/.test(String(rec.d.for))) return null; // invoice and quotation PDFs
@@ -353,8 +368,8 @@ function files_(req) {
     return { ok: true, fileId: file.getId() };
   }
   if (req.op === 'original') return original_(who.user, String(req.id || ''));
-  const row = readAll_(syncTab_(SpreadsheetApp.getActive())).filter(r => r[0] === String(req.id) && r[1] === 'F')[0];
-  const rec = row && view_(who.user, toRec_(row), personalDocs_(readAll_(syncTab_(SpreadsheetApp.getActive()))));
+  const all = readAll_(syncTab_(SpreadsheetApp.getActive())), row = all.filter(r => r[0] === String(req.id) && r[1] === 'F')[0];
+  const rec = row && view_(who.user, toRec_(row), hiddenFor_(all, who.user));
   if (!rec) return { ok: false, error: 'This file is not available to you.' };
   const blob = DriveApp.getFileById(rec.d.fileId).getBlob();
   return { ok: true, fileId: rec.d.fileId, name: rec.d.name, mime: rec.d.mime, data: Utilities.base64Encode(blob.getBytes()) };
@@ -383,12 +398,6 @@ function nextInvoiceNo_() {
   const props = PropertiesService.getScriptProperties(), n = Number(props.getProperty('INVOICE_SEQ') || 0) + 1;
   props.setProperty('INVOICE_SEQ', String(n));
   return { ok: true, no: 'INV-' + ('000' + n).slice(-4) };
-}
-// the ids of the personal documents in the vault (ids map to true): their files go to admins only
-function personalDocs_(rows) {
-  const out = Object.create(null);
-  rows.forEach(r => { if (r[1] === 'V') { try { if (JSON.parse(r[4]).kind === 'personal') out[r[0]] = true; } catch (err) { /* a damaged record is shown to nobody but admins */ out[r[0]] = true; } } });
-  return out;
 }
 function uploads_() {
   const map = Object.create(null);
