@@ -46,3 +46,23 @@ async function updateApp() {
   location.replace(`${location.pathname}?v=${v}`); // a new address, so no stored copy can be used
 }
 const updateBanner = () => (newerVersion ? `<div class="banner new"><span>🆕 A new version of the app is ready.</span><button class="btn small" data-act="updateApp">Update now</button></div>` : '');
+
+/* ---------- installing the app on Android: one tap instead of Chrome's ⋮ menu ---------- */
+// Chrome tells the page when the app can be installed (beforeinstallprompt); its install box may only open from a tap,
+// so an Install banner shows above every page until it is installed (owner, 12 Oct 2026: a POCO phone whose menu had no
+// "Add to Home screen"). iPhones have no such box: Safari's Share → Add to Home Screen stays the way.
+let installEvent = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; paintInstall(); });
+addEventListener('appinstalled', () => { installEvent = null; paintInstall(); toast('Installed ✓ — open Brookfield from your home screen'); });
+function paintInstall() {
+  const slot = document.getElementById('installSlot');
+  if (slot) slot.innerHTML = installEvent && !isInstalled() ? `<div class="banner new"><span>📲 <b>Install Brookfield</b> on this phone: it opens from your home screen like any app, even without internet.</span><button class="btn small primary" data-act="installApp">Install</button></div>` : '';
+}
+async function installApp() {
+  const e = installEvent;
+  if (!e) return;
+  installEvent = null; paintInstall(); // Chrome's offer can be used once
+  e.prompt();
+  const { outcome } = await e.userChoice.catch(() => ({ outcome: 'dismissed' }));
+  if (outcome !== 'accepted') toast('Not installed. Open the link again to see the Install button.');
+}
