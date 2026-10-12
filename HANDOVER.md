@@ -331,6 +331,9 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 12 Oct 2026 (later): live app 5b46a137d8**: the Install bar shows on every Android phone from the start; when
+Chrome has not offered yet (it waits for a tap and ~30 s on the page; other browsers never offer) the button opens the steps.
+
 **RELEASED 12 Oct 2026: live app 3ab4b0f498** (script unchanged, v13): an **Install** banner on Android — the app catches
 Chrome's `beforeinstallprompt` and one tap opens Chrome's install box (owner's POCO C71 showed no Add to Home screen). Chrome
 reported no installability errors for the live app (`Page.getInstallabilityErrors`); the welcome page now explains the
