@@ -25,7 +25,7 @@ let res = post({ key, since: 0, push: [settings, old, income] });
 assert.ok(res.ok, res.error);
 
 /* ---------- before logins: everything works exactly as before ---------- */
-assert.deepStrictEqual([get().version, get().logins, get().required], [13, false, false]);
+assert.deepStrictEqual([get().version, get().logins, get().required], [14, false, false]);
 res = post({ key, since: 0, push: [] });
 assert.strictEqual(res.pull.length, 3, 'company code still gives everything');
 assert.deepStrictEqual([res.logins, res.me, res.refused], [false, null, []]);
@@ -156,8 +156,12 @@ assert.ok(!post({ key, since: 0, push: [] }).pull.some(p => p.id === evil || p.i
 post({ token: ownerTok, since: 0, push: [{ id: 'P-OW1-0001', k: 'P', u: 19, d: { id: 'P-OW1-0001', name: 'Warehouse', value: 1000, valueCur: 'USD' } }] });
 res = post({ token: mary2, since: 0, push: [] });
 const everything = post({ key, since: 0, push: [] }).pull;
-const money = p => ['R', 'T'].includes(p.k) || (p.k === 'C' && ['R', 'T'].includes(p.d.kind)) || (p.k === 'F' && /^[RT]-/.test(p.d.for)) || (p.k === 'L' && p.d.uid !== maryId);
-assert.deepStrictEqual(res.pull.map(p => p.id).sort(), everything.filter(p => !money(p)).map(p => p.id).sort(), 'she sees every record except the money');
+const notHers = e => e && e.k === 'E' && e.d.uid !== maryId && !e.d.worker && !e.d.regular; // her expenses are her own (12 Oct 2026)
+const byId = new Map(everything.map(p => [p.id, p]));
+const money = p => ['R', 'T'].includes(p.k) || (p.k === 'C' && ['R', 'T'].includes(p.d.kind)) || (p.k === 'F' && /^[RT]-/.test(p.d.for)) || (p.k === 'L' && p.d.uid !== maryId)
+  || notHers(p) || (p.k === 'F' && notHers(byId.get(p.d.for))) || (p.k === 'C' && notHers(byId.get(p.d.target)));
+assert.ok(everything.some(notHers), 'there are expenses others entered');
+assert.deepStrictEqual(res.pull.map(p => p.id).sort(), everything.filter(p => !money(p)).map(p => p.id).sort(), 'she sees every record except the money and the expenses others entered');
 assert.ok(everything.some(p => p.k === 'R') && !res.pull.some(p => p.k === 'R' || p.k === 'T'), 'no money received, no cash/bank moves');
 assert.deepStrictEqual(res.pull.filter(p => p.k === 'P').map(p => [p.d.name, p.d.value, p.d.valueCur]), [['Warehouse', undefined, undefined]], 'projects by name only, without their value');
 assert.strictEqual(res.sheet, '', 'and no link to the Google Sheet (it shows every balance)');
@@ -184,6 +188,22 @@ assert.deepStrictEqual(res.refused.sort(), ['C-AG1-0003', 'C-AG1-0004', 'C-AG1-0
 res = post({ token: storeTok, since: 0, push: [{ ...ask, id: 'C-SK1-0001', u: 26, d: { ...ask.d, id: 'C-SK1-0001', uid: storeId } }] });
 assert.deepStrictEqual(res.refused, ['C-SK1-0001'], 'store keepers do not ask for changes');
 assert.ok(!res.pull.some(p => p.k === 'C'), "store keepers don't see change requests");
+
+/* ---------- the office manager's expenses are her own (owner, 12 Oct 2026) ---------- */
+// an admin's expense and its voucher: not for her; an admin's salary payment to an employee: yes (the Employees screens
+// count every payment); her own: yes; the store keeper's: no
+const adminExp = exp('E-OW1-0700', 40, { uid: ownerId, by: 'Owner' }), adminPay = exp('E-OW1-0701', 40, { uid: ownerId, by: 'Owner', worker: 'W-OW1-0001', pay: 'advance' });
+const storeExp = exp('E-SK1-0700', 40, { uid: storeId, by: 'Store' }), hers = exp('E-AG1-0700', 41, { uid: maryId, by: 'Mary' });
+const vUp = post({ op: 'upload', token: ownerTok, name: 'PV.pdf', mime: 'application/pdf', data: Buffer.from('%PDF-1.4 v').toString('base64') });
+const voucher = { id: 'F-OW1-0700', k: 'F', u: 40, d: { id: 'F-OW1-0700', for: 'E-OW1-0700', type: 'voucher', fileId: vUp.fileId, name: 'PV.pdf', mime: 'application/pdf', uid: ownerId } };
+assert.deepStrictEqual(post({ token: ownerTok, since: 0, push: [adminExp, adminPay, voucher] }).refused, []);
+assert.deepStrictEqual(post({ token: storeTok, since: 0, push: [storeExp] }).refused, []);
+assert.deepStrictEqual(post({ token: mary2, since: 0, push: [hers] }).refused, []);
+const maryIds = post({ token: mary2, since: 0, push: [] }).pull.map(p => p.id);
+assert.deepStrictEqual(['E-OW1-0700', 'F-OW1-0700', 'E-OW1-0701', 'E-SK1-0700', 'E-AG1-0700'].map(id => maryIds.includes(id)), [false, false, true, false, true], "not an admin's expense or its voucher, nor the store keeper's; an admin's salary payment and her own: yes");
+assert.strictEqual(post({ op: 'file', token: mary2, id: 'F-OW1-0700' }).ok, false, "nor can she fetch the admin's voucher");
+assert.strictEqual(post({ op: 'file', token: ownerTok, id: 'F-OW1-0700' }).ok, true, 'an admin can');
+assert.ok(post({ token: mdTok, since: 0, push: [] }).pull.some(p => p.id === 'E-SK1-0700'), 'admins still see everything');
 
 /* ---------- admins: everything ---------- */
 res = post({ token: mdTok, since: 0, push: [

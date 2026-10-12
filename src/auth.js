@@ -5,7 +5,7 @@
 // The sign-in lives in its own storage slot, so it never ends up in a backup file.
 const SESSION_KEY = KEY + '-login';
 const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper' };
-const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Sees everything · adds entries · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
+const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Staff and salaries · her own expenses only, no company money · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
 const RIGHTS = {
   admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones', 'staff'],
   manager: ['add', 'suggest', 'date', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval; no money (balances)
