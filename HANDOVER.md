@@ -331,6 +331,12 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 12 Oct 2026: live app 3ab4b0f498** (script unchanged, v13): an **Install** banner on Android — the app catches
+Chrome's `beforeinstallprompt` and one tap opens Chrome's install box (owner's POCO C71 showed no Add to Home screen). Chrome
+reported no installability errors for the live app (`Page.getInstallabilityErrors`); the welcome page now explains the
+fallback: open in Chrome (not WhatsApp's browser), ⋮ → Install app, and on Xiaomi/Redmi/POCO allow Chrome's **Home screen
+shortcuts** permission. Checked on the live address in real Chrome: offered, banner shown; tap → prompt; opens offline.
+
 **RELEASED 10 Oct 2026 (night, latest): live app c8a6b632f9 + script v13** (from `keep-voucher`; test copy edb5544d3d). Bank → Cash (or any edit that
 leaves the money and the person alone) no longer cancels a signed paper; admins can undo a cancel (the original comes back
 out of the Drive bin). Checked end to end on the mock sheet: Bank → Cash kept PV valid; $250 → $300 cancelled it (no undo
