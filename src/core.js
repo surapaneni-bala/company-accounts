@@ -73,6 +73,10 @@ const total = a => a.reduce((t, x) => t + cents(x.amount), 0) / 100;
 const minus = (a, b) => (cents(a) - cents(b)) / 100;
 const byCur = items => Object.fromEntries(CURS.map(c => [c, total(items.filter(x => x.cur === c))]));
 const byAt = (a, b) => a.at.localeCompare(b.at) || (a.createdAt || '').localeCompare(b.createdAt || '') || a.id.localeCompare(b.id);
+// The office manager's Accounts show only the expenses she entered (owner, 12 Oct 2026). An admin's payments to employees
+// (and regular payments) still reach her phone, for the Employees screens only.
+const ownAccounts = () => signedIn() && !can('money') && can('staff');
+const accountsE = () => (ownAccounts() ? live(S.expenses).filter(e => e.uid === session.user.id) : live(S.expenses));
 const projName = id => id ? (S.projects.find(p => p.id === id)?.name || 'Unknown project') : 'General (no project)';
 const fileSafe = s => s.replace(/[\\/:*?"<>|]+/g, '').trim() || 'Company';
 const randHex = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -338,7 +342,7 @@ function balances() {
 }
 const plain = n => (n < 0 ? '−' : '') + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
 function viewHome() {
-  const E = live(S.expenses), R = live(S.credits), T = live(S.transfers);
+  const E = accountsE(), R = live(S.credits), T = live(S.transfers);
   const spent = byCur(E), recv = byCur(R), bal = balances();
   const today = stamp().slice(0, 10), month = today.slice(0, 7);
   const recent = [...E.map(x => [x, 'E']), ...R.map(x => [x, 'R']), ...T.map(x => [x, 'T'])].sort((a, b) => byAt(b[0], a[0])).slice(0, 8);
@@ -348,7 +352,7 @@ function viewHome() {
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
   return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
-  ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? 'Expenses — the balances are kept by the admins.' : 'Your expenses — only you and the office see them.'}</p>`}
+  ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? 'Your expenses — only the ones you entered. The balances are kept by the admins.' : 'Your expenses — only you and the admins see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
     ${signedIn() ? `<button class="eye" data-act="${hide ? 'reveal' : 'conceal'}">${hide ? '👁 Show' : '🙈 Hide'}</button>` : ''}
@@ -400,8 +404,9 @@ function itemRow(x, k, showDate) {
     <span class="amt">${isE ? '−' : '+'}${money(x.amount, x.cur)}</span></button>`;
 }
 
+const histList = () => (histKind === 'E' ? accountsE() : live(S[COLL[histKind]]));
 function viewHistory() {
-  const all = live(S[COLL[histKind]]);
+  const all = histList();
   const months = [...new Set(all.map(x => x.at.slice(0, 7)))].sort().reverse();
   return `<div class="seg" role="tablist" ${can('money') ? '' : 'hidden'}>
       ${[['E', '− Out'], ['R', '+ In'], ['T', '⇄ Moves']].map(([k, label]) => `<button data-act="hist" data-k="${k}" class="${histKind === k ? 'on' : ''}" role="tab" aria-selected="${histKind === k}">${label}</button>`).join('')}
@@ -414,7 +419,7 @@ function viewHistory() {
 }
 function histResults() {
   const q = histQuery.trim().toLowerCase();
-  const items = live(S[COLL[histKind]])
+  const items = histList()
     .filter(x => !histMonth || x.at.startsWith(histMonth))
     .filter(x => !q || [x.id, x.paidTo, x.reason, x.location, x.note, x.project && projName(x.project), x.mode && accountOf(x.mode), x.from, x.to, x.amount, x.by, x.cur].join(' ').toLowerCase().includes(q))
     .sort((a, b) => byAt(b, a));
