@@ -54,15 +54,28 @@ const updateBanner = () => (newerVersion ? `<div class="banner new"><span>🆕 A
 let installEvent = null;
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; paintInstall(); });
 addEventListener('appinstalled', () => { installEvent = null; paintInstall(); toast('Installed ✓ — open Brookfield from your home screen'); });
+// On Android the bar shows even before Chrome offers (it waits for a tap and about 30 seconds on the page, and other
+// browsers never offer): then the button explains the steps instead.
+const isAndroid = () => /Android/i.test(navigator.userAgent);
 function paintInstall() {
   const slot = document.getElementById('installSlot');
-  if (slot) slot.innerHTML = installEvent && !isInstalled() ? `<div class="banner new"><span>📲 <b>Install Brookfield</b> on this phone: it opens from your home screen like any app, even without internet.</span><button class="btn small primary" data-act="installApp">Install</button></div>` : '';
+  if (slot) slot.innerHTML = (installEvent || isAndroid()) && !isInstalled() ? `<div class="banner new"><span>📲 <b>Install Brookfield</b> on this phone: it opens from your home screen like any app, even without internet.</span><button class="btn small primary" data-act="installApp">Install</button></div>` : '';
 }
+const INSTALL_STEPS = `${head('Install Brookfield')}
+  <ol class="steps">
+    <li>Use <b>Chrome</b>. Opened from WhatsApp? Tap <b>⋮ → Open in Chrome</b>.</li>
+    <li>Tap anywhere on the page, wait about 30 seconds, then tap <b>Install</b> at the top again.</li>
+    <li>Or in Chrome tap <b>⋮</b> (top right) → <b>Install app</b> or <b>Add to Home screen</b>.</li>
+    <li><b>Xiaomi, Redmi and POCO:</b> if nothing appears on the home screen, open <b>Settings → Apps → Manage apps → Chrome →
+      Other permissions</b> and allow <b>Home screen shortcuts</b>. Then try again.</li>
+    <li>Already installed? Look for <b>Brookfield</b> on your home screen or in the app list.</li>
+  </ol>`;
 async function installApp() {
   const e = installEvent;
-  if (!e) return;
+  if (!e) return openSheet(INSTALL_STEPS);
   installEvent = null; paintInstall(); // Chrome's offer can be used once
   e.prompt();
   const { outcome } = await e.userChoice.catch(() => ({ outcome: 'dismissed' }));
   if (outcome !== 'accepted') toast('Not installed. Open the link again to see the Install button.');
 }
+paintInstall(); // Android phones see the bar from the start
