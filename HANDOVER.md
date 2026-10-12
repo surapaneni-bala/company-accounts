@@ -331,6 +331,13 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 12 Oct 2026 (night): live app 0b7485d474 + sheet script v14** (from `manager-own`): the office manager sees only the
+expenses she entered. The sheet (`hiddenFor_`) stops sending her other people's expenses, their files and change requests —
+except an admin's payment to an employee (`worker`) or of a regular payment (`regular`), for the Employees screens; her
+Accounts list only her own (`accountsE`); her phone drops and re-fetches (`dropMoney`, script ≥ 14). Checked: test-auth
+(what she gets; mutations caught), in the browser as her phone and as an admin; opens offline. Owner pastes v14
+(sheet-script.txt?v=18) into the REAL sheet + New version. The `office` branch carries it as script v17.
+
 **RELEASED 12 Oct 2026 (evening): live app 24aef99955 + brookfield.apk** — the owner's POCO C71 (Agnes's phone) is an
 **Android Go** phone (`ro.config.low_ram=true`, home screen `com.gogo.launcher` with no CONFIRM_PIN_SHORTCUT handler):
 Chrome can neither install a web app nor add a shortcut there, so it shows no Add to Home screen at all (checked over USB with
