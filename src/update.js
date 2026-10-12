@@ -69,7 +69,10 @@ const INSTALL_STEPS = `${head('Install Brookfield')}
     <li><b>Xiaomi, Redmi and POCO:</b> if nothing appears on the home screen, open <b>Settings → Apps → Manage apps → Chrome →
       Other permissions</b> and allow <b>Home screen shortcuts</b>. Then try again.</li>
     <li>Already installed? Look for <b>Brookfield</b> on your home screen or in the app list.</li>
-  </ol>`;
+  </ol>
+  <a class="btn in" href="/brookfield.apk" download="Brookfield.apk">📦 Unable to add to home screen? Download the app (APK) here</a>
+  <p class="muted center" style="margin-top:8px">For Android phones whose home screen can't take web apps (Android Go phones like the POCO C71). Open the
+    downloaded file and tap <b>Install</b>; if the phone asks, allow Chrome to install apps.</p>`;
 async function installApp() {
   const e = installEvent;
   if (!e) return openSheet(INSTALL_STEPS);

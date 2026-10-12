@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.bepl.brookfield",
+    "sha256_cert_fingerprints": ["4E:D6:D4:0A:B2:F1:EB:E2:7B:C0:6F:7C:60:22:EF:BE:21:6D:B6:D8:89:0B:79:E3:DA:09:D7:CD:0D:A5:D1:47"]
+  }
+}]
