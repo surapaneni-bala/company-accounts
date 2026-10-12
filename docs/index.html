@@ -398,6 +398,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
     <div class="top-l"><button class="backbtn" id="menuBtn" data-act="tab" data-tab="menu" hidden aria-label="Back to the menu" title="Menu">‹</button><div><div class="co" id="coName"></div><div class="today-date" id="todayDate"></div></div></div>
     <div class="top-r"><button class="chip who" id="whoChip" data-act="account" hidden></button><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
   </header>
+  <div id="installSlot"></div>
   <main id="main"></main>
 </div>
 
@@ -431,7 +432,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'c8a6b632f9'; // filled in by tools/build.js
+const APP_VERSION = '3ab4b0f498'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -705,7 +706,7 @@ const WIDE_LOGO = `<img class="wide-logo" src="logo-wide.png" alt="Brookfield En
 function viewSetup() {
   const mode = setupMode || 'join';
   const logo = APP_LOGO;
-  const tip = isPhone() && !isInstalled() ? `<p class="note">📲 <b>First install the app:</b> iPhone — in Safari tap <b>Share → Add to Home Screen</b>. Android — in Chrome tap <b>⋮ → Add to Home screen</b>. Then open <b>Accounts</b> from your home screen.</p>` : '';
+  const tip = isPhone() && !isInstalled() ? `<p class="note">📲 <b>First install the app.</b> <b>Android:</b> tap <b>Install</b> at the top. No Install button? Open this link in <b>Chrome</b> (from WhatsApp: ⋮ → Open in Chrome), then ⋮ → <b>Install app</b>. On Xiaomi, Redmi and POCO phones first allow it: Settings → Apps → Manage apps → Chrome → Other permissions → <b>Home screen shortcuts</b> → Allow. <b>iPhone:</b> in Safari tap <b>Share → Add to Home Screen</b>. Then open <b>Brookfield</b> from your home screen.</p>` : '';
   const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="join">← Back</button></p>`;
   if (mode === 'new') return `<section class="setup card pad">${logo}
     <h1>New company</h1>
@@ -2950,7 +2951,7 @@ async function inviteSheet() {
   openSheet(`${head('Add a phone')}
     <ol class="steps">
       <li>Send this link to the phone (WhatsApp or email).</li>
-      <li>On the phone, open the link. <b>iPhone:</b> in Safari tap <b>Share → Add to Home Screen</b>. <b>Android:</b> in Chrome tap <b>⋮ → Add to Home screen</b>.</li>
+      <li>On the phone, open the link. <b>iPhone:</b> in Safari tap <b>Share → Add to Home Screen</b>. <b>Android:</b> in Chrome tap <b>Install</b> at the top (or ⋮ → <b>Install app</b>).</li>
       <li>Open <b>Accounts</b> from the home screen and tap <b>Join my company</b>. If the link is not filled in already, paste it.${S.link.logins ? ' Then type the username and password you gave them.' : ''}</li>
     </ol>
     <label class="fld"><span>Invite link</span><input id="inviteLink" readonly value="${esc(inviteLink())}"></label>
@@ -4093,6 +4094,26 @@ async function updateApp() {
 }
 const updateBanner = () => (newerVersion ? `<div class="banner new"><span>🆕 A new version of the app is ready.</span><button class="btn small" data-act="updateApp">Update now</button></div>` : '');
 
+/* ---------- installing the app on Android: one tap instead of Chrome's ⋮ menu ---------- */
+// Chrome tells the page when the app can be installed (beforeinstallprompt); its install box may only open from a tap,
+// so an Install banner shows above every page until it is installed (owner, 12 Oct 2026: a POCO phone whose menu had no
+// "Add to Home screen"). iPhones have no such box: Safari's Share → Add to Home Screen stays the way.
+let installEvent = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; paintInstall(); });
+addEventListener('appinstalled', () => { installEvent = null; paintInstall(); toast('Installed ✓ — open Brookfield from your home screen'); });
+function paintInstall() {
+  const slot = document.getElementById('installSlot');
+  if (slot) slot.innerHTML = installEvent && !isInstalled() ? `<div class="banner new"><span>📲 <b>Install Brookfield</b> on this phone: it opens from your home screen like any app, even without internet.</span><button class="btn small primary" data-act="installApp">Install</button></div>` : '';
+}
+async function installApp() {
+  const e = installEvent;
+  if (!e) return;
+  installEvent = null; paintInstall(); // Chrome's offer can be used once
+  e.prompt();
+  const { outcome } = await e.userChoice.catch(() => ({ outcome: 'dismissed' }));
+  if (outcome !== 'accepted') toast('Not installed. Open the link again to see the Install button.');
+}
+
 /* ---------- events ---------- */
 const ACTIONS = {
   tab: b => { tab = b.dataset.tab; render(); scrollTo(0, 0); },
@@ -4133,6 +4154,7 @@ const ACTIONS = {
   importOld: () => importSheet(),
   howUpdate: () => howUpdateSheet(),
   updateApp: () => updateApp(),
+  installApp: () => installApp(),
   assignPick: b => assignSheet(b.dataset.id),
   pickAll: b => { const f = b.closest('form'); $$('.pick:not([hidden]) input', f).forEach(i => (i.checked = true)); updatePick(f); },
   pickNone: b => { const f = b.closest('form'); $$('input[name=pick]', f).forEach(i => (i.checked = false)); updatePick(f); },

@@ -273,7 +273,7 @@ const WIDE_LOGO = `<img class="wide-logo" src="logo-wide.png" alt="Brookfield En
 function viewSetup() {
   const mode = setupMode || 'join';
   const logo = APP_LOGO;
-  const tip = isPhone() && !isInstalled() ? `<p class="note">📲 <b>First install the app:</b> iPhone — in Safari tap <b>Share → Add to Home Screen</b>. Android — in Chrome tap <b>⋮ → Add to Home screen</b>. Then open <b>Accounts</b> from your home screen.</p>` : '';
+  const tip = isPhone() && !isInstalled() ? `<p class="note">📲 <b>First install the app.</b> <b>Android:</b> tap <b>Install</b> at the top. No Install button? Open this link in <b>Chrome</b> (from WhatsApp: ⋮ → Open in Chrome), then ⋮ → <b>Install app</b>. On Xiaomi, Redmi and POCO phones first allow it: Settings → Apps → Manage apps → Chrome → Other permissions → <b>Home screen shortcuts</b> → Allow. <b>iPhone:</b> in Safari tap <b>Share → Add to Home Screen</b>. Then open <b>Brookfield</b> from your home screen.</p>` : '';
   const back = `<p class="center"><button class="link" data-act="setupMode" data-mode="join">← Back</button></p>`;
   if (mode === 'new') return `<section class="setup card pad">${logo}
     <h1>New company</h1>
