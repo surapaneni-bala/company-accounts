@@ -30,7 +30,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 13; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 14; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';
@@ -191,10 +191,13 @@ function applyPull(pull) {
 
 // A login without the money right (the office manager since script v11) must not keep money it received before: once
 // the sheet stops sending it, everything not waiting to be sent leaves this phone and what it may see is fetched again.
+// Since script v14 that includes expenses others entered, except payments to an employee or of a regular payment.
+const notMine = (e, unsent) => e.uid !== session.user.id && !e.worker && !e.regular && !unsent.has(e.id);
 function dropMoney() {
   if (!signedIn() || can('money') || (S.link.v || 0) < 11) return false;
   const unsent = new Set(S.dirty);
-  if (![...S.credits, ...S.transfers].some(r => !unsent.has(r.id)) && !S.projects.some(p => p.value)) return false;
+  if (![...S.credits, ...S.transfers].some(r => !unsent.has(r.id)) && !S.projects.some(p => p.value)
+    && !((S.link.v || 0) >= 14 && S.expenses.some(e => notMine(e, unsent)))) return false;
   S = { ...S, ...onlyUnsent(), link: { ...S.link, since: 0 } };
   save(); dropFileCopies(); render(); scheduleSync(0);
   return true;
