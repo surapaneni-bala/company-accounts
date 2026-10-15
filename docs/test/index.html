@@ -445,7 +445,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '76fa49011e'; // filled in by tools/build.js
+const APP_VERSION = '20283bb9cc'; // filled in by tools/build.js
 const KEY = 'bepl-test-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -819,7 +819,7 @@ function viewHome() {
     <div class="mini"><small>Spent this month</small>${lines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
   </div>
   <div class="two" style="margin-top:12px">${can('staff') ? `<button class="btn ghost" data-act="regulars">🔁 Regular payments</button>` : ''}<button class="btn ghost" data-act="banks">🏦 Company bank details</button></div>
-  ${openAdvances().length || can('edit') ? `<button class="btn ghost" data-act="advances" style="margin-top:10px">🏪 Advances with suppliers${openAdvances().length ? ` · ${sumText(openAdvances())} left` : ''}</button>` : ''}
+  ${openAdvances().length || can('edit') ? `<button class="btn ghost" data-act="advances" style="margin-top:10px">🏪 Advances${openAdvances().length ? ` · ${sumText(openAdvances())} with suppliers` : ''}</button>` : ''}
   <div class="sec-head" style="margin-top:22px"><h2 class="sec">Recent</h2><button class="btn small ghost" data-act="tab" data-tab="hist">See all →</button></div>
   ${recent.length ? `<div class="card list">${recent.map(([x, k]) => itemRow(x, k, true)).join('')}</div>` : empty('Nothing here yet', 'Tap <b>Add expense</b> or <b>Money received</b> to start.')}`;
 }
@@ -940,7 +940,7 @@ function expenseForm(old, preset) {
       ${accountChips(d.mode, 'Paid from')}
       ${whenField(old?.at, !!old)}
       ${byField()}${approvalNote(old)}
-      ${old || d.regular ? '' : `<label class="fld check"><input type="checkbox" name="advance"> 🏪 Advance to a supplier — goods are taken from it later</label>`}
+      ${old || d.regular ? '' : `<label class="fld check"><input type="checkbox" name="advance"> 🏪 Advance to a supplier or company — goods or work are taken from it later</label>`}
       ${old ? '' : `<label class="fld check"><input type="checkbox" name="sign"> ✍️ Get their signature now (payment voucher)</label>`}
       <p class="err"></p>
       <button class="btn out">${old ? saveLabel() : 'Save expense'}</button>
@@ -4706,8 +4706,12 @@ async function remakeInvoice(id) {
 const openAdvances = () => live(S.expenses).filter(e => e.advance);
 const takenFrom = id => live(S.expenses).filter(e => e.from === id).sort(byAt);
 const advanceTag = x => (x.advance ? `<i class="tag warn">Advance · ${esc(money(x.amount, x.cur))} left</i>` : x.from ? '<i class="tag">From advance</i>' : '');
-// entries typed before this existed, that look like an advance to a supplier
+// entries typed as plain expenses that look like an advance — to a supplier or company, or a salary advance to an employee
 const looksLikeAdvance = e => !e.advance && !e.advanceTotal && !e.from && !e.worker && !e.regular && /advance/i.test(`${e.reason} ${e.paidTo}`);
+// the employee a payment's "paid to" names (full name, or the same first name): only a guess, an admin confirms
+const employeeLike = e => { const n = clean(e.paidTo).toLowerCase(); return n ? live(S.workers).find(w => { const m = w.name.toLowerCase(); return m === n || m.split(' ')[0] === n.split(' ')[0]; }) : null; };
+// the two kinds, as buttons: which one it was is the admin's call (owner, 15 Oct 2026: tell employee advances apart)
+const advanceKindButtons = r => `<div class="two" style="margin-bottom:10px">${live(S.workers).length ? `<button class="btn small ghost" data-act="empAdvance" data-id="${esc(r.id)}">👷 Salary advance to an employee</button>` : ''}<button class="btn small ghost" data-act="makeAdvance" data-id="${esc(r.id)}">🏪 Advance to a supplier or company</button></div>`;
 
 // on an expense's page: where it stands as an advance, or a way to make it one
 function advanceBlock(r) {
@@ -4716,7 +4720,11 @@ function advanceBlock(r) {
     return `<p class="note">🏪 Taken from the advance paid to ${esc(r.paidTo)}${p ? ` on ${esc(fmtDate(p.at.slice(0, 10)))}` : ''}${r.received ? ` · collected ${esc(fmtDate(r.received))}` : ''}.</p>
       ${p && !p.deleted ? `<button class="btn ghost" data-act="open" data-kind="E" data-id="${esc(p.id)}" style="margin-bottom:10px">🏪 Open the advance</button>` : ''}`;
   }
-  if (!r.advance && !r.advanceTotal) return can('edit') && !r.worker && !r.regular ? `<button class="btn ghost" data-act="makeAdvance" data-id="${esc(r.id)}" style="margin-bottom:10px">🏪 This was an advance to a supplier</button>` : '';
+  if (!r.advance && !r.advanceTotal) {
+    if (!can('edit') || r.worker || r.regular) return '';
+    const w = employeeLike(r);
+    return `${looksLikeAdvance(r) ? `<p class="muted">Was this an advance?${w ? ` It names ${esc(w.name)}, one of your employees.` : ''}</p>` : ''}${advanceKindButtons(r)}`;
+  }
   const taken = takenFrom(r.id), total = r.advanceTotal || r.amount, used = minus(total, r.advance ? r.amount : 0);
   return `<div class="note">🏪 <b>Advance to ${esc(r.paidTo)}</b>: ${money(total, r.cur)} paid · ${money(used, r.cur)} taken · <b>${r.advance ? `${money(r.amount, r.cur)} left` : 'all taken'}</b></div>
     ${r.advance && can('edit') ? `<button class="btn out" data-act="takeAdvance" data-id="${esc(r.id)}" style="margin:10px 0">➖ Take from the advance</button>` : ''}
@@ -4724,16 +4732,46 @@ function advanceBlock(r) {
 }
 function advancesSheet() {
   const open = openAdvances().sort(byAt), maybe = can('edit') ? live(S.expenses).filter(looksLikeAdvance).sort((a, b) => byAt(b, a)).slice(0, 20) : [];
-  openSheet(`${head('Advances with suppliers', 'out')}
-    <p class="hint">Money paid to a supplier before the goods. Each time you collect something, open the advance and tap <b>Take from the advance</b>.</p>
-    ${open.length ? `<p class="note">Still with suppliers: <b>${sumText(open)}</b></p><div class="card list inset">${open.map(x => itemRow(x, 'E', true)).join('')}</div>` : empty('No open advances', 'Tick "Advance to a supplier" when you add the payment.')}
-    ${maybe.length ? `<h3 class="subh">Entries that look like advances</h3><p class="muted">Open one and tap "This was an advance to a supplier".</p><div class="card list inset">${maybe.map(x => itemRow(x, 'E', true)).join('')}</div>` : ''}`);
+  const staff = can('staff') ? live(S.expenses).filter(e => e.worker && e.pay === 'advance').sort((a, b) => byAt(b, a)) : [];
+  openSheet(`${head('Advances', 'out')}
+    <h3 class="subh">🏪 With suppliers and companies</h3>
+    <p class="hint">Money paid before the goods or the work. Each time you collect something, open the advance and tap <b>Take from the advance</b>.</p>
+    ${open.length ? `<p class="note">Still with them: <b>${sumText(open)}</b></p><div class="card list inset">${open.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">None open. Tick "Advance to a supplier or company" when you add the payment.</p>'}
+    ${maybe.length ? `<h3 class="subh">❓ Entries that look like advances (${maybe.length})</h3><p class="muted">Say which kind each one was. An employee's comes off their pay.</p>
+      ${maybe.map(x => { const w = employeeLike(x); return `<div class="card list inset" style="margin-bottom:10px">${itemRow(x, 'E', true)}<div class="sugg">${w ? `<span class="muted">Names ${esc(w.name)}, one of your employees.</span>` : ''}${advanceKindButtons(x)}</div></div>`; }).join('')}` : ''}
+    ${can('staff') ? `<h3 class="subh">👷 Salary advances to employees (${staff.length})</h3><p class="muted">These come off each employee's pay (Employees).</p>
+      ${staff.length ? `<div class="card list inset">${staff.slice(0, 15).map(x => itemRow(x, 'E', true)).join('')}</div>` : ''}` : ''}`);
   comeBack(advancesSheet);
+}
+// A plain entry that was a salary advance: linked to the employee (worker, pay 'advance') so it comes off their pay, like
+// one given from Employees. Who it was paid to and what was signed stay as they are, so its voucher stays valid.
+async function empAdvanceSheet(id) {
+  const r = S.expenses.find(x => x.id === id && !x.deleted), ws = live(S.workers).sort((a, b) => a.name.localeCompare(b.name));
+  if (!r || !ws.length || !await unlock('Enter the password to link it to an employee.')) return;
+  const guess = employeeLike(r);
+  openSheet(`${head('Salary advance to an employee', 'out', `${money(r.amount, r.cur)} to ${r.paidTo} · ${fmtDate(r.at.slice(0, 10))}`)}
+    <form data-form="empAdvance" data-id="${esc(id)}">
+      <label class="fld"><span>Which employee?</span><select name="worker">${guess ? '' : '<option value="">Choose…</option>'}${ws.map(w => `<option value="${esc(w.id)}" ${guess && w.id === guess.id ? 'selected' : ''}>${esc(w.name)}${w.status === 'left' ? ' (has left)' : ''}</option>`).join('')}</select></label>
+      <p class="muted">It is taken off their pay, like an advance given from Employees. "Paid to" and the signed voucher stay as they are.</p>
+      <p class="err"></p>
+      <button class="btn out">Link as a salary advance</button>
+    </form>`);
+}
+function saveEmpAdvance(f) {
+  const r = S.expenses.find(x => x.id === f.dataset.id && !x.deleted), w = workerOf(f.elements.worker.value);
+  if (!r) return closeSheet();
+  if (!w) return formErr(f, 'worker', 'Choose the employee');
+  const day = r.at.slice(0, 10);
+  if (w.clearedTo && day <= w.clearedTo && !confirm(`This was paid on ${fmtDate(day)}, before ${w.name}'s salary was cleared (up to ${fmtDate(w.clearedTo)}).\n\nLinking it takes it off their pay again. Link it anyway?`)) return;
+  const by = myName() || S.lastBy || '';
+  update({ expenses: S.expenses.map(x => (x.id === r.id ? { ...x, worker: w.id, pay: 'advance', editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', r.id, `Linked to ${w.name} as a salary advance (${money(r.amount, r.cur)}) — it comes off their pay`]], by) });
+  toast(`Linked to ${w.name} ✓ — it comes off their pay`);
+  detail('E', r.id);
 }
 async function makeAdvance(id) {
   const r = S.expenses.find(x => x.id === id && !x.deleted);
   if (!r || !await unlock('Enter the password to mark this as an advance.')) return;
-  if (!confirm(`Mark ${money(r.amount, r.cur)} to ${r.paidTo} as an advance?\n\nThen each time goods are collected you take them from it, and it shows what is left.`)) return;
+  if (!confirm(`Mark ${money(r.amount, r.cur)} to ${r.paidTo} as an advance to a supplier or company?\n\nThen each time goods or work are collected you take them from it, and it shows what is left.`)) return;
   const by = myName() || S.lastBy || '';
   update({ expenses: S.expenses.map(x => (x.id === id ? { ...x, advance: true, advanceTotal: x.amount, editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', id, `Marked as an advance to ${r.paidTo} (${money(r.amount, r.cur)})`]], by) });
   toast('Marked as an advance ✓');
@@ -5127,13 +5165,14 @@ const ACTIONS = {
   addLine: () => { $('.ilines').insertAdjacentHTML('beforeend', lineRow()); $('.iline:last-child input').focus(); },
   advances: () => advancesSheet(),
   makeAdvance: b => makeAdvance(b.dataset.id),
+  empAdvance: b => empAdvanceSheet(b.dataset.id),
   takeAdvance: async b => { if (await unlock('Enter the password to take from the advance.')) takeForm(b.dataset.id); },
   useSuggestion: b => useSuggestion(b.dataset.key),
   notRegular: b => notRegular(b.dataset.key),
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);

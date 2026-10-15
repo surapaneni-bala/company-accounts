@@ -373,7 +373,7 @@ function viewHome() {
     <div class="mini"><small>Spent this month</small>${lines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
   </div>
   <div class="two" style="margin-top:12px">${can('staff') ? `<button class="btn ghost" data-act="regulars">🔁 Regular payments</button>` : ''}<button class="btn ghost" data-act="banks">🏦 Company bank details</button></div>
-  ${openAdvances().length || can('edit') ? `<button class="btn ghost" data-act="advances" style="margin-top:10px">🏪 Advances with suppliers${openAdvances().length ? ` · ${sumText(openAdvances())} left` : ''}</button>` : ''}
+  ${openAdvances().length || can('edit') ? `<button class="btn ghost" data-act="advances" style="margin-top:10px">🏪 Advances${openAdvances().length ? ` · ${sumText(openAdvances())} with suppliers` : ''}</button>` : ''}
   <div class="sec-head" style="margin-top:22px"><h2 class="sec">Recent</h2><button class="btn small ghost" data-act="tab" data-tab="hist">See all →</button></div>
   ${recent.length ? `<div class="card list">${recent.map(([x, k]) => itemRow(x, k, true)).join('')}</div>` : empty('Nothing here yet', 'Tap <b>Add expense</b> or <b>Money received</b> to start.')}`;
 }
@@ -494,7 +494,7 @@ function expenseForm(old, preset) {
       ${accountChips(d.mode, 'Paid from')}
       ${whenField(old?.at, !!old)}
       ${byField()}${approvalNote(old)}
-      ${old || d.regular ? '' : `<label class="fld check"><input type="checkbox" name="advance"> 🏪 Advance to a supplier — goods are taken from it later</label>`}
+      ${old || d.regular ? '' : `<label class="fld check"><input type="checkbox" name="advance"> 🏪 Advance to a supplier or company — goods or work are taken from it later</label>`}
       ${old ? '' : `<label class="fld check"><input type="checkbox" name="sign"> ✍️ Get their signature now (payment voucher)</label>`}
       <p class="err"></p>
       <button class="btn out">${old ? saveLabel() : 'Save expense'}</button>
