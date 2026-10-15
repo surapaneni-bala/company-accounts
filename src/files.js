@@ -596,7 +596,7 @@ const SLIP_W = 1240, SLIP_H = 1754; // A4 at 150 dots per inch
 const SANS = '"Helvetica Neue", Helvetica, Arial, Roboto, sans-serif';
 const SLIP_C = { navy: '#26306B', accent: '#C8501E', ink: '#1B2232', label: '#6B7190', rule: '#C9CDDD', tint: 'rgba(38,48,107,.05)', stripe: 'rgba(38,48,107,.025)', stampInk: '#1D3FC4' };
 const SLIP_TITLE = { voucher: 'PAYMENT VOUCHER', receipt: 'RECEIPT', salary: 'SALARY SLIP', advance: 'ADVANCE VOUCHER', settlement: 'FINAL SETTLEMENT' };
-const STAMP_PLACE = { a: 72, r: 0.76, s: 0.12 }; // the date on the stamp: angle of the dotted line's middle (0 = right, 90 = down), its distance and letter size as parts of the stamp's radius
+const STAMP_PLACE = { a: 67.5, r: 0.79, s: 0.14 }; // the date on the stamp: angle of the dotted line's middle (0 = right, 90 = down), its distance and letter size as parts of the stamp's radius
 const slipMoney = (n, cur) => `${cur} ${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 function wrapText(g, text, width) {
   const lines = [];
