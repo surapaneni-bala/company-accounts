@@ -8,14 +8,21 @@ const openAdvances = () => live(S.expenses).filter(e => e.advance);
 const takenFrom = id => live(S.expenses).filter(e => e.from === id).sort(byAt);
 const advanceTag = x => (x.advance ? `<i class="tag warn">Advance · ${esc(money(x.amount, x.cur))} left</i>` : x.from ? '<i class="tag">From advance</i>' : '');
 // entries typed as plain expenses that look like an advance — to a supplier or company, or a salary advance to an employee
-const looksLikeAdvance = e => !e.advance && !e.advanceTotal && !e.from && !e.worker && !e.regular && /advance/i.test(`${e.reason} ${e.paidTo}`);
+const looksLikeAdvance = e => !e.advance && !e.advanceTotal && !e.from && !e.worker && !e.regular && !(S.notAdvance || []).includes(e.id) && /advance/i.test(`${e.reason} ${e.paidTo}`);
 // the employee a payment's "paid to" names (full name, or the same first name): only a guess, an admin confirms
 const employeeLike = e => { const n = clean(e.paidTo).toLowerCase(); return n ? live(S.workers).find(w => { const m = w.name.toLowerCase(); return m === n || m.split(' ')[0] === n.split(' ')[0]; }) : null; };
 // the two kinds, as buttons: which one it was is the admin's call (owner, 15 Oct 2026: tell employee advances apart)
-const advanceKindButtons = r => `<div class="two" style="margin-bottom:10px">${live(S.workers).length ? `<button class="btn small ghost" data-act="empAdvance" data-id="${esc(r.id)}">👷 Salary advance to an employee</button>` : ''}<button class="btn small ghost" data-act="makeAdvance" data-id="${esc(r.id)}">🏪 Advance to a supplier or company</button></div>`;
+const advanceKindButtons = r => `<div class="two" style="margin-bottom:10px">${live(S.workers).length ? `<button class="btn small ghost" data-act="empAdvance" data-id="${esc(r.id)}">👷 Salary advance to an employee</button>` : ''}<button class="btn small ghost" data-act="makeAdvance" data-id="${esc(r.id)}">🏪 Advance to a supplier or company</button>${looksLikeAdvance(r) ? `<button class="btn small ghost" data-act="notAdvance" data-id="${esc(r.id)}">✖ Neither — a normal payment</button>` : ''}</div>`;
+// a supplier advance marked by mistake can be undone while nothing has been taken from it
+const undoable = r => r.advance && !takenFrom(r.id).length && cents(r.amount) === cents(r.advanceTotal || r.amount);
+const undoButton = (id, label) => `<button class="btn ghost" data-act="undoAdvance" data-id="${esc(id)}" style="margin-bottom:10px">↩️ ${label}</button>`;
 
 // on an expense's page: where it stands as an advance, or a way to make it one
 function advanceBlock(r) {
+  if (r.worker && r.pay === 'advance') {
+    const w = workerOf(r.worker);
+    return can('edit') ? `<p class="note">👷 Salary advance to ${esc(w ? w.name : r.paidTo)}: it comes off their pay.</p>${undoButton(r.id, 'Not a salary advance — undo')}` : '';
+  }
   if (r.from) {
     const p = S.expenses.find(x => x.id === r.from);
     return `<p class="note">🏪 Taken from the advance paid to ${esc(r.paidTo)}${p ? ` on ${esc(fmtDate(p.at.slice(0, 10)))}` : ''}${r.received ? ` · collected ${esc(fmtDate(r.received))}` : ''}.</p>
@@ -29,6 +36,7 @@ function advanceBlock(r) {
   const taken = takenFrom(r.id), total = r.advanceTotal || r.amount, used = minus(total, r.advance ? r.amount : 0);
   return `<div class="note">🏪 <b>Advance to ${esc(r.paidTo)}</b>: ${money(total, r.cur)} paid · ${money(used, r.cur)} taken · <b>${r.advance ? `${money(r.amount, r.cur)} left` : 'all taken'}</b></div>
     ${r.advance && can('edit') ? `<button class="btn out" data-act="takeAdvance" data-id="${esc(r.id)}" style="margin:10px 0">➖ Take from the advance</button>` : ''}
+    ${undoable(r) && can('edit') ? undoButton(r.id, 'Not an advance — undo') : ''}
     ${taken.length ? `<h3 class="subh">Taken so far (${taken.length})</h3><div class="card list inset" style="margin-bottom:12px">${taken.map(x => itemRow(x, 'E', true)).join('')}</div>` : ''}`;
 }
 function advancesSheet() {
@@ -69,6 +77,23 @@ function saveEmpAdvance(f) {
   toast(`Linked to ${w.name} ✓ — it comes off their pay`);
   detail('E', r.id);
 }
+// Undo a mistake (owner, 15 Oct 2026): a supplier advance with nothing taken from it, or a payment linked to an employee
+// as a salary advance, goes back to a normal payment. What was paid and signed for doesn't change, so its voucher stays valid.
+async function undoAdvance(id) {
+  const r = S.expenses.find(x => x.id === id && !x.deleted), emp = r && r.worker && r.pay === 'advance';
+  if (!r || !(emp || undoable(r)) || !await unlock('Enter the password to undo the advance.')) return;
+  const w = emp && workerOf(r.worker), day = r.at.slice(0, 10);
+  const cleared = w && w.clearedTo && day <= w.clearedTo ? `\n\n${w.name}'s salary was already cleared up to ${fmtDate(w.clearedTo)} with this advance taken off. Undoing it means they are owed ${money(r.amount, r.cur)} more.` : '';
+  if (!confirm(emp ? `Is ${money(r.amount, r.cur)} to ${r.paidTo} not a salary advance to ${w ? w.name : 'an employee'}?\n\nIt stops coming off their pay and stays a normal payment.${cleared}` : `Is ${money(r.amount, r.cur)} to ${r.paidTo} not an advance?\n\nIt stays a normal payment.`)) return;
+  const by = myName() || S.lastBy || '', drop = emp ? ['worker', 'pay', 'month'] : ['advance', 'advanceTotal'];
+  const plain = Object.fromEntries(Object.entries(r).filter(([k]) => !drop.includes(k)));
+  update({ expenses: S.expenses.map(x => (x.id === id ? { ...plain, editedAt: stampSec(), editedBy: by } : x)), notAdvance: [...(S.notAdvance || []), id],
+    log: logWith([['Edited', id, emp ? `Not a salary advance to ${w ? w.name : 'an employee'} after all — a normal payment again` : `Not an advance to ${r.paidTo} after all — a normal payment again`]], by) });
+  toast('Undone ✓ — a normal payment again');
+  detail('E', id);
+}
+// "neither": this phone stops asking about it (ponytail: kept on this phone, like "Not regular"; a shared flag needs a sheet-script change)
+function notAdvance(id, inList) { update({ notAdvance: [...(S.notAdvance || []), id] }); toast('OK — a normal payment'); if (inList) advancesSheet(); else detail('E', id); }
 async function makeAdvance(id) {
   const r = S.expenses.find(x => x.id === id && !x.deleted);
   if (!r || !await unlock('Enter the password to mark this as an advance.')) return;

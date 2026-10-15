@@ -653,7 +653,8 @@ function saveExpense(f) {
     const changes = diff(old, rec);
     if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
     if (!can('edit')) return requestChange('E', old, rec, changes, by);
-    update({ expenses: S.expenses.map(x => x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
+    const total = old.advance && cents(old.amount) === cents(old.advanceTotal) ? { advanceTotal: rec.amount } : {}; // an advance nothing was taken from: what was paid (and signed for) is the new amount
+    update({ expenses: S.expenses.map(x => x.id === old.id ? { ...x, ...rec, ...total, editedAt: stampSec(), editedBy: by } : x), log: logWith([['Edited', old.id, changes.join(' ; ')]], by), lastBy: by });
     toast('Changes saved ✓');
     if (needsNewPaper(old.id)) { render(); return slipSheet('E', old.id); } // its signed paper was cancelled: make the new one now
   } else {
