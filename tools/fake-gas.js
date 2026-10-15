@@ -93,7 +93,7 @@ function makeDrive(drive) {
     getFiles: () => iter(kids('files', id).map(file)),
     createFolder: name => { const nid = 'fold' + crypto.randomUUID().replace(/-/g, ''); drive.folders[nid] = { name, parent: id }; return folder(nid); },
     getFoldersByName: name => iter(kids('folders', id).filter(k => drive.folders[k].name === name).map(folder)),
-    createFile: blob => { const fid = 'file' + crypto.randomUUID().replace(/-/g, ''); drive.files[fid] = { folder: id, name: blob.getName(), mime: blob.getContentType(), b64: Buffer.from(blob.getBytes()).toString('base64') }; return file(fid); },
+    createFile: blob => { const fid = 'file' + crypto.randomUUID().replace(/-/g, ''); drive.files[fid] = { folder: id, name: blob.getName(), mime: blob.getContentType(), b64: Buffer.from(blob.getBytes()).toString('base64'), created: Date.now() }; return file(fid); },
   });
   const file = id => {
     const f = drive.files[id];
@@ -106,6 +106,8 @@ function makeDrive(drive) {
       moveTo: dest => { f.folder = dest.getId(); },
       setTrashed: t => { f.trashed = !!t; },
       isTrashed: () => !!f.trashed,
+      getSize: () => Buffer.from(f.b64, 'base64').length,
+      getDateCreated: () => new Date(f.created || 0),
     };
   };
   return {

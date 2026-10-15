@@ -101,7 +101,8 @@ const SIGNED_TYPES = ['voucher', 'receipt', 'slip'];
 // What the person signed for: the money, and who received it. Anything else (paid from cash or bank, the date, what it was
 // for, the project, the rate) is the office's own record: changing it leaves the signed paper as it is, since it may be with
 // the client already (owner, 10 Oct 2026, after Bank → Cash cancelled a voucher: "cancel only if I change the voucher").
-const signedFacts = (k, r) => JSON.stringify([r.amount, r.cur, k === 'R' ? '' : r.paidTo]);
+// an advance to a supplier: what they signed for is the whole advance, however much has been taken from it since
+const signedFacts = (k, r) => JSON.stringify([r.advanceTotal || r.amount, r.cur, k === 'R' ? '' : r.paidTo]);
 function cancelSigned(was) {
   const changed = new Map(); // entry id → the entry as it was signed
   [['E', 'expenses'], ['R', 'credits']].forEach(([k, key]) => {
@@ -276,7 +277,8 @@ async function uploadFiles() {
         await filePut(rec);
       }
       let res;
-      try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
+      // key: sent again after a lost answer, the sheet answers with the copy it already made (no second copy)
+      try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data), key: rec.id }); }
       catch (e) { uploadErr = await uploadFailure(e); break; }
       // a reply without the file's Drive number is not an upload (a record without one could never be filed): try again later
       if (!/^[\w-]{10,100}$/.test(String(res.fileId || ''))) { uploadErr = 'the Google Sheet did not give the file its Drive number — it tries again by itself.'; break; }

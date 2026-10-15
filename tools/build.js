@@ -45,7 +45,9 @@ const scriptV = fs.readFileSync(path.join(root, 'apps-script', 'Code.gs'), 'utf8
 const appV = fs.readFileSync(path.join(root, 'src', 'sync.js'), 'utf8').match(/^const NEWEST_SCRIPT = (\d+);/m)[1];
 if (scriptV !== appV) throw new Error(`Code.gs is version ${scriptV} but src/sync.js NEWEST_SCRIPT is ${appV}`);
 
-const js = ['core.js', 'calc.js', 'files.js', 'sync.js', 'auth.js', 'staff.js', 'regular.js', 'banks.js', 'vault.js', 'invoices.js', 'import.js', 'update.js', 'main.js'].map(read).join('\n');
+const js = ['core.js', 'calc.js', 'files.js', 'sync.js', 'auth.js', 'staff.js', 'regular.js', 'banks.js', 'vault.js', 'invoices.js', 'advances.js', 'import.js', 'update.js', 'main.js'].map(read).join('\n');
+// a build whose code does not even parse must never reach a phone (a stray comment once ate a closing brace)
+new (require('vm').Script)(js, { filename: 'app.js' });
 const page = read('shell.html').replace('<!--APP-->', () => `<script>\n${js}</script>`);
 const version = crypto.createHash('sha256').update(page).digest('hex').slice(0, 10);
 const html = page.replace('__VERSION__', version);

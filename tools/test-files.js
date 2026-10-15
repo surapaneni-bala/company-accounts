@@ -296,6 +296,28 @@ assert.strictEqual(rows('Invoices').find(r => r[0] === 'QT-OW1-0001')[9], 'Quota
 post({ token: owner, since: 0, push: [invoice('I-OW1-0001', 133, { cancelled: '2026-10-13T09:00:00' }), file('F-OW1-0500', 133, 'x', { for: 'I-OW1-0001', type: 'invoice', fileId: invPdf, no: 'INV-0001', mime: 'application/pdf', name: 'INV-0001.pdf', cancelled: '2026-10-13T09:00:00' })] });
 assert.deepStrictEqual([pathOf(invPdf), drv().files[invPdf].name, rows('Invoices').find(r => r[0] === 'INV-0001')[9]], [`${TOP} / 06 INVOICES / CHANGES / 2026 / 2026-10 OCTOBER`, 'CANCELLED INV-0001 TEST CLIENT LTD.pdf', 'Cancelled'], 'a cancelled invoice: kept under CHANGES, renamed');
 
+/* ---------- an upload sent again is not a second copy; spare copies are tidied ---------- */
+const keyed = k => post({ op: 'upload', token: owner, name: 'PV-OW1-0900 Shop.pdf', mime: 'application/pdf', data: pdf, key: k }).fileId;
+const k1 = keyed('F-OW1-0900'), k2 = keyed('F-OW1-0900');
+assert.strictEqual(k1, k2, 'sent twice with its key (a lost answer): the same file, no spare copy');
+assert.strictEqual(Object.values(drv().files).filter(f => f.name === 'PV-OW1-0900 Shop.pdf').length, 1);
+// spares from before: a twin of a filed voucher (same name and size), a loose file with no twin, and one uploaded just now
+post({ token: owner, since: 0, push: [exp('E-OW1-0900', 140, 'x'), file('F-OW1-0900', 140, 'x', { for: 'E-OW1-0900', type: 'voucher', fileId: k1, name: 'PV-OW1-0900 Shop.pdf', mime: 'application/pdf', createdAt: '2026-10-13T09:00:00' })] });
+const spare = upload('PV-OW1-0900 Shop.pdf', 'application/pdf', pdf), loose = upload('image.jpg', 'image/png', png), fresh = upload('PV-OW1-0901 New.pdf', 'application/pdf', pdf);
+[spare, loose].forEach(id => { drv().files[id].created = Date.now() - 3 * 864e5; });
+gas.morningEmail();
+assert.deepStrictEqual([drv().files[spare].trashed, pathOf(loose), !!drv().files[fresh].trashed, pathOf(fresh), !!drv().files[k1].trashed],
+  [true, `${TOP} / 10 UNFILED`, false, TOP, false], 'the spare copy to the bin, the loose file to 10 UNFILED, a new upload waits for its record, the filed one stays');
+
+/* ---------- several months paid at once; supplier advances ---------- */
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [exp('E-OW1-0910', 150, 'x', { regular: 'G-OW1-0001', period: '2026-02-01', periods: 6 }), exp('E-OW1-0911', 150, 'x', { regular: 'G-OW1-0001', period: '2026-08-01', periods: 30 }),
+  exp('E-OW1-0912', 150, 'x', { amount: 700, advance: true, advanceTotal: 1000 }), exp('E-OW1-0913', 150, 'x', { amount: 300, from: 'E-OW1-0912', received: '2026-10-14' }), exp('E-OW1-0914', 150, 'x', { advance: 'yes' })] }).refused.sort(),
+  ['E-OW1-0911', 'E-OW1-0914'], 'up to 24 periods at once; an advance is yes or no');
+const reg2 = rows('Regular payments').find(r => r[0] === 'G-OW1-0001');
+assert.deepStrictEqual([reg2[9], reg2[11]], ['2026-08-01', 2], 'January, then February to July at once: next due August');
+const expRow = id => rows('Expenses').find(r => r[0] === id);
+assert.ok(/Supplier advance: 1000 paid, 700 left/.test(expRow('E-OW1-0912').join(' ')) && /Taken from advance E-OW1-0912 on 2026-10-14/.test(expRow('E-OW1-0913').join(' ')), 'the Expenses tab says so');
+
 // the company folder follows the company's name
 post({ token: owner, since: 0, push: [{ id: 'settings', k: 'S', u: 80, d: { company: 'Acme Works Ltd', pass: { salt: 's', hash: 'h' } } }] });
 assert.strictEqual(pathOf('SHEET'), 'ACME SUPER APP', 'renamed with the company');

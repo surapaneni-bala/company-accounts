@@ -373,6 +373,7 @@ function viewHome() {
     <div class="mini"><small>Spent this month</small>${lines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
   </div>
   <div class="two" style="margin-top:12px">${can('staff') ? `<button class="btn ghost" data-act="regulars">🔁 Regular payments</button>` : ''}<button class="btn ghost" data-act="banks">🏦 Company bank details</button></div>
+  ${openAdvances().length || can('edit') ? `<button class="btn ghost" data-act="advances" style="margin-top:10px">🏪 Advances with suppliers${openAdvances().length ? ` · ${sumText(openAdvances())} left` : ''}</button>` : ''}
   <div class="sec-head" style="margin-top:22px"><h2 class="sec">Recent</h2><button class="btn small ghost" data-act="tab" data-tab="hist">See all →</button></div>
   ${recent.length ? `<div class="card list">${recent.map(([x, k]) => itemRow(x, k, true)).join('')}</div>` : empty('Nothing here yet', 'Tap <b>Add expense</b> or <b>Money received</b> to start.')}`;
 }
@@ -397,7 +398,7 @@ function itemRow(x, k, showDate) {
   const acct = accountOf(x.mode);
   const sub = [isE ? x.paidTo : x.note, isE ? x.location : '', `${ACCOUNT_ICON[acct]} ${acct}`, ...when].filter(Boolean).map(esc).join(' · ');
   const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '') + (waitingFor(x.id).length ? '<i class="tag warn">Change waiting</i>' : '')
-    + (needsNewPaper(x.id) ? `<i class="tag bad">New ${isE ? (x.pay ? 'slip' : 'voucher') : 'receipt'} needed</i>` : '');
+    + (needsNewPaper(x.id) ? `<i class="tag bad">New ${isE ? (x.pay ? 'slip' : 'voucher') : 'receipt'} needed</i>` : '') + (isE ? advanceTag(x) : '');
   return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${esc(x.id)}">
     <span class="dot">${isE ? '−' : '+'}</span>
     <span class="main"><span class="t"><span class="tt">${esc(title)}</span>${tags}</span><span class="s">${sub}</span></span>
@@ -482,7 +483,7 @@ function expenseForm(old, preset) {
   const d = old || { cur: defCur(), amount: '', paidTo: '', reason: '', location: S.lastLoc || '', project: S.lastExpProject || '', mode: S.lastMode || 'Cash', ...preset };
   openSheet(`${head(old ? 'Edit expense' : 'Add expense', 'out', old?.id)}
     <form data-form="expense" data-id="${esc(old?.id || '')}">
-      ${!old && d.regular ? `<p class="note">${esc(d.hint)}</p><input type="hidden" name="regular" value="${esc(d.regular)}"><input type="hidden" name="period" value="${esc(d.period)}">` : ''}
+      ${!old && d.regular ? `<p class="note">${esc(d.hint)}</p><input type="hidden" name="regular" value="${esc(d.regular)}"><input type="hidden" name="period" value="${esc(d.period)}">${d.periodsField || ''}` : ''}
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${rateField(d.cur, d.rate)}
@@ -493,6 +494,7 @@ function expenseForm(old, preset) {
       ${accountChips(d.mode, 'Paid from')}
       ${whenField(old?.at, !!old)}
       ${byField()}${approvalNote(old)}
+      ${old || d.regular ? '' : `<label class="fld check"><input type="checkbox" name="advance"> 🏪 Advance to a supplier — goods are taken from it later</label>`}
       ${old ? '' : `<label class="fld check"><input type="checkbox" name="sign"> ✍️ Get their signature now (payment voucher)</label>`}
       <p class="err"></p>
       <button class="btn out">${old ? saveLabel() : 'Save expense'}</button>
@@ -598,6 +600,7 @@ function detail(k, id) {
   openSheet(`${head(look[0], look[1], r.id)}
     <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
     ${waitingNote(id)}
+    ${k === 'E' && !r.deleted ? advanceBlock(r) : ''}
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
     ${k === 'T' || r.deleted ? '' : `${cancelledNote(id)}<div class="two" style="margin-bottom:10px"><button class="btn ${k === 'E' ? 'out' : 'in'}" data-act="slip" data-kind="${k}" data-id="${esc(id)}">🧾 ${k === 'E' ? (r.pay ? 'Slip' : 'Voucher') : 'Receipt'}</button>${attachButton(id, '📎 Attach')}</div>`}
     <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="${k}" data-id="${esc(id)}">🗑 Ask to delete 🔒</button>` : ''}</div>
@@ -655,7 +658,7 @@ function saveExpense(f) {
   } else {
     const [[id], seq] = nextIds('E', 1, S.seq);
     update({
-      expenses: [...S.expenses, { id, ...rec, ...(regularOf(v.regular) && DATE_RE.test(v.period) ? { regular: v.regular, period: v.period } : {}), by, createdAt: stampSec(), batch: null }], seq,
+      expenses: [...S.expenses, { id, ...rec, ...regularFields(v), ...(v.advance && !v.regular ? { advance: true, advanceTotal: rec.amount } : {}), by, createdAt: stampSec(), batch: null }], seq,
       log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('E', rec)}`]], by) : S.log,
       lastLoc: rec.location, lastMode: rec.mode, lastExpProject: rec.project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
     });
@@ -663,6 +666,12 @@ function saveExpense(f) {
     if (v.sign) { render(); return slipSheet('E', id); }
   }
   closeSheet(); render();
+}
+// paying a regular payment: which one, the due date it pays, and how many periods at once
+function regularFields(v) {
+  if (!regularOf(v.regular) || !DATE_RE.test(v.period)) return {};
+  const n = Math.round(+v.periods || 1);
+  return { regular: v.regular, period: v.period, ...(n > 1 && n <= PAY_PERIODS ? { periods: n } : {}) };
 }
 function saveMove(f) {
   const v = Object.fromEntries(new FormData(f));

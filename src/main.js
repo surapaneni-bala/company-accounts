@@ -118,10 +118,15 @@ const ACTIONS = {
   cancelInvoice: b => cancelInvoice(b.dataset.id),
   remakeInvoice: b => remakeInvoice(b.dataset.id),
   addLine: () => { $('.ilines').insertAdjacentHTML('beforeend', lineRow()); $('.iline:last-child input').focus(); },
+  advances: () => advancesSheet(),
+  makeAdvance: b => makeAdvance(b.dataset.id),
+  takeAdvance: async b => { if (await unlock('Enter the password to take from the advance.')) takeForm(b.dataset.id); },
+  useSuggestion: b => useSuggestion(b.dataset.key),
+  notRegular: b => notRegular(b.dataset.key),
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -156,6 +161,7 @@ document.addEventListener('input', e => {
   if (t.name === 'rate' && t.form) refreshRate(t.form);
   if (t.name === 'zoom' && t.form && t.form._frame) zoomFramer(t.form, +t.value);
   if (t.form && t.form.dataset.form === 'pay') { if (t.name === 'amount') t.form.dataset.typed = '1'; refreshPay(t.form, t); }
+  if (t.form && t.form.dataset.form === 'expense' && t.name === 'amount') t.form.dataset.typed = '1'; // a regular payment's amount no longer follows the periods
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.form && t.form.dataset.form === 'invoice') refreshInvoice(t.form);
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
@@ -178,6 +184,7 @@ document.addEventListener('change', e => {
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'kind' && t.form && t.form.dataset.form === 'doc') refreshDocKind(t.form);
+  if (t.name === 'periods' && t.form && t.form.dataset.form === 'expense') refreshPeriods(t.form);
   if (t.form && t.form.dataset.form === 'invoice') refreshInvoice(t.form);
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
