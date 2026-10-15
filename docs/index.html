@@ -448,7 +448,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '47571dfac0'; // filled in by tools/build.js
+const APP_VERSION = '399ca7c295'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1761,7 +1761,7 @@ async function correctPaper(k, id) {
   toast('Making the corrected PDF…');
   try {
     const original = await fileBlob(old.id), oldPages = await pdfJpegs(old.stamped ? original : await stampCancelled(original, old));
-    const shot = filesFor(id, 'photo').filter(f => !f.removed && !f.replaced).pop();
+    const shot = lastPhoto(id);
     const photo = shot ? await fileBlob(shot.id).then(imgFrom).catch(() => null) : null;
     const type = k === 'R' ? 'receipt' : r.pay ? 'slip' : 'voucher';
     const [[no], seq] = nextIds(k === 'R' ? 'RC' : 'PV', 1, S.seq);
@@ -2072,16 +2072,15 @@ const photoField = who => `<div class="fld photo-fld"><span>Photo of ${esc(who)}
   <label class="btn ghost">📷 Take or choose a photo<input type="file" name="photo" accept="image/*" capture="environment" hidden></label>
   <div class="framer" hidden><canvas></canvas><i class="frame-guide"></i></div>
   <div class="framer-tools" hidden><b aria-hidden="true">−</b><input type="range" name="zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom the photo"><b aria-hidden="true">＋</b></div>
-  <p class="muted framer-hint" hidden>Move the photo with your finger and zoom in or out (all the way out shows the whole photo) — it goes on the slip exactly like this.</p></div>`;
-async function startFramer(input) {
-  const f = input.form, file = input.files[0];
-  if (!file) return;
-  try {
-    const img = await imgFrom(file), a = img.naturalWidth / img.naturalHeight;
-    f._frame = { file, img, zoom: 1, min: Math.min(a / PHOTO_RATIO, PHOTO_RATIO / a), x: 0, y: 0, fresh: true }; // zoom 1 fills the box, min shows the whole photo
-  } catch (e) { return alert(e.message); }
-  const box = input.closest('.photo-fld');
+  <p class="muted framer-hint" hidden>Move the photo with your finger and zoom in or out (all the way out shows the whole photo) — it goes on the slip exactly like this.</p>
+  <p class="note reused-note" hidden>📷 The photo from the old voucher: use it as it is, move or zoom it, or take another.</p></div>`;
+const startFramer = input => input.files[0] && frameFile(input.form, input.files[0]).catch(e => alert(e.message));
+async function frameFile(f, file, reused = false) {
+  const img = await imgFrom(file), a = img.naturalWidth / img.naturalHeight;
+  f._frame = { file, img, reused, zoom: 1, min: Math.min(a / PHOTO_RATIO, PHOTO_RATIO / a), x: 0, y: 0, fresh: true }; // zoom 1 fills the box, min shows the whole photo
+  const box = $('.photo-fld', f);
   ['.framer', '.framer-tools', '.framer-hint'].forEach(sel => { $(sel, box).hidden = false; });
+  $('.reused-note', box).hidden = !reused;
   $('label.btn', box).firstChild.textContent = '📷 Take another photo';
   f.elements.zoom.min = f._frame.min; f.elements.zoom.value = 1;
   framerEvents(f); drawFramer(f);
@@ -2138,9 +2137,20 @@ function framedPhoto(f) {
   g.drawImage(fr.img, fr.x * k, fr.y * k, fr.img.naturalWidth * fr.s * k, fr.img.naturalHeight * fr.s * k);
   return c;
 }
+// A payment made again (its voucher cancelled when the amount changed): the photo taken for the old voucher is put in the
+// box, to use as it is, frame again or replace (owner, 15 Oct 2026). The signature is always taken new.
+const lastPhoto = id => filesFor(id, 'photo').filter(f => !f.removed && !f.replaced).pop();
+async function reusePhoto(f, id) {
+  const shot = lastPhoto(id);
+  if (!shot) return;
+  try {
+    const blob = await fileBlob(shot.id);
+    if (f.isConnected && !f._frame) await frameFile(f, blob, true); // not if a new photo was picked meanwhile
+  } catch { if (f.isConnected && !f._frame) formErr(f, null, 'The old photo is not on this phone yet (no internet?). Take a new one, or try again online.'); }
+}
 // the photo as taken (whole, not framed) is kept with the entry too, to open or send later
 async function keepTakenPhoto(f, forId, no) {
-  if (!f._frame) return;
+  if (!f._frame || f._frame.reused) return; // the old voucher's photo is kept already
   const p = await prepareFile(f._frame.file, ...TAKEN_PHOTO);
   await keepFile({ for: forId, type: 'photo', name: `${no} photo.jpg`, mime: p.mime }, p.data);
 }
@@ -2661,6 +2671,7 @@ function slipSheet(k, id, replaces = '') {
     ${uncancellable(id) ? uncancelButton(uncancellable(id), `Keep the old ${title.toLowerCase()} — undo the cancel (admin)`) : ''}`);
   sigPad($('#sheet canvas.sig'));
   showMySigField();
+  if (!isR) reusePhoto($('#sheet form'), id);
 }
 async function saveSlip(f) {
   const k = f.dataset.kind, r = S[COLL[k]].find(x => x.id === f.dataset.id), cv = $('canvas.sig', f);
