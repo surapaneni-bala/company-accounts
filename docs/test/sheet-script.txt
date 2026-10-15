@@ -14,7 +14,7 @@
  */
 const SYNC_TAB = '_sync';
 const FILES_TAB = '_files'; // every Drive file this script made, and which login uploaded it
-const FILE_COLS = ['fileId', 'uid'];
+const FILE_COLS = ['fileId', 'uid', 'key']; // key = the phone's id for the file: an upload sent again is not a second copy
 // the first bytes of each kind of file allowed: a file must be what it says it is
 const MAGIC = { 'image/jpeg': [0xFF, 0xD8, 0xFF], 'image/png': [0x89, 0x50, 0x4E, 0x47], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pdf' };
@@ -87,7 +87,10 @@ const extras_ = d => (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (
   && (d.pay === undefined || ['salary', 'advance', 'settlement'].indexOf(d.pay) >= 0) && (d.month === undefined || /^\d{4}-\d\d$/.test(d.month))
   && (d.daysOff === undefined || (num_(d.daysOff) && d.daysOff >= 0 && d.daysOff <= 31)) && (d.approval === undefined || SAFE_ID.test(d.approval))
   && (d.regular === undefined || SAFE_ID.test(d.regular)) && (d.period === undefined || DATE_RE.test(d.period)) // a regular payment, and the due date it pays
-  && (d.invoice === undefined || SAFE_ID.test(d.invoice)); // money received for an invoice
+  && (d.invoice === undefined || SAFE_ID.test(d.invoice)) // money received for an invoice
+  && (d.periods === undefined || (num_(d.periods) && d.periods >= 1 && d.periods <= 24 && d.periods % 1 === 0)) // a regular payment, several periods at once
+  && (d.advance === undefined || typeof d.advance === 'boolean') && (d.advanceTotal === undefined || (num_(d.advanceTotal) && d.advanceTotal > 0)) // an advance to a supplier
+  && (d.from === undefined || SAFE_ID.test(d.from)) && (d.received === undefined || DATE_RE.test(d.received)); // goods taken from an advance
 const str_ = v => typeof v === 'string';
 const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
@@ -95,7 +98,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 17; // shown when the web app link is opened in a browser
+const VERSION = 18; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -363,8 +366,13 @@ function files_(req) {
     if (!bytes.length || bytes.length > MAX_FILE) return { ok: false, error: 'The file is empty or bigger than 8 MB.' };
     if (!MAGIC[req.mime].every((b, i) => ((bytes[i] + 256) % 256) === b)) return { ok: false, error: 'This file is not a real photo or PDF.' };
     const name = (String(req.name || '').replace(/\.[^.]*$/, '').replace(/[^\w .()-]/g, '').slice(0, 80) || 'file') + EXT[req.mime];
+    // On a slow connection the phone may not hear the answer and send the same file again: the copy already made is the
+    // answer (the owner found spare copies loose in the company folder, 15 Oct 2026). Old app versions send no key.
+    const key = SAFE_ID.test(String(req.key || '')) ? String(req.key) : '', rows = rowsOf_(FILES_TAB, FILE_COLS);
+    const had = key && rows.filter(r => String(r.key) === key).pop();
+    if (had) { try { if (!DriveApp.getFileById(String(had.fileId)).isTrashed()) return { ok: true, fileId: String(had.fileId) }; } catch (err) { /* gone: upload it again */ } }
     const file = filesRoot_().createFile(Utilities.newBlob(bytes, req.mime, name)); // its record files it in a moment
-    saveRows_(FILES_TAB, FILE_COLS, rowsOf_(FILES_TAB, FILE_COLS).concat([{ fileId: file.getId(), uid: who.user ? who.user.id : '' }]));
+    saveRows_(FILES_TAB, FILE_COLS, rows.concat([{ fileId: file.getId(), uid: who.user ? who.user.id : '', key: key }]));
     return { ok: true, fileId: file.getId() };
   }
   if (req.op === 'original') return original_(who.user, String(req.id || ''));
@@ -420,9 +428,9 @@ function uploads_() {
    editing the date or who was paid renames it, and a folder a move leaves empty goes to the bin.
    Where a file goes follows from its record (fileHome_, no Drive calls), so any later change refiles it. Nothing is thrown
    away, except the unstamped original of a cancelled paper once its stamped copy is in. A Drive problem never stops a sync. */
-const LAYOUT = '2'; // bump when the layout changes: every sheet then refiles everything once
+const LAYOUT = '3'; // bump when the layout changes: every sheet then refiles everything once
 const DOC_FOLDER = { company: 'COMPANY', vehicle: 'VEHICLES', personal: 'PERSONAL' };
-const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', docs: '05 DOCUMENTS', invoices: '06 INVOICES', quotes: '07 QUOTATIONS', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
+const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', docs: '05 DOCUMENTS', invoices: '06 INVOICES', quotes: '07 QUOTATIONS', unfiled: '10 UNFILED', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
 const TYPE_FOLDER = { idphoto: 'ID DOCUMENT', profile: 'PROFILE PHOTO', statement: 'STATEMENTS', letterhead: 'LETTERHEAD', stamp: 'STAMP' };
 const MONTHS_ = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
 const upper_ = s => String(s || '').replace(/[\\/]/g, '-').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 60);
@@ -552,9 +560,34 @@ function organizeAll_(rows) {
   const props = PropertiesService.getScriptProperties(), root = nameRoot_(rows);
   try { const sheet = DriveApp.getFileById(SpreadsheetApp.getActive().getId()); if (!inside_(sheet, root)) sheet.moveTo(root); } catch (err) { console.error('Could not move the Google Sheet: ' + err.message); }
   organize_(rows, null, []);
+  tidySpares_(rows);
   dropEmpty_(root, true);
   SECTIONS.forEach(name => child_(root, name)); // the cabinet always shows all its drawers
   props.setProperty('FILES_LAYOUT', LAYOUT);
+}
+// Uploads no record names (a day old or more, so never one whose record is still on its way): a spare copy of a filed file
+// (same name and size) goes to the Drive bin, where Google keeps it 30 days; anything else is put in 10 UNFILED so it is
+// seen. Runs with every refiling and each morning.
+function tidySpares_(rows) {
+  const named = Object.create(null), byName = Object.create(null);
+  rows.filter(r => r[1] === 'F').forEach(r => { try { const d = JSON.parse(r[4]); named[d.fileId] = true; (byName[d.name] = byName[d.name] || []).push(d.fileId); } catch (err) { /* damaged */ } });
+  const dayAgo = Date.now() - 864e5;
+  let unfiled = null;
+  rowsOf_(FILES_TAB, FILE_COLS).forEach(u => {
+    const id = String(u.fileId);
+    if (!id || named[id]) return;
+    let file = null;
+    try { file = DriveApp.getFileById(id); } catch (err) { return; } // gone for good
+    try {
+      if (file.isTrashed() || file.getDateCreated().getTime() > dayAgo) return;
+      const name = file.getName(), size = file.getSize();
+      const twin = (byName[name] || []).some(t => { try { return DriveApp.getFileById(t).getSize() === size; } catch (err) { return false; } });
+      if (twin) { file.setTrashed(true); return; }
+      unfiled = unfiled || child_(filesRoot_(), FOLDER.unfiled);
+      const from = file.getParents(), was = from.hasNext() ? from.next() : null;
+      if (!was || was.getId() !== unfiled.getId()) file.moveTo(unfiled);
+    } catch (err) { console.error('Tidying ' + id + ': ' + err.message); }
+  });
 }
 // Run this once in the Apps Script editor after pasting the script. Google asks permission to use Drive: its screen has a
 // box for each permission, and one left unticked is never asked for again by itself, so this asks for every missing one.
@@ -792,7 +825,8 @@ const when_ = at => (at ? at.slice(0, 10) + ' ' + time_(at) : '');
 const only_ = (x, cur) => (x.cur === cur ? x.amount : '');
 // a typed "=…" must stay text, never become a formula
 const safe_ = v => (typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v);
-const remarks_ = x => [x.batch ? 'Bulk ' + x.batch : '', x.editedAt ? 'Edited by ' + (x.editedBy || '?') + ' ' + when_(x.editedAt) : '', x.manualDate ? 'Date set manually' : ''].filter(String).join(' · ');
+const remarks_ = x => [x.advance ? 'Supplier advance: ' + (x.advanceTotal || x.amount) + ' paid, ' + x.amount + ' left' : x.advanceTotal ? 'Supplier advance of ' + x.advanceTotal + ', used up' : '',
+  x.from ? 'Taken from advance ' + x.from + (x.received ? ' on ' + x.received : '') : '', x.periods > 1 ? x.periods + ' periods paid at once' : '', x.batch ? 'Bulk ' + x.batch : '', x.editedAt ? 'Edited by ' + (x.editedBy || '?') + ' ' + when_(x.editedAt) : '', x.manualDate ? 'Date set manually' : ''].filter(String).join(' · ');
 const now_ = () => Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'd MMM yyyy, h:mm a');
 
 function freshTab_(ss, name, color) {
@@ -988,11 +1022,15 @@ function dueOn_(first, every, k) {
   const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
   return t.getUTCFullYear() + '-' + ('0' + (t.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + Math.min(d, last)).slice(-2);
 }
-function regularDue_(g, periods, today) {
+const monthNo_ = d => Number(d.slice(0, 4)) * 12 + Number(d.slice(5, 7)) - 1;
+// pays = [{ period, periods }]: each payment counts for its stretch, and the ones after it when it paid several at once
+function regularDue_(g, pays, today) {
+  const paid = Object.create(null);
+  pays.forEach(p => { const k = Math.floor((monthNo_(p.period) - monthNo_(g.first)) / g.every), n = p.periods || 1; for (let i = Math.max(0, k); i < k + n; i++) paid[i] = true; });
   let next = '', late = 0;
   for (let k = 0; k < 1200; k++) {
-    const d = dueOn_(g.first, g.every, k), end = dueOn_(g.first, g.every, k + 1);
-    if (periods.some(p => p >= d.slice(0, 7) + '-01' && p < end.slice(0, 7) + '-01')) continue;
+    if (paid[k]) continue;
+    const d = dueOn_(g.first, g.every, k);
     if (!next) next = d;
     if (d < today) late++; else break;
   }
@@ -1005,7 +1043,7 @@ function regulars_(ss, c, regs) {
   dataTab_(ss, c.company, 'Regular payments', '#b45309',
     ['No.', 'What', 'Paid to', 'How often', 'Currency', 'Amount', 'Usually paid from', 'Project', 'First due', 'Next due', 'Status', 'Times paid', 'Last paid'],
     regs.map(g => {
-      const pays = c.E.filter(x => x.regular === g.id), d = regularDue_(g, pays.map(x => x.period).filter(Boolean), t);
+      const pays = c.E.filter(x => x.regular === g.id), d = regularDue_(g, pays.filter(x => x.period).map(x => ({ period: x.period, periods: x.periods || 1 })), t);
       const status = d.late ? d.late + ' late' : d.next === t ? 'Due today' : 'OK';
       return [g.id, g.name, g.paidTo, EVERY_TEXT[g.every], g.cur, g.amount, g.mode || '', g.project ? c.pname(g.project) : '', g.first, d.next, status, pays.length, pays.length ? ymd_(pays[pays.length - 1].at) : ''];
     }), ['', '', '', '', '', 'num', '', '', 'date', 'date'], [110, 180, 170, 120, 80, 110, 120, 160, 105, 105, 90, 90, 105], null);
@@ -1056,7 +1094,7 @@ function alertLines_(recs, t) {
   const live = k => recs.filter(r => r.k === k && SHAPES[k](r.d) && !r.d.deleted).map(r => r.d);
   const E = live('E'), lines = [];
   live('G').forEach(g => {
-    const d = regularDue_(g, E.filter(x => x.regular === g.id && x.period).map(x => x.period), t), left = daysBetween_(t, d.next);
+    const d = regularDue_(g, E.filter(x => x.regular === g.id && x.period).map(x => ({ period: x.period, periods: x.periods || 1 })), t), left = daysBetween_(t, d.next);
     if (d.late) lines.push('LATE: ' + g.name + ' — ' + g.cur + ' ' + g.amount + ' to ' + g.paidTo + ' (' + d.late + ' unpaid, oldest due ' + d.next + ')');
     else if (left === 0 || left === 3) lines.push('Due ' + (left ? 'in 3 days' : 'today') + ': ' + g.name + ' — ' + g.cur + ' ' + g.amount + ' to ' + g.paidTo + ' (' + d.next + ')');
   });
@@ -1069,6 +1107,7 @@ function alertLines_(recs, t) {
   return lines;
 }
 function morningEmail(test) {
+  if (test !== true) { try { tidySpares_(readAll_(syncTab_(SpreadsheetApp.getActive()))); } catch (err) { console.error('Tidying spare copies: ' + err.message); } } // the daily job
   const to = PropertiesService.getScriptProperties().getProperty('ALERT_EMAIL');
   if (!to) return 'No address: an admin sets it in the app (Settings → Morning email).';
   const recs = readAll_(syncTab_(SpreadsheetApp.getActive())).map(toRec_), lines = alertLines_(recs, today_());
