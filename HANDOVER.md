@@ -668,6 +668,12 @@ folder, which is temporary:
   (links it: `worker` + `pay: 'advance'`, so it comes off their pay; paid-to and voucher unchanged; warns when it predates the
   employee's `clearedTo`) or "🏪 Advance to a supplier or company" (supplier advance). `employeeLike` guesses the employee by
   name; the Advances screen lists both kinds and what is still to sort.
+- **The letterhead and stamp are the company's, in the company Google Sheet** (owner, 15 Oct 2026: "why have they gone"). They
+  had only ever been set in the practice copy (its own TEST sheet); the real sheet never had them, so real papers went out with
+  the plain heading and no stamp (seen on PV-8BM-0009, 13 Oct). Now: an admin banner and a note in every paper form while one
+  is missing (`brandBanner`, `brandNote`; "practice copy" wording there via `IS_PRACTICE`); Settings shows small pictures
+  (`paintBrandThumbs`); the phone keeps its copy for good (`dropFileCopies` spares `BRAND_TYPES`). Updates never touch them:
+  they are F records for 'settings', changed only by an admin choosing a new one (the old one goes to CHANGES).
 - **Deleting is for good, so a deleted record's waiting files are never sent** (`forDeleted` in `uploadFiles`, which also
   removes them from the phone). Before 9 Oct test entries deleted before their upload still went to Drive.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.

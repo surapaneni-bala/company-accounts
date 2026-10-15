@@ -126,7 +126,7 @@ function invoiceForm(type, src, client) {
       <label class="fld"><span>Pay into <em>(printed on it)</em></span><select name="bank"><option value="">— no bank details —</option>${bankList().map(b => `<option value="${esc(b.id)}" ${b.id === d.bank ? 'selected' : ''}>${esc(`${b.bank} · ${b.cur} · ${b.number}`)}</option>`).join('')}</select></label>
       ${projectSelect(d.project || '', true)}
       <label class="fld"><span>Notes and terms <em>(optional)</em></span><textarea class="plain" name="notes" rows="3" maxlength="600" placeholder="e.g. Delivery to site included.">${esc(d.notes)}</textarea></label>
-      ${mySigField()}
+      ${brandNote()}${mySigField()}
       <p class="err"></p>
       <button class="btn in">Make the ${type === 'quote' ? 'quotation' : 'invoice'} (PDF)</button>
     </form>`);

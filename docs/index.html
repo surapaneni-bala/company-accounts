@@ -344,6 +344,10 @@ a.btn { display: flex; align-items: center; justify-content: center; text-align:
 .iline input:focus { outline: none; border-color: var(--ink); background: #fff; }
 .iline-n { display: grid; grid-template-columns: 1fr 1fr 1.4fr 44px; gap: 8px; }
 .iline .x { border: 0; background: var(--paper); border-radius: 10px; height: 46px; font-size: 22px; cursor: pointer; color: var(--muted); }
+.brandthumb { width: 46px; height: 46px; flex: none; border-radius: 10px; background: var(--paper); overflow: hidden; display: grid; place-items: center; }
+.setrow .brandthumb + span { flex: 1; }
+.brandthumb:empty { display: none; }
+.brandthumb img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
 .sugg { display: grid; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); }
 .sugg:first-child { border-top: 0; }
 .fld textarea.plain { font: inherit; font-size: 16px; min-height: 90px; }
@@ -444,7 +448,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = 'f44401dd7a'; // filled in by tools/build.js
+const APP_VERSION = '9540f80b52'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -714,6 +718,7 @@ function render() {
   main.innerHTML = { menu: viewMenu, home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet }[tab]();
   if (y) scrollTo(0, y);
   if (tab === 'staff') loadThumbs();
+  if (tab === 'sheet') paintBrandThumbs();
   render.tab = tab;
   renderLock(); paintSync();
 }
@@ -765,7 +770,7 @@ function viewMenu() {
   const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const who = signedIn() ? session.user.name.split(' ')[0] : '';
   const staffWaiting = waiting().filter(c => c.kind === 'W').length;
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${docBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
     <section class="launch">
       <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
       <div class="apps">
@@ -796,7 +801,7 @@ function viewHome() {
   const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${brandBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? 'Your expenses — only the ones you entered. The balances are kept by the admins.' : 'Your expenses — only you and the admins see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
@@ -913,9 +918,9 @@ function viewSheet() {
         <h3>⚙️ Settings</h3>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
         <div class="setrow" ${can('settings') && signedIn() ? '' : 'hidden'}><span>My signature<br><span class="muted">On this phone only — for "Approved by", digitally signed</span></span><button class="btn small ghost" data-act="mySig">Change 🔒</button></div>
-        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : 'Not set'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span class="brandthumb" data-brand="stamp"></span><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : '<b class="out-c">Not set — papers print without it</b>'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
         <div class="setrow" ${can('settings') && S.link ? '' : 'hidden'}><span>Morning email<br><span class="muted">Payments due and documents expiring, every morning</span></span><button class="btn small ghost" data-act="alerts">Change 🔒</button></div>
-        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : 'Not set — slips get a plain heading'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') ? '' : 'hidden'}><span class="brandthumb" data-brand="letterhead"></span><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : '<b class="out-c">Not set — papers get a plain heading</b>'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
       </section>
@@ -1592,8 +1597,9 @@ async function loadOutbox() {
   catch { outbox = []; } // storage blocked (private browsing): nothing can be waiting
 }
 // a phone that lost access keeps only what it hasn't uploaded yet
+// (the company's letterhead and stamp stay: every paper needs them, also offline — see BRAND_TYPES)
 async function dropFileCopies() {
-  try { await idb('readwrite', s => { const req = s.openCursor(); req.onsuccess = () => { const c = req.result; if (!c) return; if (!c.value.pending) c.delete(); c.continue(); }; return req; }); }
+  try { await idb('readwrite', s => { const req = s.openCursor(); req.onsuccess = () => { const c = req.result; if (!c) return; if (!c.value.pending && !BRAND_TYPES.includes(c.value.type)) c.delete(); c.continue(); }; return req; }); }
   catch { /* nothing kept */ }
 }
 
@@ -2215,6 +2221,29 @@ function spaced(g, text, x, y, gap, align = 'left') {
   g.textAlign = was;
 }
 const slipLabel = (g, text, x, y) => { g.fillStyle = SLIP_C.label; g.font = `600 18px ${SANS}`; spaced(g, text.toUpperCase(), x, y, 1.6); };
+// The company's letterhead and stamp live in the company Google Sheet (files for 'settings'): every phone and every app
+// update uses them until an admin chooses new ones, and this phone keeps its copy of them for good (dropFileCopies spares
+// them) so papers made offline still carry them. A missing one is said out loud to admins: on 15 Oct 2026 the owner found
+// they had only ever been set in the practice copy, and real papers had gone out plain without anyone noticing.
+const BRAND_TYPES = ['letterhead', 'stamp'];
+const IS_PRACTICE = KEY !== 'company-accounts-v1';
+const BRAND_WORD = { letterhead: 'letterhead', stamp: 'company stamp' };
+const brandMissing = () => BRAND_TYPES.filter(t => !latestFile('settings', t));
+const missingText = miss => `No ${miss.map(t => BRAND_WORD[t]).join(' and no ')}${IS_PRACTICE ? ' in this practice copy' : ' in the company records'} yet`;
+function brandBanner() {
+  const miss = can('settings') && S.link ? brandMissing() : [];
+  return miss.length ? `<div class="banner"><span>🖼 ${missingText(miss)} — vouchers, receipts and slips print without ${miss.length > 1 ? 'them' : 'it'}.</span><button class="btn small" data-act="${miss[0]}">Set ${miss.length > 1 ? 'them' : 'it'}</button></div>` : '';
+}
+const brandNote = () => { const miss = can('settings') ? brandMissing() : []; return miss.length ? `<p class="note">🖼 ${missingText(miss)}: this paper will print without ${miss.length > 1 ? 'them' : 'it'} (Sheet tab → Settings).</p>` : ''; };
+const brandWhere = () => `<p class="note">${IS_PRACTICE ? 'This is the <b>practice copy</b>: its letterhead and stamp are separate from the real app’s.' : 'Kept in the company Google Sheet: every phone and every update uses it until you choose a new one here.'}</p>`;
+// the small pictures beside Letterhead and Company stamp in Settings
+function paintBrandThumbs() {
+  $$('[data-brand]').forEach(async el => {
+    const f = latestFile('settings', el.dataset.brand);
+    if (!f) return;
+    try { el.innerHTML = `<img src="${URL.createObjectURL(await fileBlob(f.id))}" alt="">`; } catch { /* offline and never fetched */ }
+  });
+}
 async function brandImage(type) {
   const f = latestFile('settings', type);
   if (!f) return null;
@@ -2617,6 +2646,7 @@ function slipSheet(k, id, replaces = '') {
     ${needsNewPaper(id) ? `<p class="note">${cancelledWhyNote(k, r)}</p>` : ''}
     ${old ? `<p class="note">This new ${title.toLowerCase()} replaces ${esc(old.no || old.name)}. The old one is cancelled when this one is made — close this screen and it stays as it is.</p>` : ''}
     <p class="hint">${esc(money(r.amount, r.cur))} · ${esc(isR ? projName(r.project) : `${r.paidTo} — ${r.reason}`)}</p>
+    ${brandNote()}
     <form data-form="slip" data-kind="${k}" data-id="${esc(id)}" data-replaces="${esc(old ? old.id : '')}">
       ${isR ? textField('party', 'Received from', 'Who paid the money?', '', false) : ''}
       ${sigField(who)}
@@ -2676,6 +2706,7 @@ function letterheadSheet() {
   const f = latestFile('settings', 'letterhead');
   openSheet(`${head('Letterhead')}
     <p class="hint">Vouchers, receipts and salary slips are printed on this. Use a picture of the whole A4 page (PNG or JPG), with empty space in the middle.</p>
+    ${brandWhere()}
     ${f ? `<p class="muted">Now: <b>${esc(f.name)}</b>${f.pending ? ' (not uploaded yet)' : ''}</p><button class="btn ghost" data-act="showFile" data-id="${esc(f.id)}" style="margin-bottom:10px">See the letterhead</button>` : '<p class="muted">No letterhead yet — slips get a plain heading with the company name.</p>'}
     ${attachButton('settings', f ? 'Choose a new letterhead' : 'Choose the letterhead', 'letterhead', 'image/png,image/jpeg')}
     ${f ? `<form data-form="contacts" class="contacts-form">
@@ -2698,6 +2729,7 @@ function stampSheet() {
   const f = latestFile('settings', 'stamp');
   openSheet(`${head('Company stamp')}
     <p class="hint">Printed on every voucher, receipt and salary slip, with the slip's date written on its dotted line. Use a clear picture of the stamp on white paper (PNG or JPG).</p>
+    ${brandWhere()}
     ${f ? `<canvas id="stampPrev" class="stampprev" width="600" height="600"></canvas>
       <p class="muted center">Move the date until it sits on the dotted line</p>
       <div class="nudge"><button type="button" data-act="nudge" data-k="a" data-d="3" aria-label="Move left">◀</button><button type="button" data-act="nudge" data-k="a" data-d="-3" aria-label="Move right">▶</button><button type="button" data-act="nudge" data-k="r" data-d="-0.012" aria-label="Move up">▲</button><button type="button" data-act="nudge" data-k="r" data-d="0.012" aria-label="Move down">▼</button><button type="button" data-act="nudge" data-k="s" data-d="-0.008" aria-label="Smaller">A−</button><button type="button" data-act="nudge" data-k="s" data-d="0.008" aria-label="Bigger">A+</button></div>
@@ -3860,7 +3892,7 @@ function finalSheet(id) {
     <form data-form="final" data-id="${esc(id)}">
       ${sigField(w.name)}
       ${photoField(w.name)}
-      ${mySigField()}
+      ${brandNote()}${mySigField()}
       ${checkedField()}
       <p class="err"></p>
       <button class="btn in">Make the final settlement (PDF)</button>
@@ -4583,7 +4615,7 @@ function invoiceForm(type, src, client) {
       <label class="fld"><span>Pay into <em>(printed on it)</em></span><select name="bank"><option value="">— no bank details —</option>${bankList().map(b => `<option value="${esc(b.id)}" ${b.id === d.bank ? 'selected' : ''}>${esc(`${b.bank} · ${b.cur} · ${b.number}`)}</option>`).join('')}</select></label>
       ${projectSelect(d.project || '', true)}
       <label class="fld"><span>Notes and terms <em>(optional)</em></span><textarea class="plain" name="notes" rows="3" maxlength="600" placeholder="e.g. Delivery to site included.">${esc(d.notes)}</textarea></label>
-      ${mySigField()}
+      ${brandNote()}${mySigField()}
       <p class="err"></p>
       <button class="btn in">Make the ${type === 'quote' ? 'quotation' : 'invoice'} (PDF)</button>
     </form>`);

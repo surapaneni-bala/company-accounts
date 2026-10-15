@@ -262,7 +262,7 @@ function finalSheet(id) {
     <form data-form="final" data-id="${esc(id)}">
       ${sigField(w.name)}
       ${photoField(w.name)}
-      ${mySigField()}
+      ${brandNote()}${mySigField()}
       ${checkedField()}
       <p class="err"></p>
       <button class="btn in">Make the final settlement (PDF)</button>

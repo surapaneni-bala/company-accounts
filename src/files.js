@@ -35,8 +35,9 @@ async function loadOutbox() {
   catch { outbox = []; } // storage blocked (private browsing): nothing can be waiting
 }
 // a phone that lost access keeps only what it hasn't uploaded yet
+// (the company's letterhead and stamp stay: every paper needs them, also offline — see BRAND_TYPES)
 async function dropFileCopies() {
-  try { await idb('readwrite', s => { const req = s.openCursor(); req.onsuccess = () => { const c = req.result; if (!c) return; if (!c.value.pending) c.delete(); c.continue(); }; return req; }); }
+  try { await idb('readwrite', s => { const req = s.openCursor(); req.onsuccess = () => { const c = req.result; if (!c) return; if (!c.value.pending && !BRAND_TYPES.includes(c.value.type)) c.delete(); c.continue(); }; return req; }); }
   catch { /* nothing kept */ }
 }
 
@@ -658,6 +659,29 @@ function spaced(g, text, x, y, gap, align = 'left') {
   g.textAlign = was;
 }
 const slipLabel = (g, text, x, y) => { g.fillStyle = SLIP_C.label; g.font = `600 18px ${SANS}`; spaced(g, text.toUpperCase(), x, y, 1.6); };
+// The company's letterhead and stamp live in the company Google Sheet (files for 'settings'): every phone and every app
+// update uses them until an admin chooses new ones, and this phone keeps its copy of them for good (dropFileCopies spares
+// them) so papers made offline still carry them. A missing one is said out loud to admins: on 15 Oct 2026 the owner found
+// they had only ever been set in the practice copy, and real papers had gone out plain without anyone noticing.
+const BRAND_TYPES = ['letterhead', 'stamp'];
+const IS_PRACTICE = KEY !== 'company-accounts-v1';
+const BRAND_WORD = { letterhead: 'letterhead', stamp: 'company stamp' };
+const brandMissing = () => BRAND_TYPES.filter(t => !latestFile('settings', t));
+const missingText = miss => `No ${miss.map(t => BRAND_WORD[t]).join(' and no ')}${IS_PRACTICE ? ' in this practice copy' : ' in the company records'} yet`;
+function brandBanner() {
+  const miss = can('settings') && S.link ? brandMissing() : [];
+  return miss.length ? `<div class="banner"><span>🖼 ${missingText(miss)} — vouchers, receipts and slips print without ${miss.length > 1 ? 'them' : 'it'}.</span><button class="btn small" data-act="${miss[0]}">Set ${miss.length > 1 ? 'them' : 'it'}</button></div>` : '';
+}
+const brandNote = () => { const miss = can('settings') ? brandMissing() : []; return miss.length ? `<p class="note">🖼 ${missingText(miss)}: this paper will print without ${miss.length > 1 ? 'them' : 'it'} (Sheet tab → Settings).</p>` : ''; };
+const brandWhere = () => `<p class="note">${IS_PRACTICE ? 'This is the <b>practice copy</b>: its letterhead and stamp are separate from the real app’s.' : 'Kept in the company Google Sheet: every phone and every update uses it until you choose a new one here.'}</p>`;
+// the small pictures beside Letterhead and Company stamp in Settings
+function paintBrandThumbs() {
+  $$('[data-brand]').forEach(async el => {
+    const f = latestFile('settings', el.dataset.brand);
+    if (!f) return;
+    try { el.innerHTML = `<img src="${URL.createObjectURL(await fileBlob(f.id))}" alt="">`; } catch { /* offline and never fetched */ }
+  });
+}
 async function brandImage(type) {
   const f = latestFile('settings', type);
   if (!f) return null;
@@ -1060,6 +1084,7 @@ function slipSheet(k, id, replaces = '') {
     ${needsNewPaper(id) ? `<p class="note">${cancelledWhyNote(k, r)}</p>` : ''}
     ${old ? `<p class="note">This new ${title.toLowerCase()} replaces ${esc(old.no || old.name)}. The old one is cancelled when this one is made — close this screen and it stays as it is.</p>` : ''}
     <p class="hint">${esc(money(r.amount, r.cur))} · ${esc(isR ? projName(r.project) : `${r.paidTo} — ${r.reason}`)}</p>
+    ${brandNote()}
     <form data-form="slip" data-kind="${k}" data-id="${esc(id)}" data-replaces="${esc(old ? old.id : '')}">
       ${isR ? textField('party', 'Received from', 'Who paid the money?', '', false) : ''}
       ${sigField(who)}
@@ -1119,6 +1144,7 @@ function letterheadSheet() {
   const f = latestFile('settings', 'letterhead');
   openSheet(`${head('Letterhead')}
     <p class="hint">Vouchers, receipts and salary slips are printed on this. Use a picture of the whole A4 page (PNG or JPG), with empty space in the middle.</p>
+    ${brandWhere()}
     ${f ? `<p class="muted">Now: <b>${esc(f.name)}</b>${f.pending ? ' (not uploaded yet)' : ''}</p><button class="btn ghost" data-act="showFile" data-id="${esc(f.id)}" style="margin-bottom:10px">See the letterhead</button>` : '<p class="muted">No letterhead yet — slips get a plain heading with the company name.</p>'}
     ${attachButton('settings', f ? 'Choose a new letterhead' : 'Choose the letterhead', 'letterhead', 'image/png,image/jpeg')}
     ${f ? `<form data-form="contacts" class="contacts-form">
@@ -1141,6 +1167,7 @@ function stampSheet() {
   const f = latestFile('settings', 'stamp');
   openSheet(`${head('Company stamp')}
     <p class="hint">Printed on every voucher, receipt and salary slip, with the slip's date written on its dotted line. Use a clear picture of the stamp on white paper (PNG or JPG).</p>
+    ${brandWhere()}
     ${f ? `<canvas id="stampPrev" class="stampprev" width="600" height="600"></canvas>
       <p class="muted center">Move the date until it sits on the dotted line</p>
       <div class="nudge"><button type="button" data-act="nudge" data-k="a" data-d="3" aria-label="Move left">◀</button><button type="button" data-act="nudge" data-k="a" data-d="-3" aria-label="Move right">▶</button><button type="button" data-act="nudge" data-k="r" data-d="-0.012" aria-label="Move up">▲</button><button type="button" data-act="nudge" data-k="r" data-d="0.012" aria-label="Move down">▼</button><button type="button" data-act="nudge" data-k="s" data-d="-0.008" aria-label="Smaller">A−</button><button type="button" data-act="nudge" data-k="s" data-d="0.008" aria-label="Bigger">A+</button></div>
