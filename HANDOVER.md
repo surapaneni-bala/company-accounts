@@ -664,6 +664,10 @@ folder, which is temporary:
   the phone now sends `key` (its F id) and the sheet answers with the copy it already made; `tidySpares_` (refiling, LAYOUT
   '3', and the daily job) bins exact twins of filed files and moves other unnamed uploads (a day old) to `10 UNFILED`.
   `tools/build.js` now refuses a build whose code does not parse.
+  Advances of two kinds (owner, 15 Oct 2026): a plain entry that looks like an advance gets "👷 Salary advance to an employee"
+  (links it: `worker` + `pay: 'advance'`, so it comes off their pay; paid-to and voucher unchanged; warns when it predates the
+  employee's `clearedTo`) or "🏪 Advance to a supplier or company" (supplier advance). `employeeLike` guesses the employee by
+  name; the Advances screen lists both kinds and what is still to sort.
 - **Deleting is for good, so a deleted record's waiting files are never sent** (`forDeleted` in `uploadFiles`, which also
   removes them from the phone). Before 9 Oct test entries deleted before their upload still went to Drive.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.

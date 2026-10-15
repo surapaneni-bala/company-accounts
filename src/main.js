@@ -120,13 +120,14 @@ const ACTIONS = {
   addLine: () => { $('.ilines').insertAdjacentHTML('beforeend', lineRow()); $('.iline:last-child input').focus(); },
   advances: () => advancesSheet(),
   makeAdvance: b => makeAdvance(b.dataset.id),
+  empAdvance: b => empAdvanceSheet(b.dataset.id),
   takeAdvance: async b => { if (await unlock('Enter the password to take from the advance.')) takeForm(b.dataset.id); },
   useSuggestion: b => useSuggestion(b.dataset.key),
   notRegular: b => notRegular(b.dataset.key),
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
