@@ -303,6 +303,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 /* files, signatures, slips */
 label.btn { display: block; text-align: center; }
+a.btn { display: flex; align-items: center; justify-content: center; text-align: center; color: inherit; text-decoration: none; box-sizing: border-box; }
 .sig { display: block; width: 100%; height: 200px; touch-action: none; background: #fff; border: 2px dashed #CFC6B4; border-radius: var(--r-sm); }
 .viewimg { display: block; width: 100%; border-radius: var(--r-sm); margin-bottom: 14px; background: var(--paper); }
 .filebig { font-size: 64px; text-align: center; margin: 10px 0; }
@@ -337,6 +338,15 @@ label.btn { display: block; text-align: center; }
 .mrow:first-child { border-top: 0; }
 .mrow b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mrow .muted { font-size: 13px; text-align: right; }
+.ilines { display: grid; gap: 10px; margin-bottom: 10px; }
+.iline { display: grid; gap: 8px; padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
+.iline input { width: 100%; min-width: 0; font: inherit; font-size: 16px; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); }
+.iline input:focus { outline: none; border-color: var(--ink); background: #fff; }
+.iline-n { display: grid; grid-template-columns: 1fr 1fr 1.4fr 44px; gap: 8px; }
+.iline .x { border: 0; background: var(--paper); border-radius: 10px; height: 46px; font-size: 22px; cursor: pointer; color: var(--muted); }
+.sugg { display: grid; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.sugg:first-child { border-top: 0; }
+.fld textarea.plain { font: inherit; font-size: 16px; min-height: 90px; }
 details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-weight: 800; color: var(--muted); padding: 8px 4px 12px; }
 .payinfo { line-height: 1.5; }
 .addoff { display: flex; gap: 8px; align-items: center; }
@@ -353,6 +363,8 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .app-tile { position: relative; border: 0; cursor: pointer; text-align: left; border-radius: var(--r-lg); padding: 20px 18px 18px; min-height: 190px; display: flex; flex-direction: column; justify-content: space-between; color: #fff; box-shadow: 0 24px 50px -30px rgba(27,34,50,.9); transition: transform .2s var(--ease); overflow: hidden; }
 .app-tile:active { transform: scale(.97); }
 .app-tile.acc { background: var(--ink); background-image: repeating-linear-gradient(0deg, transparent 0 31px, rgba(255,255,255,.05) 31px 32px); }
+.app-tile.doc { background: #3730a3; background-image: radial-gradient(circle at -10% 110%, rgba(255,255,255,.18), transparent 55%); }
+.app-tile.inv { background: #9d174d; background-image: repeating-linear-gradient(135deg, transparent 0 22px, rgba(255,255,255,.05) 22px 23px); }
 .app-tile.emp { background: var(--in); background-image: radial-gradient(circle at 110% -10%, rgba(255,255,255,.22), transparent 55%); }
 .app-tile .ai { width: 58px; height: 58px; border-radius: 18px; background: rgba(255,255,255,.16); display: grid; place-items: center; }
 .app-tile .ai svg { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

@@ -93,7 +93,7 @@ function makeDrive(drive) {
     getFiles: () => iter(kids('files', id).map(file)),
     createFolder: name => { const nid = 'fold' + crypto.randomUUID().replace(/-/g, ''); drive.folders[nid] = { name, parent: id }; return folder(nid); },
     getFoldersByName: name => iter(kids('folders', id).filter(k => drive.folders[k].name === name).map(folder)),
-    createFile: blob => { const fid = 'file' + crypto.randomUUID().replace(/-/g, ''); drive.files[fid] = { folder: id, name: blob.getName(), mime: blob.getContentType(), b64: Buffer.from(blob.getBytes()).toString('base64') }; return file(fid); },
+    createFile: blob => { const fid = 'file' + crypto.randomUUID().replace(/-/g, ''); drive.files[fid] = { folder: id, name: blob.getName(), mime: blob.getContentType(), b64: Buffer.from(blob.getBytes()).toString('base64'), created: Date.now() }; return file(fid); },
   });
   const file = id => {
     const f = drive.files[id];
@@ -106,6 +106,8 @@ function makeDrive(drive) {
       moveTo: dest => { f.folder = dest.getId(); },
       setTrashed: t => { f.trashed = !!t; },
       isTrashed: () => !!f.trashed,
+      getSize: () => Buffer.from(f.b64, 'base64').length,
+      getDateCreated: () => new Date(f.created || 0),
     };
   };
   return {
@@ -123,6 +125,7 @@ function loadGas(code, state = {}, opts = {}) {
   const props = { ...(state.props || {}) };
   const drive = state.drive || {};
   const ss = makeSpreadsheet(state);
+  const mails = [], triggers = state.triggers || [];
   const sandbox = {
     SpreadsheetApp: { getActive: () => ss, BorderStyle: { SOLID: 'SOLID', SOLID_MEDIUM: 'SOLID_MEDIUM' } },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) },
@@ -130,7 +133,7 @@ function loadGas(code, state = {}, opts = {}) {
     ContentService: { MimeType: { JSON: 'JSON' }, createTextOutput: s => ({ setMimeType() { return this; }, getContent: () => s }) },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
-      formatDate: (d, tz, fmt) => (fmt === 'yyyy-MM' ? d.toISOString().slice(0, 7) : d.toISOString().slice(0, 16).replace('T', ' ')),
+      formatDate: (d, tz, fmt) => (fmt === 'yyyy-MM' ? d.toISOString().slice(0, 7) : fmt === 'yyyy-MM-dd' ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace('T', ' ')),
       DigestAlgorithm: { SHA_256: 'sha256' },
       Charset: { UTF_8: 'utf8' },
       // like Apps Script: an array of signed bytes (-128…127)
@@ -143,12 +146,17 @@ function loadGas(code, state = {}, opts = {}) {
     Session: { getScriptTimeZone: () => 'UTC' },
     Logger: { log: () => {} },
     console: { log: () => {}, error: () => {} },
-    ScriptApp: { AuthMode: { FULL: 'FULL' }, requireAllScopes: () => {} },
+    ScriptApp: {
+      AuthMode: { FULL: 'FULL' }, requireAllScopes: () => {},
+      getProjectTriggers: () => triggers.map(t => ({ getHandlerFunction: () => t.fn })),
+      newTrigger: fn => { const t = { fn }; const b = { timeBased: () => b, everyDays: n => { t.days = n; return b; }, atHour: h => { t.hour = h; return b; }, create: () => { triggers.push(t); return t; } }; return b; },
+    },
+    MailApp: { sendEmail: m => { mails.push(m); } },
   };
   vm.createContext(sandbox);
-  const api = vm.runInContext(`${code}\n;({ setup, doGet, doPost, allowFiles: typeof allowFiles === 'function' ? allowFiles : null })`, sandbox);
-  const dump = () => ({ props, drive, sheets: ss.getSheets().map(s => ({ name: s.getName(), grid: s.grid, hidden: s.hidden })) });
-  return { ...api, ss, props, dump };
+  const api = vm.runInContext(`${code}\n;({ setup, doGet, doPost, allowFiles: typeof allowFiles === 'function' ? allowFiles : null, morningEmail: typeof morningEmail === 'function' ? morningEmail : null })`, sandbox);
+  const dump = () => ({ props, drive, triggers, sheets: ss.getSheets().map(s => ({ name: s.getName(), grid: s.grid, hidden: s.hidden })) });
+  return { ...api, ss, props, dump, mails, triggers };
 }
 
 module.exports = { loadGas };

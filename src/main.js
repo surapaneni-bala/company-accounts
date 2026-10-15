@@ -84,9 +84,49 @@ const ACTIONS = {
   workerStatement: b => workerStatement(b.dataset.id),
   projectStatement: b => projectStatement(b.dataset.id),
   payeeStatement: b => payeeStatement(b.dataset.name),
+  regulars: () => regularsSheet(),
+  addRegular: async () => { if (await unlock('Enter the password to add a regular payment.')) regularForm(); },
+  openRegular: b => regularDetail(b.dataset.id),
+  editRegular: async b => { if (await unlock('Enter the password to change this regular payment.')) regularForm(regularOf(b.dataset.id)); },
+  delRegular: b => deleteRegular(b.dataset.id),
+  payRegular: b => payRegular(b.dataset.id),
+  banks: () => banksSheet(),
+  addBank: async () => { if (await unlock('Enter the password to add a bank account.')) bankForm(); },
+  openBank: b => bankDetail(b.dataset.id),
+  editBank: async b => { if (await unlock('Enter the password to change this bank account.')) bankForm(bankOf(b.dataset.id)); },
+  delBank: b => deleteBank(b.dataset.id),
+  copyBank: b => copyBank(b),
+  docs: () => docsSheet(),
+  addDoc: () => docForm(),
+  openDoc: b => docDetail(b.dataset.id),
+  editDoc: async b => { if (await unlock('Enter the password to change this document.')) docForm(docOf(b.dataset.id)); },
+  renewDoc: async b => { if (await unlock('Enter the password to renew this document.')) renewForm(b.dataset.id); },
+  delDoc: b => deleteDoc(b.dataset.id),
+  alerts: async () => { if (await unlock('Enter the password to change the morning email.')) alertsSheet(); },
+  testAlerts: () => saveAlerts($('#sheet form[data-form=alerts]'), true),
+  sales: () => salesSheet(),
+  newInvoice: b => invoiceForm(b.dataset.type, null, b.dataset.client),
+  clients: () => clientsSheet(),
+  addClient: () => clientForm(),
+  openClient: b => clientDetail(b.dataset.id),
+  editClient: b => clientForm(clientOf(b.dataset.id)),
+  delClient: b => deleteClient(b.dataset.id),
+  openInvoice: b => invoiceDetail(b.dataset.id),
+  payInvoice: b => payInvoice(b.dataset.id),
+  quoteToInvoice: b => invoiceForm('invoice', invOf(b.dataset.id)),
+  copyInvoice: b => { const x = invOf(b.dataset.id); if (x) invoiceForm(x.type, x); },
+  cancelInvoice: b => cancelInvoice(b.dataset.id),
+  remakeInvoice: b => remakeInvoice(b.dataset.id),
+  addLine: () => { $('.ilines').insertAdjacentHTML('beforeend', lineRow()); $('.iline:last-child input').focus(); },
+  advances: () => advancesSheet(),
+  makeAdvance: b => makeAdvance(b.dataset.id),
+  takeAdvance: async b => { if (await unlock('Enter the password to take from the advance.')) takeForm(b.dataset.id); },
+  useSuggestion: b => useSuggestion(b.dataset.key),
+  notRegular: b => notRegular(b.dataset.key),
+  delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -121,7 +161,9 @@ document.addEventListener('input', e => {
   if (t.name === 'rate' && t.form) refreshRate(t.form);
   if (t.name === 'zoom' && t.form && t.form._frame) zoomFramer(t.form, +t.value);
   if (t.form && t.form.dataset.form === 'pay') { if (t.name === 'amount') t.form.dataset.typed = '1'; refreshPay(t.form, t); }
+  if (t.form && t.form.dataset.form === 'expense' && t.name === 'amount') t.form.dataset.typed = '1'; // a regular payment's amount no longer follows the periods
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
+  if (t.form && t.form.dataset.form === 'invoice') refreshInvoice(t.form);
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
   if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
@@ -141,6 +183,9 @@ document.addEventListener('change', e => {
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
+  if (t.name === 'kind' && t.form && t.form.dataset.form === 'doc') refreshDocKind(t.form);
+  if (t.name === 'periods' && t.form && t.form.dataset.form === 'expense') refreshPeriods(t.form);
+  if (t.form && t.form.dataset.form === 'invoice') refreshInvoice(t.form);
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }

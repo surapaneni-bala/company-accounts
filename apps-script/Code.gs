@@ -14,17 +14,24 @@
  */
 const SYNC_TAB = '_sync';
 const FILES_TAB = '_files'; // every Drive file this script made, and which login uploaded it
-const FILE_COLS = ['fileId', 'uid'];
+const FILE_COLS = ['fileId', 'uid', 'key']; // key = the phone's id for the file: an upload sent again is not a second copy
 // the first bytes of each kind of file allowed: a file must be what it says it is
 const MAGIC = { 'image/jpeg': [0xFF, 0xD8, 0xFF], 'image/png': [0x89, 0x50, 0x4E, 0x47], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pdf' };
-const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Files'];
+const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Documents', 'Invoices', 'Files'];
 // record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
 // File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …),
-// Absence (one day an employee did not work: it comes off that month's wage)
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A'];
-const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement'];
+// Absence (one day an employee did not work: it comes off that month's wage),
+// reGular payment (rent, internet, licence fees: due every 1, 3, 6 or 12 months), Bank account (the company's, to be paid into),
+// Vault document (a licence, a vehicle's papers, a passport…: its file is an F record of type 'document'),
+// Klient (who invoices and quotations go to) and Invoice (an invoice or a quotation: its PDF is an F record) — admins only
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 'K', 'I'];
+const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement', 'document', 'invoice', 'quote'];
+const SALES_KINDS = ['K', 'I']; // what clients are charged and owe: admins only (owner, 11 Oct 2026)
+// the vault's kinds of document: company and vehicle papers are for admins and the office manager; personal ones (the
+// shareholders' and staff's IDs and passports) for admins only (owner, 11 Oct 2026)
+const DOC_KINDS = ['company', 'vehicle', 'personal'];
 const BRAND_FILES = ['letterhead', 'stamp']; // the company's own: only admins set them, every login's slips carry them
 const FILE_MIMES = ['image/jpeg', 'image/png', 'application/pdf'];
 const MAX_FILE = 8 * 1024 * 1024; // bytes
@@ -62,12 +69,28 @@ const SHAPES = {
     && ['active', 'left'].indexOf(d.status || 'active') >= 0 && (!d.left || DATE_RE.test(d.left)) && (d.openingAmount === undefined || num_(d.openingAmount))
     && (!d.clearedTo || DATE_RE.test(d.clearedTo)),
   F: d => /^[A-Za-z0-9_-]{10,100}$/.test(d.fileId) && str_(d.name) && FILE_MIMES.indexOf(d.mime) >= 0 && SAFE_ID.test(d.for) && FILE_TYPES.indexOf(d.type) >= 0,
+  G: d => str_(d.name) && str_(d.paidTo) && num_(d.amount) && d.amount > 0 && CURS.indexOf(d.cur) >= 0 && EVERY_MONTHS.indexOf(d.every) >= 0 && DATE_RE.test(d.first)
+    && (d.mode === undefined || ACCOUNTS.indexOf(d.mode) >= 0) && (d.project === undefined || str_(d.project)),
+  B: d => str_(d.bank) && d.bank.length > 0 && str_(d.number) && d.number.length > 0 && ['accName', 'cur', 'branch', 'swift', 'note'].every(k => d[k] === undefined || str_(d[k])),
+  V: d => str_(d.title) && d.title.length > 0 && DOC_KINDS.indexOf(d.kind) >= 0 && ['issued', 'expires'].every(k => !d[k] || DATE_RE.test(d[k]))
+    && (d.remind === undefined || (num_(d.remind) && d.remind >= 0 && d.remind <= 365)) && ['owner', 'docNo', 'note'].every(k => d[k] === undefined || str_(d[k])),
+  K: d => str_(d.name) && d.name.length > 0 && ['phone', 'address', 'tin', 'note'].every(k => d[k] === undefined || str_(d[k])),
+  I: d => ['invoice', 'quote'].indexOf(d.type) >= 0 && str_(d.no) && d.no.length > 0 && SAFE_ID.test(d.client) && DATE_RE.test(d.date) && (!d.due || DATE_RE.test(d.due))
+    && CURS.indexOf(d.cur) >= 0 && Array.isArray(d.items) && d.items.length > 0 && d.items.length <= 100
+    && d.items.every(it => isObj_(it) && str_(it.t) && num_(it.qty) && it.qty > 0 && num_(it.price) && it.price >= 0 && (it.unit === undefined || str_(it.unit)))
+    && (d.tax === undefined || (num_(d.tax) && d.tax >= 0 && d.tax <= 100)) && ['bank', 'from'].every(k => !d[k] || SAFE_ID.test(d[k])) && ['notes', 'project'].every(k => d[k] === undefined || str_(d[k])),
 };
+const EVERY_MONTHS = [1, 3, 6, 12];
 const num_ = v => typeof v === 'number' && isFinite(v);
 // optional fields on money records: the SSP rate of the day, and the employee a payment belongs to
 const extras_ = d => (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (d.worker === undefined || SAFE_ID.test(d.worker))
   && (d.pay === undefined || ['salary', 'advance', 'settlement'].indexOf(d.pay) >= 0) && (d.month === undefined || /^\d{4}-\d\d$/.test(d.month))
-  && (d.daysOff === undefined || (num_(d.daysOff) && d.daysOff >= 0 && d.daysOff <= 31)) && (d.approval === undefined || SAFE_ID.test(d.approval));
+  && (d.daysOff === undefined || (num_(d.daysOff) && d.daysOff >= 0 && d.daysOff <= 31)) && (d.approval === undefined || SAFE_ID.test(d.approval))
+  && (d.regular === undefined || SAFE_ID.test(d.regular)) && (d.period === undefined || DATE_RE.test(d.period)) // a regular payment, and the due date it pays
+  && (d.invoice === undefined || SAFE_ID.test(d.invoice)) // money received for an invoice
+  && (d.periods === undefined || (num_(d.periods) && d.periods >= 1 && d.periods <= 24 && d.periods % 1 === 0)) // a regular payment, several periods at once
+  && (d.advance === undefined || typeof d.advance === 'boolean') && (d.advanceTotal === undefined || (num_(d.advanceTotal) && d.advanceTotal > 0)) // an advance to a supplier
+  && (d.from === undefined || SAFE_ID.test(d.from)) && (d.received === undefined || DATE_RE.test(d.received)); // goods taken from an advance
 const str_ = v => typeof v === 'string';
 const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
@@ -75,7 +98,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 14; // shown when the web app link is opened in a browser
+const VERSION = 18; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -174,7 +197,7 @@ function sync_(req) {
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role !== 'admin' ? '' : ss.getUrl(), kinds: KINDS, // the sheet shows every balance
-    pull: result.pull.map(r => view_(user, r, hidden)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F'))), refused: result.refused, me: user ? public_(user) : null,
+    pull: result.pull.map(r => view_(user, r, hidden)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V'))), refused: result.refused, me: user ? public_(user) : null,
     logins: !!user || users_().length > 0, warning: warning,
   };
 }
@@ -193,11 +216,13 @@ function who_(req) {
 }
 
 // What each login receives. Store keepers get only their own entries; only admins get the company password.
-// hidden = what the office manager may not have (hiddenFor_): expenses, and their files and change requests
+// hidden = what the office manager may not have (hiddenFor_): personal documents, other people's expenses, and their files
+// and change requests
 function view_(user, rec, hidden) {
   if (!user || user.role === 'admin') return rec;
   if (rec.k === 'S') return { id: rec.id, k: rec.k, u: rec.u, d: { company: rec.d.company } };
-  if (user.role === 'manager') return hidden && hidden[rec.k === 'F' ? rec.d.for : rec.k === 'C' ? rec.d.target : rec.id] ? null : managerView_(user, rec);
+  if (rec.k === 'B') return rec; // the company's bank details are for everyone to give to clients (no balances)
+  if (user.role === 'manager') return (rec.k === 'V' && rec.d.kind === 'personal') || (hidden && hidden[rec.k === 'F' ? rec.d.for : rec.k === 'C' ? rec.d.target : rec.id]) ? null : managerView_(user, rec);
   if (rec.k === 'F' && BRAND_FILES.indexOf(rec.d.type) >= 0) return rec; // everyone's vouchers carry the letterhead and stamp
   return (rec.k === 'E' || rec.k === 'L' || rec.k === 'F') && rec.d.uid === user.id ? rec : null;
 }
@@ -206,20 +231,22 @@ function view_(user, rec, hidden) {
 // (the log names amounts received). Without money in and moves, no balance can be worked out from what she holds.
 const MONEY_KINDS = ['R', 'T'];
 // Her expenses are her own (owner, 12 Oct 2026): she gets the ones she entered, and an admin's only when it pays an employee
-// or a regular payment (rent…), for the Employees and Regular payments screens. Ids map to true; null for other logins.
+// or a regular payment (rent…), for the Employees and Regular payments screens. Personal documents in the vault (IDs,
+// passports) are admins' only, with their scans. Ids map to true; null for other logins.
 function hiddenFor_(rows, user) {
   if (!user || user.role !== 'manager') return null;
   const out = Object.create(null);
   rows.forEach(r => {
-    if (r[1] !== 'E') return;
+    if (r[1] !== 'E' && r[1] !== 'V') return;
     let d = null;
     try { d = JSON.parse(r[4]); } catch (err) { out[r[0]] = true; return; } // a damaged record: admins only
-    if (d.uid !== user.id && !d.worker && !d.regular) out[r[0]] = true;
+    if (r[1] === 'V' ? d.kind === 'personal' : d.uid !== user.id && !d.worker && !d.regular) out[r[0]] = true;
   });
   return out;
 }
 function managerView_(user, rec) {
-  if (MONEY_KINDS.indexOf(rec.k) >= 0) return null;
+  if (MONEY_KINDS.indexOf(rec.k) >= 0 || SALES_KINDS.indexOf(rec.k) >= 0) return null;
+  if (rec.k === 'F' && /^[IK]-/.test(String(rec.d.for))) return null; // invoice and quotation PDFs
   if (rec.k === 'P') { const d = Object.assign({}, rec.d); delete d.value; delete d.valueCur; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
   if (rec.k === 'C' && MONEY_KINDS.indexOf(rec.d.kind) >= 0) return null;
   if (rec.k === 'F' && /^[RT]-/.test(String(rec.d.for))) return null;
@@ -232,7 +259,7 @@ function allowed_(user, p, before) {
   if (before) return false; // only admins change what is already there (an office manager's edit is a change request)
   if (p.d.uid !== user.id || p.d.deleted) return false; // a new record carries its sender's login and isn't born deleted
   if (p.k === 'F' && BRAND_FILES.indexOf(p.d.type) >= 0) return false; // the company letterhead and stamp: admins only
-  if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0));
+  if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A', 'V'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0)) && (p.k !== 'V' || p.d.kind !== 'personal');
   return p.k === 'E' || p.k === 'L' || p.k === 'F'; // store keeper: own expenses, notes and their receipts
 }
 
@@ -257,7 +284,7 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     if (i !== undefined && Number(out[i][2]) >= u) return; // already have this copy or a newer one (e.g. sent again after a lost reply)
     const before = i === undefined ? null : JSON.parse(out[i][4]);
     if (!allowed_(user || null, p, before)) { refused.push(p.id); return; }
-    if (codeOnly && (p.k === 'W' || p.k === 'F')) { refused.push(p.id); return; }
+    if (codeOnly && (p.k === 'W' || p.k === 'F' || p.k === 'V')) { refused.push(p.id); return; }
     const t = p.k === 'C' ? index[p.d.target] : 0;
     if (t === undefined || (p.k === 'C' && out[t][1] !== p.d.kind)) { refused.push(p.id); return; } // a change request needs its entry
     // an edit must leave its entry valid: approving it can never produce a record the sheet would refuse
@@ -269,7 +296,8 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     if (p.k === 'A' && limited && (index[p.d.worker] === undefined || out[index[p.d.worker]][1] !== 'W')) { refused.push(p.id); return; } // a day not worked belongs to an employee
     if (p.k === 'F' && limited) { // a file belongs to a record the sender may see (a store keeper: their own)
       const f = index[p.d.for];
-      if (f === undefined || (user.role === 'store' && JSON.parse(out[f][4]).uid !== user.id)) { refused.push(p.id); return; }
+      const o = f === undefined ? null : JSON.parse(out[f][4]);
+      if (!o || (user.role === 'store' && o.uid !== user.id) || (out[f][1] === 'V' && o.kind === 'personal')) { refused.push(p.id); return; }
     }
     const d = limited ? Object.assign({}, p.d, { by: user.name }) : p.d; // signed by the login that sent it
     seq += 1;
@@ -303,6 +331,12 @@ const WRONG_LOGIN = 'Wrong username or password. After 5 wrong tries, wait 15 mi
 
 function account_(req) {
   if (req.op === 'upload' || req.op === 'file' || req.op === 'original') return files_(req);
+  if (req.op === 'alerts' || req.op === 'number') { // admins (or, before logins, a phone with the company code)
+    const who = who_(req);
+    if (who.error) return { ok: false, error: who.error, code: who.code };
+    if (!(who.user ? who.user.role === 'admin' : !users_().length)) return { ok: false, error: 'Only an admin can do this.' };
+    return req.op === 'alerts' ? alerts_(req) : nextInvoiceNo_();
+  }
   if (req.op === 'login') return login_(req);
   if (req.op === 'setup') return setupLogins_(req);
   const me = req.token ? sessionUser_(String(req.token)) : null;
@@ -332,8 +366,13 @@ function files_(req) {
     if (!bytes.length || bytes.length > MAX_FILE) return { ok: false, error: 'The file is empty or bigger than 8 MB.' };
     if (!MAGIC[req.mime].every((b, i) => ((bytes[i] + 256) % 256) === b)) return { ok: false, error: 'This file is not a real photo or PDF.' };
     const name = (String(req.name || '').replace(/\.[^.]*$/, '').replace(/[^\w .()-]/g, '').slice(0, 80) || 'file') + EXT[req.mime];
+    // On a slow connection the phone may not hear the answer and send the same file again: the copy already made is the
+    // answer (the owner found spare copies loose in the company folder, 15 Oct 2026). Old app versions send no key.
+    const key = SAFE_ID.test(String(req.key || '')) ? String(req.key) : '', rows = rowsOf_(FILES_TAB, FILE_COLS);
+    const had = key && rows.filter(r => String(r.key) === key).pop();
+    if (had) { try { if (!DriveApp.getFileById(String(had.fileId)).isTrashed()) return { ok: true, fileId: String(had.fileId) }; } catch (err) { /* gone: upload it again */ } }
     const file = filesRoot_().createFile(Utilities.newBlob(bytes, req.mime, name)); // its record files it in a moment
-    saveRows_(FILES_TAB, FILE_COLS, rowsOf_(FILES_TAB, FILE_COLS).concat([{ fileId: file.getId(), uid: who.user ? who.user.id : '' }]));
+    saveRows_(FILES_TAB, FILE_COLS, rows.concat([{ fileId: file.getId(), uid: who.user ? who.user.id : '', key: key }]));
     return { ok: true, fileId: file.getId() };
   }
   if (req.op === 'original') return original_(who.user, String(req.id || ''));
@@ -361,6 +400,13 @@ function original_(user, id) {
   }
   return { ok: false, error: 'The original of ' + f.no + ' is no longer in the Google Drive bin (Drive keeps it for 30 days).' };
 }
+// Invoices are numbered by the sheet, in one unbroken series for the whole company (phones may be offline, so they can't
+// count by themselves). Each request takes the next number, under the script lock that every request holds.
+function nextInvoiceNo_() {
+  const props = PropertiesService.getScriptProperties(), n = Number(props.getProperty('INVOICE_SEQ') || 0) + 1;
+  props.setProperty('INVOICE_SEQ', String(n));
+  return { ok: true, no: 'INV-' + ('000' + n).slice(-4) };
+}
 function uploads_() {
   const map = Object.create(null);
   rowsOf_(FILES_TAB, FILE_COLS).forEach(r => { map[String(r.fileId)] = String(r.uid); });
@@ -382,8 +428,9 @@ function uploads_() {
    editing the date or who was paid renames it, and a folder a move leaves empty goes to the bin.
    Where a file goes follows from its record (fileHome_, no Drive calls), so any later change refiles it. Nothing is thrown
    away, except the unstamped original of a cancelled paper once its stamped copy is in. A Drive problem never stops a sync. */
-const LAYOUT = '2'; // bump when the layout changes: every sheet then refiles everything once
-const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
+const LAYOUT = '3'; // bump when the layout changes: every sheet then refiles everything once
+const DOC_FOLDER = { company: 'COMPANY', vehicle: 'VEHICLES', personal: 'PERSONAL' };
+const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', docs: '05 DOCUMENTS', invoices: '06 INVOICES', quotes: '07 QUOTATIONS', unfiled: '10 UNFILED', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
 const TYPE_FOLDER = { idphoto: 'ID DOCUMENT', profile: 'PROFILE PHOTO', statement: 'STATEMENTS', letterhead: 'LETTERHEAD', stamp: 'STAMP' };
 const MONTHS_ = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
 const upper_ = s => String(s || '').replace(/[\\/]/g, '-').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 60);
@@ -450,6 +497,14 @@ function fileHome_(f, byId, files) {
     return { w: w, path: (old || gone ? [FOLDER.changes] : []).concat(sub), name: name, status: status };
   }
   if (!owner) return { path: [FOLDER.pay, FOLDER.other], name: name, status: status };
+  if (owner.k === 'I') { // invoices and quotations by year and month, named by number and client; a cancelled one under CHANGES
+    const k = byId[o.client], who = k && k.k === 'K' ? k.d.name : '';
+    return { path: [o.type === 'quote' ? FOLDER.quotes : FOLDER.invoices].concat(changes, dated_(String(o.date || ''))), name: `${o.no} ${upper_(who)}${ext}`.replace(' ' + ext, ext), status: status };
+  }
+  if (owner.k === 'V') { // the vault: one folder per document, its older versions under CHANGES
+    const doc = [DOC_FOLDER[o.kind] || FOLDER.other, idSeg_(upper_(o.title), owner.id)];
+    return { path: (gone ? [FOLDER.gone, FOLDER.docs] : [FOLDER.docs].concat(changes)).concat(doc), name: `${upper_(o.title)} ${String(f.createdAt || '').slice(0, 10)}${ext}`, status: status };
+  }
   const section = owner.k === 'R' ? FOLDER.received : FOLDER.pay;
   const who = owner.k === 'R' ? (byId[o.project] ? byId[o.project].d.name : 'GENERAL') : o.paidTo || o.reason;
   const entry = dated_(day).concat([idSeg_(`${day} ${upper_(who)}`, owner.id)]);
@@ -457,7 +512,7 @@ function fileHome_(f, byId, files) {
 }
 const homeText_ = h => (h.w ? [h.w.d.deleted ? FOLDER.staffGone : FOLDER.staff, staffName_(h.w)] : []).concat(h.path).map(segName_).join(' / ');
 const homeFolder_ = (h, cache) => (h.w ? h.path.reduce(child_, staffFolder_(h.w, cache)) : folderAt_(h.path, cache));
-const SECTIONS = [FOLDER.pay, FOLDER.received, FOLDER.staff, FOLDER.company, FOLDER.staffGone, FOLDER.gone];
+const SECTIONS = [FOLDER.pay, FOLDER.received, FOLDER.staff, FOLDER.company, FOLDER.docs, FOLDER.invoices, FOLDER.quotes, FOLDER.staffGone, FOLDER.gone];
 // folders a move left empty go to the bin, up to the sections (the sections and the company folder always stay)
 function tidyUp_(folder, rootId) {
   while (folder && folder.getId() !== rootId && SECTIONS.indexOf(folder.getName()) < 0 && !folder.getFiles().hasNext() && !folder.getFolders().hasNext()) {
@@ -505,15 +560,41 @@ function organizeAll_(rows) {
   const props = PropertiesService.getScriptProperties(), root = nameRoot_(rows);
   try { const sheet = DriveApp.getFileById(SpreadsheetApp.getActive().getId()); if (!inside_(sheet, root)) sheet.moveTo(root); } catch (err) { console.error('Could not move the Google Sheet: ' + err.message); }
   organize_(rows, null, []);
+  tidySpares_(rows);
   dropEmpty_(root, true);
   SECTIONS.forEach(name => child_(root, name)); // the cabinet always shows all its drawers
   props.setProperty('FILES_LAYOUT', LAYOUT);
+}
+// Uploads no record names (a day old or more, so never one whose record is still on its way): a spare copy of a filed file
+// (same name and size) goes to the Drive bin, where Google keeps it 30 days; anything else is put in 10 UNFILED so it is
+// seen. Runs with every refiling and each morning.
+function tidySpares_(rows) {
+  const named = Object.create(null), byName = Object.create(null);
+  rows.filter(r => r[1] === 'F').forEach(r => { try { const d = JSON.parse(r[4]); named[d.fileId] = true; (byName[d.name] = byName[d.name] || []).push(d.fileId); } catch (err) { /* damaged */ } });
+  const dayAgo = Date.now() - 864e5;
+  let unfiled = null;
+  rowsOf_(FILES_TAB, FILE_COLS).forEach(u => {
+    const id = String(u.fileId);
+    if (!id || named[id]) return;
+    let file = null;
+    try { file = DriveApp.getFileById(id); } catch (err) { return; } // gone for good
+    try {
+      if (file.isTrashed() || file.getDateCreated().getTime() > dayAgo) return;
+      const name = file.getName(), size = file.getSize();
+      const twin = (byName[name] || []).some(t => { try { return DriveApp.getFileById(t).getSize() === size; } catch (err) { return false; } });
+      if (twin) { file.setTrashed(true); return; }
+      unfiled = unfiled || child_(filesRoot_(), FOLDER.unfiled);
+      const from = file.getParents(), was = from.hasNext() ? from.next() : null;
+      if (!was || was.getId() !== unfiled.getId()) file.moveTo(unfiled);
+    } catch (err) { console.error('Tidying ' + id + ': ' + err.message); }
+  });
 }
 // Run this once in the Apps Script editor after pasting the script. Google asks permission to use Drive: its screen has a
 // box for each permission, and one left unticked is never asked for again by itself, so this asks for every missing one.
 // Then it files everything into the company folder (the Google Sheet too): if Drive is still not allowed, it fails here.
 function allowFiles() {
   ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  if (!hasMorning_()) ScriptApp.newTrigger('morningEmail').timeBased().everyDays(1).atHour(7).create(); // the morning email, at about 7
   organizeAll_(readAll_(syncTab_(SpreadsheetApp.getActive())));
   Logger.log(`Drive access is allowed, and everything is filed in the folder ${filesRoot_().getName()} (the Google Sheet too). Now: Deploy → Manage deployments → ✏️ → New version → Deploy.`);
 }
@@ -710,6 +791,10 @@ function rebuild_(ss, all) {
   ledger_(ss, ctx);
   changeLog_(ss, ctx);
   employees_(ss, ctx, of('W').filter(x => !x.deleted));
+  regulars_(ss, ctx, of('G').filter(x => !x.deleted));
+  banks_(ss, ctx, of('B').filter(x => !x.deleted));
+  docs_(ss, ctx, of('V').filter(x => !x.deleted), recs);
+  invoices_(ss, ctx, of('I').filter(x => !x.deleted), of('K'));
   filesTab_(ss, ctx, recs);
   // keep the tabs in a fixed order right after "Read me"
   VIEW_TABS.forEach((name, i) => {
@@ -740,7 +825,8 @@ const when_ = at => (at ? at.slice(0, 10) + ' ' + time_(at) : '');
 const only_ = (x, cur) => (x.cur === cur ? x.amount : '');
 // a typed "=…" must stay text, never become a formula
 const safe_ = v => (typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v);
-const remarks_ = x => [x.batch ? 'Bulk ' + x.batch : '', x.editedAt ? 'Edited by ' + (x.editedBy || '?') + ' ' + when_(x.editedAt) : '', x.manualDate ? 'Date set manually' : ''].filter(String).join(' · ');
+const remarks_ = x => [x.advance ? 'Supplier advance: ' + (x.advanceTotal || x.amount) + ' paid, ' + x.amount + ' left' : x.advanceTotal ? 'Supplier advance of ' + x.advanceTotal + ', used up' : '',
+  x.from ? 'Taken from advance ' + x.from + (x.received ? ' on ' + x.received : '') : '', x.periods > 1 ? x.periods + ' periods paid at once' : '', x.batch ? 'Bulk ' + x.batch : '', x.editedAt ? 'Edited by ' + (x.editedBy || '?') + ' ' + when_(x.editedAt) : '', x.manualDate ? 'Date set manually' : ''].filter(String).join(' · ');
 const now_ = () => Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'd MMM yyyy, h:mm a');
 
 function freshTab_(ss, name, color) {
@@ -871,7 +957,7 @@ function received_(ss, c) {
     ['', 'date', '', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 190, 75, 120, 140, 110, 200, 120, 150, 260, 110], [6, 7]);
 }
 // Every uploaded file: what it is, what it belongs to, its status and the Drive folder it is filed in.
-const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement' };
+const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document', invoice: 'Invoice', quote: 'Quotation' };
 function filesTab_(ss, c, recs) {
   const byId = Object.create(null);
   recs.forEach(r => { byId[r.id] = r; });
@@ -881,7 +967,7 @@ function filesTab_(ss, c, recs) {
     if (f.for === 'settings') return 'The company';
     if (!o) return '';
     const d = o.d;
-    return o.k === 'W' ? 'Employee: ' + d.name : o.k === 'E' ? (d.worker ? c.wname(d.worker) : d.paidTo || '') + ' — ' + (d.reason || '') : o.k === 'R' ? 'Money received — ' + c.pname(d.project) : '';
+    return o.k === 'I' ? (d.type === 'quote' ? 'Quotation ' : 'Invoice ') + d.no : o.k === 'V' ? 'Document: ' + d.title : o.k === 'W' ? 'Employee: ' + d.name : o.k === 'E' ? (d.worker ? c.wname(d.worker) : d.paidTo || '') + ' — ' + (d.reason || '') : o.k === 'R' ? 'Money received — ' + c.pname(d.project) : '';
   };
   // in the order of the folders in Drive, so the tab reads like the filing cabinet
   const rows = files.map(f => {
@@ -929,6 +1015,122 @@ function employees_(ss, c, workers) {
     ['Employee no.', 'Name', 'Job', 'Site', 'Phone', 'Monthly wage', 'Currency', 'Started', 'Status', 'Left on', 'Paid USD', 'Paid SSP', 'ID number'],
     workers.map(w => [w.id, w.name, w.job || '', w.site || '', w.phone || '', w.wage, w.cur, w.start, w.status === 'left' ? 'Left' : 'Working', w.left || '', paid[w.id + 'USD'] || 0, paid[w.id + 'SSP'] || 0, w.idNo || '']),
     ['', '', '', '', '', 'num', '', 'date', '', 'date', 'USD', 'SSP'], [110, 170, 130, 120, 120, 110, 80, 105, 90, 105, 110, 120, 130], [10, 11]);
+}
+/* ---------- regular payments: the same sums as the app (src/calc.js dueOn, regularDue) ---------- */
+function dueOn_(first, every, k) {
+  const y = Number(first.slice(0, 4)), m = Number(first.slice(5, 7)), d = Number(first.slice(8, 10)), t = new Date(Date.UTC(y, m - 1 + k * every, 1));
+  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return t.getUTCFullYear() + '-' + ('0' + (t.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + Math.min(d, last)).slice(-2);
+}
+const monthNo_ = d => Number(d.slice(0, 4)) * 12 + Number(d.slice(5, 7)) - 1;
+// pays = [{ period, periods }]: each payment counts for its stretch, and the ones after it when it paid several at once
+function regularDue_(g, pays, today) {
+  const paid = Object.create(null);
+  pays.forEach(p => { const k = Math.floor((monthNo_(p.period) - monthNo_(g.first)) / g.every), n = p.periods || 1; for (let i = Math.max(0, k); i < k + n; i++) paid[i] = true; });
+  let next = '', late = 0;
+  for (let k = 0; k < 1200; k++) {
+    if (paid[k]) continue;
+    const d = dueOn_(g.first, g.every, k);
+    if (!next) next = d;
+    if (d < today) late++; else break;
+  }
+  return { next: next, late: late };
+}
+const today_ = () => Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+const EVERY_TEXT = { 1: 'Every month', 3: 'Every 3 months', 6: 'Every 6 months', 12: 'Every year' };
+function regulars_(ss, c, regs) {
+  const t = today_();
+  dataTab_(ss, c.company, 'Regular payments', '#b45309',
+    ['No.', 'What', 'Paid to', 'How often', 'Currency', 'Amount', 'Usually paid from', 'Project', 'First due', 'Next due', 'Status', 'Times paid', 'Last paid'],
+    regs.map(g => {
+      const pays = c.E.filter(x => x.regular === g.id), d = regularDue_(g, pays.filter(x => x.period).map(x => ({ period: x.period, periods: x.periods || 1 })), t);
+      const status = d.late ? d.late + ' late' : d.next === t ? 'Due today' : 'OK';
+      return [g.id, g.name, g.paidTo, EVERY_TEXT[g.every], g.cur, g.amount, g.mode || '', g.project ? c.pname(g.project) : '', g.first, d.next, status, pays.length, pays.length ? ymd_(pays[pays.length - 1].at) : ''];
+    }), ['', '', '', '', '', 'num', '', '', 'date', 'date'], [110, 180, 170, 120, 80, 110, 120, 160, 105, 105, 90, 90, 105], null);
+}
+function banks_(ss, c, banks) {
+  dataTab_(ss, c.company, 'Bank accounts', '#0e7490', ['No.', 'Bank', 'Account name', 'Account number', 'Currency', 'Branch', 'SWIFT code', 'Note'],
+    banks.map(b => [b.id, b.bank, b.accName || '', b.number, b.cur || '', b.branch || '', b.swift || '', b.note || '']), [], [110, 220, 240, 180, 80, 160, 120, 260], null);
+}
+/* ---------- the vault: documents and when they expire ---------- */
+const DOC_TEXT = { company: 'Company', vehicle: 'Vehicle', personal: 'Personal' };
+const daysBetween_ = (a, b) => Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 864e5);
+const remindOf_ = v => (num_(v.remind) ? v.remind : 30);
+function docState_(v, t) {
+  if (!v.expires) return { text: 'No expiry date', left: '' };
+  const left = daysBetween_(t, v.expires);
+  return { left: left, text: left < 0 ? 'Expired' : left === 0 ? 'Expires today' : left <= remindOf_(v) ? 'Expires soon' : 'Valid' };
+}
+function docs_(ss, c, docs, recs) {
+  const t = today_(), file = Object.create(null);
+  recs.filter(r => r.k === 'F' && r.d.type === 'document' && !r.d.deleted && !r.d.replaced && !r.d.removed).forEach(r => { file[r.d.for] = r.d.fileId; });
+  dataTab_(ss, c.company, 'Documents', '#4338ca', ['No.', 'Document', 'Kind', 'Belongs to', 'Number', 'Issued', 'Expires', 'Days left', 'Status', 'Remind days before', 'Note', 'Open'],
+    docs.map(v => { const s = docState_(v, t); return [v.id, v.title, DOC_TEXT[v.kind], v.owner || '', v.docNo || '', v.issued || '', v.expires || '', s.left, s.text, remindOf_(v), v.note || '', file[v.id] ? 'https://drive.google.com/file/d/' + file[v.id] + '/view' : '']; }),
+    ['', '', '', '', '', 'date', 'date'], [110, 220, 90, 180, 140, 105, 105, 80, 110, 90, 220, 300], null);
+}
+
+/* ---------- invoices and quotations: the same sums as the app (src/calc.js invoiceTotals, invoiceState) ---------- */
+function invoiceState_(inv, credits, t) {
+  const sub = inv.items.reduce((s, it) => s + Math.round(it.qty * it.price * 100), 0), tax = inv.tax > 0 ? Math.round(sub * inv.tax / 100) : 0, total = sub + tax;
+  const paid = credits.filter(c => c.invoice === inv.id && c.cur === inv.cur).reduce((s, c) => s + cents_(c.amount), 0), due = Math.max(0, total - paid);
+  const state = inv.cancelled ? 'Cancelled' : inv.type === 'quote' ? 'Quotation' : due === 0 ? 'Paid' : inv.due && inv.due < t ? 'Overdue' : paid ? 'Part paid' : 'Unpaid';
+  return { total: total / 100, paid: paid / 100, due: inv.type === 'quote' || inv.cancelled ? 0 : due / 100, state: state };
+}
+function invoices_(ss, c, invs, clients) {
+  const t = today_(), name = Object.create(null);
+  clients.forEach(k => { name[k.id] = k.name; });
+  dataTab_(ss, c.company, 'Invoices', '#9d174d', ['Number', 'Kind', 'Client', 'Date', 'Due / valid until', 'Currency', 'Total', 'Paid', 'Still owed', 'Status', 'Entry no.'],
+    invs.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).map(inv => {
+      const s = invoiceState_(inv, c.R, t);
+      return [inv.no, inv.type === 'quote' ? 'Quotation' : 'Invoice', name[inv.client] || '', inv.date, inv.due || '', inv.cur, s.total, s.paid, s.due, s.state, inv.id];
+    }), ['', '', '', 'date', 'date', '', 'num', 'num', 'num'], [110, 100, 220, 105, 120, 80, 120, 120, 120, 100, 120], null);
+}
+
+/* ---------- the morning email: what needs doing today ---------- */
+// Sent by a daily trigger (allowFiles sets it up) to the address an admin chose in the app (Settings → Morning email).
+// Payments: due in 3 days, today, or late (every morning until paid). Documents: on their reminder day, 7 days and 1 day
+// before, the day they expire, then every Monday while expired. Nothing to say: no email.
+function alertLines_(recs, t) {
+  const live = k => recs.filter(r => r.k === k && SHAPES[k](r.d) && !r.d.deleted).map(r => r.d);
+  const E = live('E'), lines = [];
+  live('G').forEach(g => {
+    const d = regularDue_(g, E.filter(x => x.regular === g.id && x.period).map(x => ({ period: x.period, periods: x.periods || 1 })), t), left = daysBetween_(t, d.next);
+    if (d.late) lines.push('LATE: ' + g.name + ' — ' + g.cur + ' ' + g.amount + ' to ' + g.paidTo + ' (' + d.late + ' unpaid, oldest due ' + d.next + ')');
+    else if (left === 0 || left === 3) lines.push('Due ' + (left ? 'in 3 days' : 'today') + ': ' + g.name + ' — ' + g.cur + ' ' + g.amount + ' to ' + g.paidTo + ' (' + d.next + ')');
+  });
+  const monday = new Date(Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10))).getUTCDay() === 1;
+  live('V').filter(v => v.expires).forEach(v => {
+    const left = daysBetween_(t, v.expires), who = v.owner ? ' (' + v.owner + ')' : '';
+    if (left < 0 && monday) lines.push('EXPIRED: ' + v.title + who + ' — expired on ' + v.expires);
+    else if (left >= 0 && [remindOf_(v), 7, 1, 0].indexOf(left) >= 0) lines.push((left ? 'Expires in ' + left + ' day' + (left === 1 ? '' : 's') : 'Expires TODAY') + ': ' + v.title + who + ' (' + v.expires + ')');
+  });
+  return lines;
+}
+function morningEmail(test) {
+  if (test !== true) { try { tidySpares_(readAll_(syncTab_(SpreadsheetApp.getActive()))); } catch (err) { console.error('Tidying spare copies: ' + err.message); } } // the daily job
+  const to = PropertiesService.getScriptProperties().getProperty('ALERT_EMAIL');
+  if (!to) return 'No address: an admin sets it in the app (Settings → Morning email).';
+  const recs = readAll_(syncTab_(SpreadsheetApp.getActive())).map(toRec_), lines = alertLines_(recs, today_());
+  if (!lines.length && test !== true) return 'Nothing to do today.';
+  const company = (recs.filter(r => r.k === 'S').map(r => r.d.company)[0]) || 'Company';
+  MailApp.sendEmail({ to: to, subject: company + (lines.length ? ' — ' + lines.length + ' thing' + (lines.length === 1 ? '' : 's') + ' to do today' : ' — test: the morning email works'),
+    body: (lines.length ? lines.join('\n') : 'Nothing is due or expiring today. This is the test you asked for.') + '\n\nOpen the app: ' + APP_URL_ });
+  return 'Sent to ' + to + '.';
+}
+const APP_URL_ = 'https://app.b-e-p-l.com/';
+const hasMorning_ = () => ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'morningEmail');
+// an admin chooses where the morning email goes ('' = none), or asks for a test now
+function alerts_(req) {
+  const props = PropertiesService.getScriptProperties();
+  if (typeof req.email === 'string') {
+    const email = req.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'That is not an email address.' };
+    if (email) props.setProperty('ALERT_EMAIL', email); else props.deleteProperty('ALERT_EMAIL');
+  }
+  let running = false;
+  try { running = hasMorning_(); } catch (err) { running = false; } // not allowed yet: allowFiles has not been run since script 15
+  const sent = req.test ? morningEmail(true) : '';
+  return { ok: true, email: props.getProperty('ALERT_EMAIL') || '', running: running, sent: sent };
 }
 function changeLog_(ss, c) {
   dataTab_(ss, c.company, 'Change Log', COLOR.muted, ['When', 'Action', 'Entry', 'By', 'Details'],

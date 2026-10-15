@@ -214,6 +214,110 @@ const PAY4 = `${TOP} / 01 PAYMENTS / 2026 / 2026-10 OCTOBER / 2026-10-08 SHOP (E
 assert.deepStrictEqual([drv().files[v2].trashed, pathOf(v2), drv().files[v2].name, drv().files[s2].trashed], [false, PAY4, 'PV-OW1-0003 Shop.pdf', true], 'in use again, not renamed CANCELLED; the stamped copy in the bin');
 assert.strictEqual(post({ op: 'original', token: owner, id: 'F-OW1-0200' }).ok, false, 'nothing more to bring back');
 assert.strictEqual(post({ op: 'file', token: owner, id: 'F-OW1-0200' }).fileId, v2, 'a fetched file says which Drive file it is');
+/* ---------- regular payments and the company's bank accounts ---------- */
+const reg = (id, u, extra = {}) => ({ id, k: 'G', u, d: { id, name: 'Land rent', paidTo: 'Landlord', amount: 500, cur: 'USD', every: 1, first: '2026-01-01', mode: 'Bank', ...extra } });
+const bank = (id, u, extra = {}) => ({ id, k: 'B', u, d: { id, bank: 'Test Bank', accName: 'Test Builders Ltd', number: '0011223344', cur: 'USD', ...extra } });
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [reg('G-OW1-0001', 100), bank('B-OW1-0001', 100), reg('G-OW1-0002', 100, { every: 2 }), bank('B-OW1-0002', 100, { number: '' })] }).refused.sort(),
+  ['B-OW1-0002', 'G-OW1-0002'], 'an admin adds them; every 1, 3, 6 or 12 months; an account has a number');
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [reg('G-AG1-0001', 101, { uid: m.me.id }), bank('B-AG1-0001', 101, { uid: m.me.id })] }).refused.sort(), ['B-AG1-0001', 'G-AG1-0001'], 'the office manager does not');
+assert.deepStrictEqual(post({ token: s.token, since: 0, push: [bank('B-SK1-0001', 101, { uid: s.me.id })] }).refused, ['B-SK1-0001'], 'nor the store keeper');
+const kindsFor = t => post({ token: t, since: 0, push: [] }).pull.map(p => p.k);
+assert.ok(kindsFor(m.token).includes('G') && kindsFor(m.token).includes('B'), 'the office manager sees the regular payments (she pays them) and the bank details');
+assert.ok(!kindsFor(s.token).includes('G') && kindsFor(s.token).includes('B'), 'the store keeper sees only the bank details');
+// paying one: an expense that names it and the due date it pays; the tab works out the next due date
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [exp('E-OW1-0300', 102, 'x', { regular: 'G-OW1-0001', period: '2026-01-01' }), exp('E-OW1-0301', 102, 'x', { regular: 'G-OW1-0001', period: 'January' })] }).refused, ['E-OW1-0301'], 'the period is a date');
+const regRow = rows('Regular payments').find(r => r[0] === 'G-OW1-0001');
+assert.deepStrictEqual([regRow[9], regRow[11]], ['2026-02-01', 1], 'next due after January is paid; paid once');
+assert.ok(rows('Bank accounts').some(r => r[0] === 'B-OW1-0001' && r[3] === '0011223344'), 'the Bank accounts tab');
+
+/* ---------- the vault: company and vehicle papers for admins and the office manager, personal ones for admins only ---------- */
+const doc = (id, u, uid, extra = {}) => ({ id, k: 'V', u, d: { id, title: 'Trading licence', kind: 'company', expires: '2027-01-10', remind: 30, uid, ...extra } });
+const docFile = (id, forId, u, uid, fileId, extra = {}) => file(id, u, uid, { for: forId, type: 'document', fileId, name: 'scan.pdf', mime: 'application/pdf', createdAt: '2026-10-11T09:00:00', ...extra });
+const lic = upload('scan.pdf', 'application/pdf', pdf), pass = upload('scan.pdf', 'application/pdf', pdf);
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [doc('V-OW1-0001', 110, 'x'), doc('V-OW1-0002', 110, 'x', { title: 'Passport', kind: 'personal', owner: 'Test Shareholder' }), doc('V-OW1-0003', 110, 'x', { kind: 'boat' }), doc('V-OW1-0004', 110, 'x', { expires: 'next year' }),
+  docFile('F-OW1-0400', 'V-OW1-0001', 110, 'x', lic), docFile('F-OW1-0401', 'V-OW1-0002', 110, 'x', pass)] }).refused.sort(), ['V-OW1-0003', 'V-OW1-0004'], 'a kind the vault knows; a real expiry date');
+const mPull = post({ token: m.token, since: 0, push: [] }).pull.map(p => p.id);
+assert.ok(mPull.includes('V-OW1-0001') && mPull.includes('F-OW1-0400'), 'the office manager sees company papers and their files');
+assert.ok(!mPull.includes('V-OW1-0002') && !mPull.includes('F-OW1-0401'), 'but not a personal document, nor its file');
+assert.strictEqual(post({ op: 'file', token: m.token, id: 'F-OW1-0401' }).ok, false, 'nor can she fetch its file');
+assert.strictEqual(post({ op: 'file', token: owner, id: 'F-OW1-0401' }).ok, true, 'an admin can');
+assert.ok(!post({ token: s.token, since: 0, push: [] }).pull.some(p => p.k === 'V'), 'the store keeper sees no documents');
+const vehM = upload('car.pdf', 'application/pdf', pdf);
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [doc('V-AG1-0001', 111, m.me.id, { title: 'Truck insurance', kind: 'vehicle', owner: 'TEST 123A' }), doc('V-AG1-0002', 111, m.me.id, { kind: 'personal' })] }).refused, ['V-AG1-0002'], 'she adds vehicle papers, not personal ones');
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [doc('V-AG1-0001', 112, m.me.id, { title: 'Changed' })] }).refused, ['V-AG1-0001'], 'only admins change a document');
+// filed in Drive: 05 DOCUMENTS / <kind> / <TITLE> (V-…), named by the day it was added; a renewal sends the old one to CHANGES
+assert.deepStrictEqual([pathOf(lic), drv().files[lic].name], [`${TOP} / 05 DOCUMENTS / COMPANY / TRADING LICENCE (V-OW1-0001)`, 'TRADING LICENCE 2026-10-11.pdf']);
+assert.strictEqual(pathOf(pass), `${TOP} / 05 DOCUMENTS / PERSONAL / PASSPORT (V-OW1-0002)`);
+const lic2 = upload('scan2.pdf', 'application/pdf', pdf);
+post({ token: owner, since: 0, push: [doc('V-OW1-0001', 113, 'x', { expires: '2028-01-10' }), docFile('F-OW1-0402', 'V-OW1-0001', 113, 'x', lic2, { replaces: 'F-OW1-0400', createdAt: '2026-10-12T09:00:00' }), docFile('F-OW1-0400', 'V-OW1-0001', 113, 'x', lic, { replaced: '2026-10-12T09:00:00' })] });
+assert.deepStrictEqual([pathOf(lic2), pathOf(lic)], [`${TOP} / 05 DOCUMENTS / COMPANY / TRADING LICENCE (V-OW1-0001)`, `${TOP} / 05 DOCUMENTS / CHANGES / COMPANY / TRADING LICENCE (V-OW1-0001)`], 'renewed: the new one in place, the old one under CHANGES');
+assert.ok(rows('Documents').some(r => r[0] === 'V-OW1-0001' && r[6] === '2028-01-10' && r[8] === 'Valid' && String(r[11]).endsWith(lic2 + '/view')), 'the Documents tab links the current file');
+
+/* ---------- the morning email ---------- */
+assert.strictEqual(post({ op: 'alerts', token: m.token, email: 'x@example.com' }).ok, false, 'only an admin chooses where it goes');
+assert.strictEqual(post({ op: 'alerts', token: owner, email: 'not an email' }).ok, false);
+gas.allowFiles();
+assert.deepStrictEqual(post({ op: 'alerts', token: owner, email: 'office@example.com' }), { ok: true, email: 'office@example.com', running: true, sent: '' }, 'allowFiles started the morning trigger');
+gas.allowFiles();
+assert.strictEqual(gas.triggers.length, 1, 'only once');
+const tday = new Date().toISOString().slice(0, 10), inDays = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+post({ token: owner, since: 0, push: [doc('V-OW1-0005', 120, 'x', { title: 'Road licence', kind: 'vehicle', owner: 'TEST 999B', expires: inDays(7) }), doc('V-OW1-0006', 120, 'x', { title: 'Fire certificate', expires: inDays(12) }),
+  reg('G-OW1-0003', 120, { name: 'Internet', paidTo: 'ISP', amount: 120, first: tday })] });
+gas.mails.length = 0;
+gas.morningEmail();
+const mail = gas.mails[0];
+assert.strictEqual(mail.to, 'office@example.com');
+assert.ok(/LATE: Land rent/.test(mail.body) && /Due today: Internet/.test(mail.body) && /Expires in 7 days: Road licence \(TEST 999B\)/.test(mail.body), 'late rent, internet due today, a road licence a week before');
+assert.ok(!/Fire certificate/.test(mail.body), 'not every day of the reminder: 12 days is no reminder day');
+gas.mails.length = 0;
+post({ op: 'alerts', token: owner, email: '' });
+gas.morningEmail();
+assert.strictEqual(gas.mails.length, 0, 'no address: no email');
+
+/* ---------- invoices and quotations: admins only; the sheet numbers invoices in one series ---------- */
+assert.deepStrictEqual([post({ op: 'number', token: owner }).no, post({ op: 'number', token: owner }).no], ['INV-0001', 'INV-0002'], 'one unbroken series');
+assert.strictEqual(post({ op: 'number', token: m.token }).ok, false, 'only admins take a number');
+const client = (id, u, extra = {}) => ({ id, k: 'K', u, d: { id, name: 'Test Client Ltd', phone: '+000 111', ...extra } });
+const invoice = (id, u, extra = {}) => ({ id, k: 'I', u, d: { id, type: 'invoice', no: 'INV-0001', client: 'K-OW1-0001', date: '2026-10-11', due: '2026-10-25', cur: 'USD', items: [{ t: 'Cement 42.5', qty: 20, unit: 'bags', price: 15 }], tax: 0, ...extra } });
+const invPdf = upload('INV-0001.pdf', 'application/pdf', pdf), qtPdf = upload('QT-OW1-0001.pdf', 'application/pdf', pdf);
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [client('K-OW1-0001', 130), invoice('I-OW1-0001', 130), invoice('I-OW1-0002', 130, { type: 'quote', no: 'QT-OW1-0001', due: '' }),
+  invoice('I-OW1-0003', 130, { items: [] }), invoice('I-OW1-0004', 130, { items: [{ t: 'x', qty: 0, price: 1 }] }), invoice('I-OW1-0005', 130, { type: 'bill' }),
+  file('F-OW1-0500', 130, 'x', { for: 'I-OW1-0001', type: 'invoice', fileId: invPdf, no: 'INV-0001', mime: 'application/pdf', name: 'INV-0001.pdf' }), file('F-OW1-0501', 130, 'x', { for: 'I-OW1-0002', type: 'quote', fileId: qtPdf, no: 'QT-OW1-0001', mime: 'application/pdf', name: 'QT.pdf' })] }).refused.sort(),
+  ['I-OW1-0003', 'I-OW1-0004', 'I-OW1-0005'], 'an invoice has lines, each with a quantity; invoice or quotation');
+assert.ok(!post({ token: m.token, since: 0, push: [] }).pull.some(p => ['K', 'I'].includes(p.k) || p.id === 'F-OW1-0500'), 'the office manager sees no clients, invoices or their PDFs');
+assert.ok(!post({ token: s.token, since: 0, push: [] }).pull.some(p => ['K', 'I'].includes(p.k)), 'nor the store keeper');
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [client('K-AG1-0001', 131, { uid: m.me.id })] }).refused, ['K-AG1-0001'], 'nor adds them');
+assert.deepStrictEqual([pathOf(invPdf), drv().files[invPdf].name, pathOf(qtPdf)], [`${TOP} / 06 INVOICES / 2026 / 2026-10 OCTOBER`, 'INV-0001 TEST CLIENT LTD.pdf', `${TOP} / 07 QUOTATIONS / 2026 / 2026-10 OCTOBER`], 'by year and month, named by number and client');
+// a payment names the invoice; the tab shows what is paid and still owed
+post({ token: owner, since: 0, push: [{ id: 'R-OW1-0100', k: 'R', u: 132, d: { id: 'R-OW1-0100', cur: 'USD', amount: 120, at: '2026-10-12T10:00', project: '', mode: 'Bank', invoice: 'I-OW1-0001' } }] });
+const invRow = rows('Invoices').find(r => r[0] === 'INV-0001');
+assert.deepStrictEqual(invRow.slice(6, 10), [300, 120, 180, 'Part paid'], 'total 20 × 15, paid 120, 180 still owed');
+assert.strictEqual(rows('Invoices').find(r => r[0] === 'QT-OW1-0001')[9], 'Quotation');
+post({ token: owner, since: 0, push: [invoice('I-OW1-0001', 133, { cancelled: '2026-10-13T09:00:00' }), file('F-OW1-0500', 133, 'x', { for: 'I-OW1-0001', type: 'invoice', fileId: invPdf, no: 'INV-0001', mime: 'application/pdf', name: 'INV-0001.pdf', cancelled: '2026-10-13T09:00:00' })] });
+assert.deepStrictEqual([pathOf(invPdf), drv().files[invPdf].name, rows('Invoices').find(r => r[0] === 'INV-0001')[9]], [`${TOP} / 06 INVOICES / CHANGES / 2026 / 2026-10 OCTOBER`, 'CANCELLED INV-0001 TEST CLIENT LTD.pdf', 'Cancelled'], 'a cancelled invoice: kept under CHANGES, renamed');
+
+/* ---------- an upload sent again is not a second copy; spare copies are tidied ---------- */
+const keyed = k => post({ op: 'upload', token: owner, name: 'PV-OW1-0900 Shop.pdf', mime: 'application/pdf', data: pdf, key: k }).fileId;
+const k1 = keyed('F-OW1-0900'), k2 = keyed('F-OW1-0900');
+assert.strictEqual(k1, k2, 'sent twice with its key (a lost answer): the same file, no spare copy');
+assert.strictEqual(Object.values(drv().files).filter(f => f.name === 'PV-OW1-0900 Shop.pdf').length, 1);
+// spares from before: a twin of a filed voucher (same name and size), a loose file with no twin, and one uploaded just now
+post({ token: owner, since: 0, push: [exp('E-OW1-0900', 140, 'x'), file('F-OW1-0900', 140, 'x', { for: 'E-OW1-0900', type: 'voucher', fileId: k1, name: 'PV-OW1-0900 Shop.pdf', mime: 'application/pdf', createdAt: '2026-10-13T09:00:00' })] });
+const spare = upload('PV-OW1-0900 Shop.pdf', 'application/pdf', pdf), loose = upload('image.jpg', 'image/png', png), fresh = upload('PV-OW1-0901 New.pdf', 'application/pdf', pdf);
+[spare, loose].forEach(id => { drv().files[id].created = Date.now() - 3 * 864e5; });
+gas.morningEmail();
+assert.deepStrictEqual([drv().files[spare].trashed, pathOf(loose), !!drv().files[fresh].trashed, pathOf(fresh), !!drv().files[k1].trashed],
+  [true, `${TOP} / 10 UNFILED`, false, TOP, false], 'the spare copy to the bin, the loose file to 10 UNFILED, a new upload waits for its record, the filed one stays');
+
+/* ---------- several months paid at once; supplier advances ---------- */
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [exp('E-OW1-0910', 150, 'x', { regular: 'G-OW1-0001', period: '2026-02-01', periods: 6 }), exp('E-OW1-0911', 150, 'x', { regular: 'G-OW1-0001', period: '2026-08-01', periods: 30 }),
+  exp('E-OW1-0912', 150, 'x', { amount: 700, advance: true, advanceTotal: 1000 }), exp('E-OW1-0913', 150, 'x', { amount: 300, from: 'E-OW1-0912', received: '2026-10-14' }), exp('E-OW1-0914', 150, 'x', { advance: 'yes' })] }).refused.sort(),
+  ['E-OW1-0911', 'E-OW1-0914'], 'up to 24 periods at once; an advance is yes or no');
+const reg2 = rows('Regular payments').find(r => r[0] === 'G-OW1-0001');
+assert.deepStrictEqual([reg2[9], reg2[11]], ['2026-08-01', 2], 'January, then February to July at once: next due August');
+const expRow = id => rows('Expenses').find(r => r[0] === id);
+assert.ok(/Supplier advance: 1000 paid, 700 left/.test(expRow('E-OW1-0912').join(' ')) && /Taken from advance E-OW1-0912 on 2026-10-14/.test(expRow('E-OW1-0913').join(' ')), 'the Expenses tab says so');
+
 // the company folder follows the company's name
 post({ token: owner, since: 0, push: [{ id: 'settings', k: 'S', u: 80, d: { company: 'Acme Works Ltd', pass: { salt: 's', hash: 'h' } } }] });
 assert.strictEqual(pathOf('SHEET'), 'ACME SUPER APP', 'renamed with the company');

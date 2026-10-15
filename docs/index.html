@@ -303,6 +303,7 @@ dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
 
 /* files, signatures, slips */
 label.btn { display: block; text-align: center; }
+a.btn { display: flex; align-items: center; justify-content: center; text-align: center; color: inherit; text-decoration: none; box-sizing: border-box; }
 .sig { display: block; width: 100%; height: 200px; touch-action: none; background: #fff; border: 2px dashed #CFC6B4; border-radius: var(--r-sm); }
 .viewimg { display: block; width: 100%; border-radius: var(--r-sm); margin-bottom: 14px; background: var(--paper); }
 .filebig { font-size: 64px; text-align: center; margin: 10px 0; }
@@ -337,6 +338,15 @@ label.btn { display: block; text-align: center; }
 .mrow:first-child { border-top: 0; }
 .mrow b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mrow .muted { font-size: 13px; text-align: right; }
+.ilines { display: grid; gap: 10px; margin-bottom: 10px; }
+.iline { display: grid; gap: 8px; padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
+.iline input { width: 100%; min-width: 0; font: inherit; font-size: 16px; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); }
+.iline input:focus { outline: none; border-color: var(--ink); background: #fff; }
+.iline-n { display: grid; grid-template-columns: 1fr 1fr 1.4fr 44px; gap: 8px; }
+.iline .x { border: 0; background: var(--paper); border-radius: 10px; height: 46px; font-size: 22px; cursor: pointer; color: var(--muted); }
+.sugg { display: grid; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.sugg:first-child { border-top: 0; }
+.fld textarea.plain { font: inherit; font-size: 16px; min-height: 90px; }
 details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-weight: 800; color: var(--muted); padding: 8px 4px 12px; }
 .payinfo { line-height: 1.5; }
 .addoff { display: flex; gap: 8px; align-items: center; }
@@ -353,6 +363,8 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .app-tile { position: relative; border: 0; cursor: pointer; text-align: left; border-radius: var(--r-lg); padding: 20px 18px 18px; min-height: 190px; display: flex; flex-direction: column; justify-content: space-between; color: #fff; box-shadow: 0 24px 50px -30px rgba(27,34,50,.9); transition: transform .2s var(--ease); overflow: hidden; }
 .app-tile:active { transform: scale(.97); }
 .app-tile.acc { background: var(--ink); background-image: repeating-linear-gradient(0deg, transparent 0 31px, rgba(255,255,255,.05) 31px 32px); }
+.app-tile.doc { background: #3730a3; background-image: radial-gradient(circle at -10% 110%, rgba(255,255,255,.18), transparent 55%); }
+.app-tile.inv { background: #9d174d; background-image: repeating-linear-gradient(135deg, transparent 0 22px, rgba(255,255,255,.05) 22px 23px); }
 .app-tile.emp { background: var(--in); background-image: radial-gradient(circle at 110% -10%, rgba(255,255,255,.22), transparent 55%); }
 .app-tile .ai { width: 58px; height: 58px; border-radius: 18px; background: rgba(255,255,255,.16); display: grid; place-items: center; }
 .app-tile .ai svg { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -432,7 +444,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '0b7485d474'; // filled in by tools/build.js
+const APP_VERSION = 'bb5f039cda'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -466,8 +478,10 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
+// an empty list of every kind of record (a new company, a new phone, a sign-in that starts again)
+const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
 // A new record made by a signed-in person also carries their login (uid); edits keep the original one.
 function update(patch) {
   const now = Date.now(), dirty = new Set(S.dirty || []), stamped = {};
@@ -547,11 +561,13 @@ function nextIds(prefix, n, seq) {
 const logWith = (entries, by = S.lastBy || '') => [...S.log, ...entries.map(([action, id, text], i) => ({ lid: `L-${S.dev}-${Date.now().toString(36)}${i}`, at: stampSec(), action, id, text, by }))];
 
 const LABELS = { cur: 'Money type', amount: 'Amount', paidTo: 'Paid to', reason: 'Reason', location: 'Location', project: 'Project', mode: 'Cash or bank', note: 'Note', at: 'Date', from: 'Moved', rate: 'SSP for 1 USD',
-  to: 'Moved to', manualDate: 'Date set by hand', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
+  to: 'Moved to', manualDate: 'Date set by hand', every: 'How often', first: 'First due', bank: 'Bank', accName: 'Account name', number: 'Account number', branch: 'Branch', swift: 'SWIFT code', title: 'Document', kind: 'Kind', owner: 'Belongs to', docNo: 'Document number', issued: 'Issued', expires: 'Expires', remind: 'Reminder (days before)', address: 'Address', tin: 'TIN', name: 'Name', phone: 'Phone', job: 'Job', site: 'Site', wage: 'Monthly wage', start: 'Started', idNo: 'ID number', status: 'Status', left: 'Left on', openingAmount: 'Before the app', openingNote: 'Note', clearedTo: 'Salary cleared up to' };
 function showVal(k, r) {
   const v = r[k];
   if (['amount', 'wage', 'openingAmount'].includes(k)) return v === undefined || v === '' ? '(empty)' : money(+v, r.cur);
-  if (['start', 'left', 'clearedTo'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  if (['start', 'left', 'clearedTo', 'first', 'issued', 'expires'].includes(k)) return v ? fmtDate(v) : '(empty)';
+  if (k === 'kind' && DOC_KIND[v]) return DOC_KIND[v][1];
+  if (k === 'every') return EVERY[v] || '(empty)';
   return k === 'project' ? projName(v) : k === 'at' ? fmtAbs(v) : k === 'mode' ? accountOf(v) : k === 'from' ? `${v} → ${v === 'Cash' ? 'Bank' : 'Cash'}` : k === 'rate' ? (v ? plain(+v) : '(empty)') : k === 'status' ? (v === 'left' ? 'Left' : 'Working') : k === 'manualDate' ? (v ? 'yes' : 'no') : (v || '(empty)');
 }
 function diff(a, b) { return Object.keys(LABELS).filter(k => k in b && String(a[k] ?? '') !== String(b[k] ?? '')).map(k => `${LABELS[k]}: ${showVal(k, a)} → ${showVal(k, b)}`); }
@@ -749,12 +765,14 @@ function viewMenu() {
   const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const who = signedIn() ? session.user.name.split(' ')[0] : '';
   const staffWaiting = waiting().filter(c => c.kind === 'W').length;
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${docBanners()}
     <section class="launch">
       <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
       <div class="apps">
         <button class="app-tile acc" data-act="tab" data-tab="home"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><span><b>Accounts</b><small>Cash, bank and projects</small></span></button>
         <button class="app-tile emp" data-act="tab" data-tab="staff">${staffWaiting ? `<span class="badge">${staffWaiting} waiting</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg></span><span><b>Employees</b><small>Salaries, advances and slips</small></span></button>
+        <button class="app-tile doc" data-act="docs">${live(S.docs).some(v => docState(v).soon) ? `<span class="badge">${live(S.docs).filter(v => docState(v).soon).length} to renew</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><span><b>Documents</b><small>Licences, vehicles, IDs</small></span></button>
+        ${can('settings') ? `<button class="app-tile inv" data-act="sales">${live(S.invoices).some(x => x.type === 'invoice' && invState(x).state === 'overdue') ? `<span class="badge">${live(S.invoices).filter(x => x.type === 'invoice' && invState(x).state === 'overdue').length} overdue</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span><span><b>Invoices</b><small>Quotations, clients, what is owed</small></span></button>` : ''}
       </div>
     </section>`;
 }
@@ -778,7 +796,7 @@ function viewHome() {
   const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? 'Your expenses — only the ones you entered. The balances are kept by the admins.' : 'Your expenses — only you and the admins see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
@@ -799,6 +817,8 @@ function viewHome() {
     <div class="mini"><small>Spent today</small>${lines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
     <div class="mini"><small>Spent this month</small>${lines(byCur(E.filter(e => e.at.startsWith(month))))}</div>
   </div>
+  <div class="two" style="margin-top:12px">${can('staff') ? `<button class="btn ghost" data-act="regulars">🔁 Regular payments</button>` : ''}<button class="btn ghost" data-act="banks">🏦 Company bank details</button></div>
+  ${openAdvances().length || can('edit') ? `<button class="btn ghost" data-act="advances" style="margin-top:10px">🏪 Advances with suppliers${openAdvances().length ? ` · ${sumText(openAdvances())} left` : ''}</button>` : ''}
   <div class="sec-head" style="margin-top:22px"><h2 class="sec">Recent</h2><button class="btn small ghost" data-act="tab" data-tab="hist">See all →</button></div>
   ${recent.length ? `<div class="card list">${recent.map(([x, k]) => itemRow(x, k, true)).join('')}</div>` : empty('Nothing here yet', 'Tap <b>Add expense</b> or <b>Money received</b> to start.')}`;
 }
@@ -823,7 +843,7 @@ function itemRow(x, k, showDate) {
   const acct = accountOf(x.mode);
   const sub = [isE ? x.paidTo : x.note, isE ? x.location : '', `${ACCOUNT_ICON[acct]} ${acct}`, ...when].filter(Boolean).map(esc).join(' · ');
   const tags = (x.batch ? '<i class="tag">Bulk</i>' : '') + (x.editedAt ? '<i class="tag">Edited</i>' : '') + (x.manualDate ? '<i class="tag warn">Date set</i>' : '') + (waitingFor(x.id).length ? '<i class="tag warn">Change waiting</i>' : '')
-    + (needsNewPaper(x.id) ? `<i class="tag bad">New ${isE ? (x.pay ? 'slip' : 'voucher') : 'receipt'} needed</i>` : '');
+    + (needsNewPaper(x.id) ? `<i class="tag bad">New ${isE ? (x.pay ? 'slip' : 'voucher') : 'receipt'} needed</i>` : '') + (isE ? advanceTag(x) : '');
   return `<button class="row ${isE ? 'out' : 'in'}" data-act="open" data-kind="${k}" data-id="${esc(x.id)}">
     <span class="dot">${isE ? '−' : '+'}</span>
     <span class="main"><span class="t"><span class="tt">${esc(title)}</span>${tags}</span><span class="s">${sub}</span></span>
@@ -894,6 +914,7 @@ function viewSheet() {
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>${esc(S.company)}<br><span class="muted">Company name${signedIn() ? '' : ', password'} · this device: ${esc(S.dev)}</span></span><button class="btn small ghost" data-act="settings">Change 🔒</button></div>
         <div class="setrow" ${can('settings') && signedIn() ? '' : 'hidden'}><span>My signature<br><span class="muted">On this phone only — for "Approved by", digitally signed</span></span><button class="btn small ghost" data-act="mySig">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : 'Not set'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
+        <div class="setrow" ${can('settings') && S.link ? '' : 'hidden'}><span>Morning email<br><span class="muted">Payments due and documents expiring, every morning</span></span><button class="btn small ghost" data-act="alerts">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : 'Not set — slips get a plain heading'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
         <div class="setrow"><span>Lock now<br><span class="muted">Ask for the password again</span></span><button class="btn small ghost" data-act="lock">🔒 Lock</button></div>
@@ -902,10 +923,12 @@ function viewSheet() {
 }
 
 /* ---------- forms ---------- */
-function expenseForm(old) {
-  const d = old || { cur: defCur(), amount: '', paidTo: '', reason: '', location: S.lastLoc || '', project: S.lastExpProject || '', mode: S.lastMode || 'Cash' };
+// preset: a new expense filled in (paying a regular payment: which one, and the due date it pays)
+function expenseForm(old, preset) {
+  const d = old || { cur: defCur(), amount: '', paidTo: '', reason: '', location: S.lastLoc || '', project: S.lastExpProject || '', mode: S.lastMode || 'Cash', ...preset };
   openSheet(`${head(old ? 'Edit expense' : 'Add expense', 'out', old?.id)}
     <form data-form="expense" data-id="${esc(old?.id || '')}">
+      ${!old && d.regular ? `<p class="note">${esc(d.hint)}</p><input type="hidden" name="regular" value="${esc(d.regular)}"><input type="hidden" name="period" value="${esc(d.period)}">${d.periodsField || ''}` : ''}
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${rateField(d.cur, d.rate)}
@@ -916,19 +939,22 @@ function expenseForm(old) {
       ${accountChips(d.mode, 'Paid from')}
       ${whenField(old?.at, !!old)}
       ${byField()}${approvalNote(old)}
+      ${old || d.regular ? '' : `<label class="fld check"><input type="checkbox" name="advance"> 🏪 Advance to a supplier — goods are taken from it later</label>`}
       ${old ? '' : `<label class="fld check"><input type="checkbox" name="sign"> ✍️ Get their signature now (payment voucher)</label>`}
       <p class="err"></p>
       <button class="btn out">${old ? saveLabel() : 'Save expense'}</button>
     </form>${datalists()}`);
 }
-function creditForm(old, presetProject) {
-  const d = old || { cur: defCur(), amount: '', project: presetProject || S.lastProject || '', mode: 'Bank', note: '' };
+// preset: a new entry filled in (a payment for an invoice: which one)
+function creditForm(old, presetProject, preset) {
+  const d = old || { cur: defCur(), amount: '', project: presetProject || S.lastProject || '', mode: 'Bank', note: '', ...preset };
   openSheet(`${head(old ? 'Edit money received' : 'Money received', 'in', old?.id)}
     <form data-form="credit" data-id="${esc(old?.id || '')}">
+      ${!old && d.invoice ? `<p class="note">${esc(d.hint)}</p><input type="hidden" name="invoice" value="${esc(d.invoice)}">` : ''}
       ${curChips(d.cur)}
       ${amountField(d.amount, d.cur)}
       ${rateField(d.cur, d.rate)}
-      ${projectSelect(d.project, false)}
+      ${projectSelect(d.project, !!d.invoice)}
       ${accountChips(d.mode, 'Received into')}
       ${textField('note', 'Note', 'e.g. 2nd installment', d.note, false)}
       ${whenField(old?.at, !!old)}
@@ -1019,6 +1045,7 @@ function detail(k, id) {
   openSheet(`${head(look[0], look[1], r.id)}
     <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
     ${waitingNote(id)}
+    ${k === 'E' && !r.deleted ? advanceBlock(r) : ''}
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
     ${k === 'T' || r.deleted ? '' : `${cancelledNote(id)}<div class="two" style="margin-bottom:10px"><button class="btn ${k === 'E' ? 'out' : 'in'}" data-act="slip" data-kind="${k}" data-id="${esc(id)}">🧾 ${k === 'E' ? (r.pay ? 'Slip' : 'Voucher') : 'Receipt'}</button>${attachButton(id, '📎 Attach')}</div>`}
     <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="${k}" data-id="${esc(id)}">🗑 Ask to delete 🔒</button>` : ''}</div>
@@ -1076,7 +1103,7 @@ function saveExpense(f) {
   } else {
     const [[id], seq] = nextIds('E', 1, S.seq);
     update({
-      expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq,
+      expenses: [...S.expenses, { id, ...rec, ...regularFields(v), ...(v.advance && !v.regular ? { advance: true, advanceTotal: rec.amount } : {}), by, createdAt: stampSec(), batch: null }], seq,
       log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('E', rec)}`]], by) : S.log,
       lastLoc: rec.location, lastMode: rec.mode, lastExpProject: rec.project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
     });
@@ -1084,6 +1111,12 @@ function saveExpense(f) {
     if (v.sign) { render(); return slipSheet('E', id); }
   }
   closeSheet(); render();
+}
+// paying a regular payment: which one, the due date it pays, and how many periods at once
+function regularFields(v) {
+  if (!regularOf(v.regular) || !DATE_RE.test(v.period)) return {};
+  const n = Math.round(+v.periods || 1);
+  return { regular: v.regular, period: v.period, ...(n > 1 && n <= PAY_PERIODS ? { periods: n } : {}) };
 }
 function saveMove(f) {
   const v = Object.fromEntries(new FormData(f));
@@ -1166,7 +1199,7 @@ function saveCredit(f) {
   if (amount === null) return formErr(f, 'amount', 'Type a correct amount, like 50000');
   const by = clean(v.by);
   const [project, projects, seq0] = projectFromForm(v);
-  if (!project) return formErr(f, 'newProject', 'Type the new project name');
+  if (project === null || project === undefined) return formErr(f, 'newProject', 'Type the new project name'); // '' = general: only offered for an invoice's payment
   if (!by) return formErr(f, 'by', 'Type your name');
   const cur = formCur(f), rate = rateFrom(f, cur);
   if (rate === null) return formErr(f, 'rate', RATE_ERR);
@@ -1182,7 +1215,7 @@ function saveCredit(f) {
   } else {
     const [[id], seq] = nextIds('R', 1, S.seq);
     update({
-      credits: [...S.credits, { id, ...rec, by, createdAt: stampSec() }], seq, lastProject: project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
+      credits: [...S.credits, { id, ...rec, ...(invOf(v.invoice) ? { invoice: v.invoice } : {}), by, createdAt: stampSec() }], seq, lastProject: project, lastBy: by, lastCur: rec.cur, ...(rate ? { lastRate: rate } : {}),
       log: rec.manualDate ? logWith([['Old date', id, `Added with date ${fmtAbs(rec.at)} (password used) — ${describe('R', rec)}`]], by) : S.log,
     });
     toast(`Saved ✓ ${money(amount, rec.cur)} received`);
@@ -1268,7 +1301,7 @@ async function doSetup(f) {
   const v = Object.fromEntries(new FormData(f));
   if (v.pw !== v.pw2) return formErr(f, 'pw2', "The two passwords don't match.");
   const salt = randHex();
-  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
+  S = { v: 2, company: clean(v.company), pass: { salt, hash: await hashPw(v.pw, salt) }, ...noRecords(), kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: Date.now(), link: null, createdAt: stampSec(), lastBackup: null };
   save();
   navigator.storage?.persist?.();
   render(); scrollTo(0, 0); toast('All set! Add your first entry.');
@@ -1359,6 +1392,85 @@ function inWage(p, cur) {
 }
 
 const dayAfter = d => { const [y, m, dd] = d.split('-').map(Number), t = new Date(Date.UTC(y, m - 1, dd + 1)); return t.toISOString().slice(0, 10); };
+
+/* ---------- regular payments: rent, internet, licence fees ---------- */
+const EVERY_MONTHS = [1, 3, 6, 12];
+// The k-th due date of a payment due every `every` months from `first`, on the same day of the month (or the month's last
+// day when it is shorter: from the 31st it falls on 30 April and 28 February, and is back on the 31st in May).
+function dueOn(first, every, k) {
+  const [y, m, d] = first.split('-').map(Number), t = new Date(Date.UTC(y, m - 1 + k * every, 1));
+  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+}
+const monthNo = d => +d.slice(0, 4) * 12 + +d.slice(5, 7) - 1;
+// which due date (0, 1, 2 …) the stretch a day falls in belongs to: due date k covers its month and the months up to the next
+const stretchOf = (g, d) => Math.floor((monthNo(d) - monthNo(g.first)) / g.every);
+// Where a regular payment stands today: the oldest due date not paid yet (next), and how many due dates before today are
+// unpaid (late). pays = what its payments were for: { period: the due date paid, periods: how many in a row (6 months of
+// rent at once) } (or just the due date). A payment counts for the stretch it falls in, so moving the due day (the 1st to
+// the 5th) keeps the months already paid.
+function regularDue(g, pays, today) {
+  const paid = new Set();
+  pays.forEach(p => { const d = typeof p === 'string' ? p : p.period, n = (p && p.periods) || 1, k = stretchOf(g, d); for (let i = Math.max(0, k); i < k + n; i++) paid.add(i); });
+  let next = '', late = 0;
+  for (let k = 0; k < 1200; k++) {
+    if (paid.has(k)) continue;
+    const d = dueOn(g.first, g.every, k);
+    if (!next) next = d;
+    if (d < today) late++; else break;
+  }
+  return { next, late };
+}
+
+// Payments that look like a regular payment, for the owner to confirm: the same payee and currency, paid again and again
+// about every 1, 3, 6 or 12 months for a similar amount (a whole multiple of it counts as several periods paid at once).
+// Each suggestion lists its payments and the due date each one pays. Frequent buying from one shop (several times a
+// month, or amounts all over the place) is not regular.
+const EVERY_OF_GAP = g => (g < 0.5 ? 0 : g < 2 ? 1 : g < 4.5 ? 3 : g < 9 ? 6 : g <= 15 ? 12 : 0);
+const median = a => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+function findRegulars(expenses) {
+  const groups = new Map();
+  expenses.filter(e => !e.deleted && !e.regular && !e.worker && !e.pay && !e.advance && !e.from && String(e.paidTo || '').trim())
+    .forEach(e => { const key = `${String(e.paidTo).trim().toLowerCase().replace(/\s+/g, ' ')}|${e.cur}`; (groups.get(key) || groups.set(key, []).get(key)).push(e); });
+  const out = [];
+  for (const [key, list] of groups) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => a.at.localeCompare(b.at));
+    const unit = median(list.map(e => e.amount));
+    const periodsOf = a => { if (Math.abs(a - unit) <= unit * 0.15) return 1; const n = Math.round(a / unit); return n >= 2 && n <= 12 && Math.abs(a - n * unit) <= unit * n * 0.05 ? n : 0; };
+    const items = list.map(e => ({ e, n: periodsOf(e.amount) })).filter(x => x.n);
+    if (items.length < 2) continue;
+    const gaps = items.slice(1).map((x, i) => (monthNo(x.e.at) - monthNo(items[i].e.at)) / items[i].n);
+    const every = EVERY_OF_GAP(median(gaps));
+    if (!every || (every === 1 && items.length < 3)) continue;
+    if (gaps.filter(g => Math.abs(g - every) <= Math.max(1, every * 0.34)).length < gaps.length * 0.6) continue; // not steady enough
+    const g = { first: items[0].e.at.slice(0, 10), every }, taken = new Set();
+    const pays = items.map(({ e, n }) => {
+      let k = Math.max(0, stretchOf(g, e.at));
+      while (taken.has(k)) k++;
+      for (let i = k; i < k + n; i++) taken.add(i);
+      return { id: e.id, period: dueOn(g.first, every, k), ...(n > 1 ? { periods: n } : {}) };
+    });
+    const most = f => { const c = new Map(); items.forEach(({ e }) => c.set(e[f] || '', (c.get(e[f] || '') || 0) + 1)); return [...c].sort((a, b) => b[1] - a[1])[0][0]; };
+    out.push({ key, paidTo: items[items.length - 1].e.paidTo, cur: items[0].e.cur, amount: Math.round(unit * 100) / 100, every, first: g.first, reason: most('reason'), mode: most('mode'), project: most('project'), pays });
+  }
+  return out.sort((a, b) => b.pays.length - a.pays.length);
+}
+
+/* ---------- invoices and quotations ---------- */
+// The money on an invoice: each line is quantity × unit price to the cent; tax (a percentage, 0 = none) on their sum.
+function invoiceTotals(inv) {
+  const sub = inv.items.reduce((t, it) => t + Math.round(it.qty * it.price * 100), 0), tax = inv.tax > 0 ? Math.round(sub * inv.tax / 100) : 0;
+  return { sub: sub / 100, tax: tax / 100, total: (sub + tax) / 100 };
+}
+// What has been received for it (money received entries that name it, in its currency) and what is still owed.
+function invoiceState(inv, credits, today) {
+  const total = invoiceTotals(inv).total;
+  const paid = credits.filter(c => c.invoice === inv.id && !c.deleted && c.cur === inv.cur).reduce((t, c) => t + Math.round(c.amount * 100), 0);
+  const due = Math.max(0, Math.round(total * 100) - paid) / 100;
+  const state = inv.cancelled ? 'cancelled' : due === 0 ? 'paid' : inv.due && inv.due < today ? 'overdue' : paid ? 'part' : 'unpaid';
+  return { total, paid: paid / 100, due, state };
+}
 
 // An employee's account: wage earned month by month (less days not worked: the dated ones recorded for them, plus
 // the number older salary payments carried),
@@ -1452,8 +1564,8 @@ const MAX_FILE = 8 * 1024 * 1024; // the sheet script refuses bigger files
 const PHOTO_SIDE = 1600; // photos are shrunk on the phone: quicker to upload, still sharp on a slip
 const PDF_Q = 0.8; // slips and statements: side by side at 2× it looks the same as 0.9, and is a quarter smaller (quicker to upload)
 const TAKEN_PHOTO = [1280, 0.8]; // the payment photo as taken: a person and money, not small print — a third smaller than other photos
-const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑' };
-const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement' };
+const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑', document: '📄', invoice: '🧾', quote: '📝' };
+const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document', invoice: 'Invoice', quote: 'Quotation' };
 let outbox = [];          // files waiting to upload (their details; the bytes stay in IndexedDB)
 let uploading = false, uploadErr = '';
 let shown = null;         // the file on screen, kept in memory so "Send" opens the share sheet straight from the tap
@@ -1546,7 +1658,8 @@ const SIGNED_TYPES = ['voucher', 'receipt', 'slip'];
 // What the person signed for: the money, and who received it. Anything else (paid from cash or bank, the date, what it was
 // for, the project, the rate) is the office's own record: changing it leaves the signed paper as it is, since it may be with
 // the client already (owner, 10 Oct 2026, after Bank → Cash cancelled a voucher: "cancel only if I change the voucher").
-const signedFacts = (k, r) => JSON.stringify([r.amount, r.cur, k === 'R' ? '' : r.paidTo]);
+// an advance to a supplier: what they signed for is the whole advance, however much has been taken from it since
+const signedFacts = (k, r) => JSON.stringify([r.advanceTotal || r.amount, r.cur, k === 'R' ? '' : r.paidTo]);
 function cancelSigned(was) {
   const changed = new Map(); // entry id → the entry as it was signed
   [['E', 'expenses'], ['R', 'credits']].forEach(([k, key]) => {
@@ -1721,7 +1834,8 @@ async function uploadFiles() {
         await filePut(rec);
       }
       let res;
-      try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data) }); }
+      // key: sent again after a lost answer, the sheet answers with the copy it already made (no second copy)
+      try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data), key: rec.id }); }
       catch (e) { uploadErr = await uploadFailure(e); break; }
       // a reply without the file's Drive number is not an upload (a record without one could never be filed): try again later
       if (!/^[\w-]{10,100}$/.test(String(res.fileId || ''))) { uploadErr = 'the Google Sheet did not give the file its Drive number — it tries again by itself.'; break; }
@@ -1840,7 +1954,8 @@ function checkPaper(f) {
   const no = clean(f.elements.no.value).toUpperCase(), code = clean(f.elements.code.value).toUpperCase().replace(/[^0-9A-Z]/g, '');
   const p = live(S.files).filter(x => String(x.no || '').toUpperCase() === no).pop(), box = $('.check-result', f);
   if (!p) { box.innerHTML = `<p class="note">❌ No paper ${esc(no)} was made in the app — or it hasn't reached this phone yet (sync, then check again).</p>`; return; }
-  const en = entryOf(p.for), w = workerOf(p.for), about = en ? whatIs(en[0], en[1]) : w ? `Employee ${w.name}` : p.for;
+  const en = entryOf(p.for), w = workerOf(p.for), inv = invOf(p.for), k = inv && clientOf(inv.client);
+  const about = en ? whatIs(en[0], en[1]) : w ? `Employee ${w.name}` : inv ? `${inv.type === 'quote' ? 'Quotation' : 'Invoice'} for ${k ? k.name : '—'}, ${money(invoiceTotals(inv).total, inv.cur)}, dated ${fmtDate(inv.date)}` : p.for;
   const open = `<button type="button" class="btn ghost" data-act="showFile" data-id="${esc(p.id)}" style="margin-top:8px">Open the original to compare</button>`;
   if (!p.check) { box.innerHTML = `<p class="note">ℹ️ ${esc(no)} was made before check codes. Compare the paper with the original.</p><p class="muted">${esc(about)}</p>${open}`; return; }
   if (code !== p.check.replace('-', '')) { box.innerHTML = `<p class="note">⚠️ <b>NOT GENUINE:</b> the check code does not match ${esc(no)}. The real one is for: ${esc(about)}.</p>${open}`; return; }
@@ -2315,11 +2430,13 @@ async function renderSlip(s) {
 }
 
 /* ---------- statements: every entry for one person or project, on as many pages as it takes ---------- */
-/* st = { title, no, date, info: [[label, value]], sections: [{ title, cols: [{ h, w, right }], rows: [[cell]], total: [label, value] }],
-          summary: [[label, value, strong]], verdict: { text, good } | null, sign: { label, name, sig, photo } | null, preparedBy, ref } */
+/* st = { title, no, date, info: [[label, value]], sections: [{ title, cols: [{ h, w, right, wrap }], rows: [[cell]], total: [label, value] }],
+          summary: [[label, value, strong]], verdict: { text, good } | null, notes: [[heading, [line]]] | null,
+          sign: { label, name, sig, photo } | null, approvals: true (prepared/checked/approved and the stamp, no signature box),
+          preparedBy, preparedSign, checkedBy, approval, stampDate, check, ref } */
 const fitText = (g, t, w) => { t = String(t ?? ''); if (g.measureText(t).width <= w) return t; while (t && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; };
 async function renderStatement(st) {
-  const [lh, stampImg, logo, wm] = await Promise.all([letterheadImage(), st.sign ? brandImage('stamp') : null, wideLogo(), watermark()]);
+  const [lh, stampImg, logo, wm] = await Promise.all([letterheadImage(), st.sign || st.approvals ? brandImage('stamp') : null, wideLogo(), watermark()]);
   const C = SLIP_C, L = 90, R = SLIP_W - 90, W = R - L, top = lh ? 268 : 200, limit = SLIP_H - 80, pages = [];
   let g, y;
   const page = () => {
@@ -2363,15 +2480,17 @@ async function renderStatement(st) {
     headRow();
     if (!sec.rows.length) { g.fillStyle = C.label; g.font = `italic 22px ${SANS}`; g.fillText('Nothing yet.', L + 14, y + 30); y += 44; }
     sec.rows.forEach((row, ri) => {
-      if (y + 40 > limit - 60) { page(); headRow(); }
-      if (ri % 2) { g.fillStyle = C.stripe; g.fillRect(L, y, W, 40); }
-      row.forEach((cell, i) => {
+      // a wrap column takes as many lines as its text needs, and the row grows with it
+      const cells = row.map((cell, i) => { const c = sec.cols[i]; g.font = `${c.right ? 600 : 500} 22px ${SANS}`; return c.wrap ? wrapText(g, String(cell ?? ''), c.w - 28) : [fitText(g, cell, c.w - 28)]; });
+      const rh = 40 + (Math.max(1, ...cells.map(c => c.length)) - 1) * 30;
+      if (y + rh > limit - 60) { page(); headRow(); }
+      if (ri % 2) { g.fillStyle = C.stripe; g.fillRect(L, y, W, rh); }
+      cells.forEach((lines, i) => {
         const c = sec.cols[i];
         g.fillStyle = C.ink; g.font = `${c.right ? 600 : 500} 22px ${SANS}`;
-        const t = fitText(g, cell, c.w - 28);
-        if (c.right) { g.textAlign = 'right'; g.fillText(t, xs[i] + c.w - 14, y + 27); g.textAlign = 'left'; } else g.fillText(t, xs[i] + 14, y + 27);
+        lines.forEach((t, li) => { if (c.right) { g.textAlign = 'right'; g.fillText(t, xs[i] + c.w - 14, y + 27 + li * 30); g.textAlign = 'left'; } else g.fillText(t, xs[i] + 14, y + 27 + li * 30); });
       });
-      y += 40;
+      y += rh;
     });
     if (sec.total) {
       g.fillStyle = C.navy; g.fillRect(L, y, W, 1.5);
@@ -2397,7 +2516,17 @@ async function renderStatement(st) {
     g.fillStyle = tone; g.font = `700 30px ${SANS}`; spaced(g, st.verdict.text, L + W / 2, y + 49, 2, 'center');
     y += 100;
   }
-  if (st.sign && y + 200 + 120 + 40 > limit) page();
+  // notes under the totals (an invoice's bank details and terms): a heading, then its lines, wrapped to the page
+  for (const [heading, lines] of st.notes || []) {
+    g.font = `500 22px ${SANS}`;
+    const text = lines.flatMap(l => wrapText(g, l, W - 20));
+    if (y + 40 + text.length * 32 > limit) page();
+    slipLabel(g, heading, L, y + 24);
+    g.fillStyle = C.ink; g.font = `500 22px ${SANS}`; text.forEach((t, i) => g.fillText(t, L, y + 58 + i * 32));
+    y += 58 + text.length * 32 + 10;
+  }
+  if ((st.sign || st.approvals) && y + (st.sign ? 320 : 140) + 40 > limit) page();
+  if (st.approvals && !st.sign) y += 110; // room above the lines for the names and saved signatures
   if (st.sign) {
     const s = st.sign, h = 200, split = s.photo ? L + 660 : R;
     g.strokeStyle = C.navy; g.lineWidth = 2.5; g.strokeRect(L, y, W, h);
@@ -2409,6 +2538,8 @@ async function renderStatement(st) {
     g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; g.fillText(s.name, L + 24, lineY + 30);
     g.fillStyle = C.label; g.font = `400 18px ${SANS}`; g.textAlign = 'right'; g.fillText('Signature', L + 24 + lineW, lineY + 30); g.textAlign = 'left';
     y += h + 120;
+  }
+  if (st.sign || st.approvals) {
     const colW = W / 3;
     if (stampImg) drawStamp(g, stampImg, R - 104, y - 45, 180, st.stampDate, stampImg.place); // clear of the page number below
     [['Prepared by', st.preparedBy || '', st.preparedSign], ['Checked by', st.checkedBy || '', null], ['Approved by', st.approval ? st.approval.name : '', st.approval]].forEach(([lab, name, sign], i) => {
@@ -2602,10 +2733,10 @@ const SYNC_TIMEOUT_MS = 45000, SLOWEST_BPS = 4000; // a request gets 45 s plus t
 const APP_URL = 'https://app.b-e-p-l.com/';
 // the order is the order records are sent in: an employee before a change request about them, files last
 // (the sheet only takes a file record whose entry it already has)
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', I: 'invoices', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
-const KINDS_SEEN = 4; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A)
+const KINDS_SEEN = 5; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I)
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string' && okRate(d),
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && okRate(d),
@@ -2615,6 +2746,11 @@ const VALID = {
   C: d => typeof d.id === 'string' && SAFE_ID.test(d.target) && ['E', 'R', 'T', 'P', 'W', 'A'].includes(d.kind) && !!d.after && typeof d.after === 'object' && typeof d.status === 'string' && AT_RE.test(d.at),
   A: d => typeof d.id === 'string' && SAFE_ID.test(d.worker) && DATE_RE.test(d.date),
   W: d => typeof d.id === 'string' && typeof d.name === 'string' && Number.isFinite(d.wage) && CURS.includes(d.cur) && DATE_RE.test(d.start),
+  G: d => typeof d.id === 'string' && typeof d.name === 'string' && typeof d.paidTo === 'string' && Number.isFinite(d.amount) && CURS.includes(d.cur) && EVERY_MONTHS.includes(d.every) && DATE_RE.test(d.first),
+  B: d => typeof d.id === 'string' && typeof d.bank === 'string' && typeof d.number === 'string',
+  V: d => typeof d.id === 'string' && typeof d.title === 'string' && ['company', 'vehicle', 'personal'].includes(d.kind),
+  K: d => typeof d.id === 'string' && typeof d.name === 'string',
+  I: d => typeof d.id === 'string' && ['invoice', 'quote'].includes(d.type) && typeof d.no === 'string' && CURS.includes(d.cur) && DATE_RE.test(d.date) && Array.isArray(d.items) && d.items.every(it => it && typeof it.t === 'string' && Number.isFinite(it.qty) && Number.isFinite(it.price)),
   F: d => typeof d.id === 'string' && /^[\w-]{10,100}$/.test(d.fileId) && typeof d.name === 'string' && FILE_MIMES.includes(d.mime) && SAFE_ID.test(d.for) && typeof d.type === 'string',
 };
 const DATE_RE = /^\d{4}-\d\d-\d\d$/;
@@ -2624,7 +2760,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 14; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 18; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';
@@ -2924,7 +3060,7 @@ async function doJoin(f) {
     return formErr(f, null, /^No internet/.test(e.message) ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
   }
   if (!(res.pull || []).some(p => p.k === 'S')) return formErr(f, null, 'That Google Sheet has no company yet. Connect the main computer first.');
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
+  S = { v: 2, company: '', pass: null, ...noRecords(), kindsSeen: KINDS_SEEN, seq: {}, dev: newDev(), dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { ...link, since: 0, sheet: sheetOk(res.sheet) } };
   applyPull(res.pull);
   S = { ...S, link: { ...S.link, since: res.seq } };
   save(); navigator.storage?.persist?.();
@@ -2945,7 +3081,7 @@ async function joinSignedIn(f, link, username, password) {
     const offline = /^No internet/.test(e.message);
     return formErr(f, offline ? null : 'password', offline ? 'No internet. Joining needs internet once — try again when connected.' : e.message);
   }
-  S = { v: 2, company: '', pass: null, expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [], kindsSeen: KINDS_SEEN, seq: {}, dev, dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { u: link.u, k: '', since: 0, sheet: '', logins: true } };
+  S = { v: 2, company: '', pass: null, ...noRecords(), kindsSeen: KINDS_SEEN, seq: {}, dev, dirty: [], settingsU: 0, createdAt: stampSec(), lastBackup: null, link: { u: link.u, k: '', since: 0, sheet: '', logins: true } };
   await signedInAs(res, password);
   navigator.storage?.persist?.();
   history.replaceState(null, '', location.pathname);
@@ -2978,7 +3114,7 @@ async function disconnect() {
 function migrate(s) {
   const dev = s.dev || newDev();
   const relearn = s.link && (s.kindsSeen || 1) < KINDS_SEEN;
-  return { ...s, dev, transfers: s.transfers || [], changes: s.changes || [], workers: s.workers || [], absences: s.absences || [], files: s.files || [], dirty: s.dirty || [], settingsU: s.settingsU || 1, kindsSeen: KINDS_SEEN,
+  return { ...s, dev, ...Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, s[k] || []])), dirty: s.dirty || [], settingsU: s.settingsU || 1, kindsSeen: KINDS_SEEN,
     link: relearn ? { ...s.link, since: 0 } : (s.link || null), log: s.log.map((l, i) => l.lid ? l : { ...l, lid: `L-${dev}-old${i}` }) };
 }
 
@@ -2995,7 +3131,6 @@ const RIGHTS = {
   manager: ['add', 'suggest', 'date', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval; no money (balances)
   store: ['add'],
 };
-const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [] };
 
 // { token, user: { id, name, username, role }, check: { salt, hash } } — or { out: true, why } once signed out
 let session = loadSession();
@@ -3049,7 +3184,7 @@ async function signOut() {
   saveSession({ out: true }); // the sign-in screen shows at once, so nothing new can be added meanwhile
   closeAll(); render(); dropFileCopies();
   try { await callServer(S.link, { op: 'logout', token }); } catch { /* already signed out on the sheet: fine */ }
-  if (!S.dirty.length) { S = { ...S, ...NOTHING_SEEN, link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
+  if (!S.dirty.length) { S = { ...S, ...noRecords(), link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
   render();
 }
 
@@ -3906,6 +4041,737 @@ function payslipSpec(r) {
     extra: [...(salary ? [['Paid on', slipDay(r)]] : []), ['Paid from', accountOf(r.mode)], ...rateRow(r), ['Employee no.', w.id]], signLabel: 'Received by', signName: w.name };
 }
 
+/* ---------- regular payments: rent, internet, licence fees ---------- */
+// A regular payment (kind G) is something paid again every 1, 3, 6 or 12 months. Paying it is an ordinary expense that
+// names it (regular) and the due date it pays (period), so nothing about what was paid is stored on it: where it stands
+// is worked out from those expenses (calc.js regularDue). Admins set them up; the office manager pays them too.
+const EVERY = { 1: 'Every month', 3: 'Every 3 months', 6: 'Every 6 months', 12: 'Every year' };
+const DUE_SOON_DAYS = 7; // ponytail: a week's notice for all of them; a setting per payment if the owner wants one
+const regularOf = id => S.regulars.find(g => g.id === id && !g.deleted);
+const dueOf = g => regularDue(g, live(S.expenses).filter(e => e.regular === g.id && e.period).map(e => ({ period: e.period, periods: e.periods || 1 })), today());
+const daysTo = d => Math.round((Date.parse(d) - Date.parse(today())) / 864e5);
+const isDueSoon = due => !!due.next && daysTo(due.next) <= DUE_SOON_DAYS;
+function dueText({ next, late }) {
+  const n = daysTo(next);
+  if (late > 1) return `${late} payments late — the oldest was due ${fmtDate(next)}`;
+  if (n < 0) return `${-n} day${n === -1 ? '' : 's'} late — due ${fmtDate(next)}`;
+  return n === 0 ? 'Due today' : n === 1 ? 'Due tomorrow' : n <= DUE_SOON_DAYS ? `Due in ${n} days — ${fmtDay(next)}` : `Next due ${fmtDate(next)}`;
+}
+// what a payment covers: "October 2026", "October 2026 – March 2027", or "1 Oct 2026 – 31 Dec 2026" (n periods from d)
+function periodText(g, d, n = 1) {
+  const k = Math.max(0, stretchOf(g, d)), last = dueOn(g.first, g.every, k + n - 1);
+  if (g.every === 1) return n === 1 ? monthName(d.slice(0, 7)) : `${monthName(d.slice(0, 7))} – ${monthName(last.slice(0, 7))}`;
+  return `${fmtDate(d)} – ${fmtDate(dayBefore(dueOn(g.first, g.every, k + n)))}`;
+}
+// paying a regular payment: how many periods at once (1 … 12); the amount follows unless typed by hand
+const PAY_PERIODS = 12;
+const periodsLabel = (g, n) => (g.every === 12 ? `${n} year${n === 1 ? '' : 's'}` : `${n * g.every} month${n * g.every === 1 ? '' : 's'}`);
+const periodsSelect = g => `<label class="fld"><span>Paying for</span><select name="periods">${Array.from({ length: PAY_PERIODS }, (_, i) => `<option value="${i + 1}">${periodsLabel(g, i + 1)}${i ? ' at once' : ''}</option>`).join('')}</select></label>`;
+function refreshPeriods(f) {
+  const g = regularOf(f.elements.regular.value), n = +f.elements.periods.value || 1;
+  if (!g) return;
+  if (!f.dataset.typed) { f.elements.amount.value = String(Math.round(g.amount * n * 100) / 100); refreshAmount(f.elements.amount); }
+  f.elements.reason.value = `${g.name} — ${periodText(g, f.elements.period.value, n)}`;
+}
+const dueList = () => live(S.regulars).map(g => [g, dueOf(g)]).sort((a, b) => (a[1].next || '9').localeCompare(b[1].next || '9'));
+
+// at the top of Accounts: what is due within a week, or late
+function regularBanners() {
+  if (!can('staff')) return '';
+  const due = dueList().filter(([, d]) => isDueSoon(d));
+  return due.slice(0, 3).map(([g, d]) => `<div class="banner${daysTo(d.next) < 0 ? '' : ' new'}"><span>🔁 <b>${esc(g.name)}</b> · ${money(g.amount, g.cur)} to ${esc(g.paidTo)} — ${esc(dueText(d))}</span><button class="btn small" data-act="payRegular" data-id="${esc(g.id)}">Pay</button></div>`).join('')
+    + (due.length > 3 ? `<div class="banner"><span>🔁 ${due.length - 3} more regular payments are due.</span><button class="btn small" data-act="regulars">See all</button></div>` : '');
+}
+
+// Repeating payments found among the entries (calc.js findRegulars), for an admin to confirm; "not regular" is kept on
+// this phone. Confirming makes the regular payment and links those payments to it, so their months count as paid.
+const regularHints = () => (can('settings') ? findRegulars(live(S.expenses)).filter(s => !(S.notRegular || []).includes(s.key)) : []);
+const suggestionCard = list => (list.length ? `<h3 class="subh">🔎 Found in your past entries</h3><div class="card list inset">${list.map(s => `<div class="sugg">
+    <div><b>${esc(s.reason || s.paidTo)}</b> · ${esc(s.paidTo)}<br><span class="muted">About ${money(s.amount, s.cur)} ${esc(EVERY[s.every].toLowerCase())} · ${s.pays.length} payments since ${fmtDate(s.first)}</span></div>
+    <div class="two"><button class="btn small primary" data-act="useSuggestion" data-key="${esc(s.key)}">Make it a regular payment</button><button class="btn small ghost" data-act="notRegular" data-key="${esc(s.key)}">Not regular</button></div></div>`).join('')}</div>` : '');
+function useSuggestion(key) {
+  const s = regularHints().find(x => x.key === key);
+  if (s) regularForm(null, s);
+}
+function notRegular(key) { update({ notRegular: [...(S.notRegular || []), key] }); regularsSheet(); }
+function regularsSheet() {
+  const list = dueList();
+  openSheet(`${head('Regular payments', 'out')}
+    <p class="hint">Rent, internet, licence fees… Each one shows here a week before it is due. <b>Pay</b> fills in the expense for you.</p>
+    ${can('settings') ? '<button class="btn out" data-act="addRegular">＋ Add a regular payment 🔒</button>' : ''}
+    ${suggestionCard(regularHints())}
+    ${list.length ? `<div class="card list inset" style="margin-top:14px">${list.map(([g, d]) => regularRow(g, d)).join('')}</div>`
+      : `<div style="height:14px"></div>${empty('None yet', can('settings') ? 'Add each one once: what it is, who is paid, how much and how often.' : 'An admin adds them.')}`}`);
+  comeBack(regularsSheet);
+}
+function regularRow(g, d) {
+  const n = d.next ? daysTo(d.next) : 99;
+  return `<button class="row out" data-act="openRegular" data-id="${esc(g.id)}"><span class="dot">🔁</span>
+    <span class="main"><span class="t"><span class="tt">${esc(g.name)}</span>${n < 0 ? '<i class="tag bad">Late</i>' : n <= DUE_SOON_DAYS ? '<i class="tag warn">Due soon</i>' : ''}</span>
+    <span class="s">${esc([g.paidTo, EVERY[g.every], dueText(d)].join(' · '))}</span></span>
+    <span class="amt">${money(g.amount, g.cur)}</span></button>`;
+}
+function regularDetail(id) {
+  const g = regularOf(id);
+  if (!g) return false;
+  const d = dueOf(g), pays = live(S.expenses).filter(e => e.regular === id).sort((a, b) => byAt(b, a));
+  const facts = [['Paid to', g.paidTo], ['How often', EVERY[g.every]], ['First due', fmtDate(g.first)], ['Usually paid from', accountOf(g.mode)], ['Project', g.project && projName(g.project)], ['Note', g.note]];
+  openSheet(`${head(g.name, 'out', id)}
+    <div class="dbig out">${money(g.amount, g.cur)}</div>
+    <p class="note">${esc(dueText(d))}: ${esc(periodText(g, d.next))}.</p>
+    <button class="btn out" data-act="payRegular" data-id="${esc(id)}">💵 Pay ${esc(periodText(g, d.next))}</button>
+    <dl class="facts" style="margin-top:16px">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
+    ${can('settings') ? `<div class="two"><button class="btn ghost" data-act="editRegular" data-id="${esc(id)}">✏️ Edit 🔒</button><button class="btn danger" data-act="delRegular" data-id="${esc(id)}">🗑 Delete 🔒</button></div>` : ''}
+    <h3 class="subh">Paid so far (${pays.length})</h3>
+    ${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">Nothing paid in the app yet.</p>'}`);
+  comeBack(() => regularDetail(id));
+}
+// paying one: the expense form, filled in, for the oldest due date not paid yet
+function payRegular(id) {
+  const g = regularOf(id), d = g && dueOf(g);
+  if (!d || !d.next) return;
+  expenseForm(null, { cur: g.cur, amount: g.amount, paidTo: g.paidTo, reason: `${g.name} — ${periodText(g, d.next)}`, location: '', project: g.project || '', mode: g.mode, regular: g.id, period: d.next, periodsField: periodsSelect(g),
+    hint: `🔁 ${g.name}, ${periodText(g, d.next)} (due ${fmtDate(d.next)}). Change the amount if it is different this time.` });
+}
+
+// sugg: a suggestion found in past entries (its payments are linked on saving)
+function regularForm(old, sugg) {
+  const d = old || (sugg ? { name: sugg.reason, paidTo: sugg.paidTo, cur: sugg.cur, amount: sugg.amount, every: sugg.every, first: sugg.first, mode: accountOf(sugg.mode), project: sugg.project } : { cur: defCur(), amount: '', every: 1, first: today(), mode: 'Bank', project: '' });
+  openSheet(`${head(old ? 'Edit regular payment' : 'New regular payment', 'out', old?.id)}
+    ${sugg ? `<p class="note">Found ${sugg.pays.length} past payments to ${esc(sugg.paidTo)}. Check the details: once saved, those payments are linked to it and their months count as paid.</p>` : ''}
+    <form data-form="regular" data-id="${esc(old?.id || '')}" data-sugg="${esc(sugg ? sugg.key : '')}">
+      ${textField('name', 'What is it?', 'e.g. Land rent, Internet, Trading licence', d.name)}
+      ${textField('paidTo', 'Paid to', 'Who is paid?', d.paidTo)}
+      ${curChips(d.cur)}
+      ${amountField(d.amount, d.cur).replace(' autofocus', '')}
+      <div class="fld"><span>How often? Every…</span><div class="curseg">${EVERY_MONTHS.map(n => `<label><input type="radio" name="every" value="${n}" ${n === +d.every ? 'checked' : ''}><span><b>${n === 12 ? '1 year' : `${n} month${n === 1 ? '' : 's'}`}</b></span></label>`).join('')}</div></div>
+      <label class="fld"><span>${old || sugg ? 'First due date <em>(changing it moves every due date)</em>' : 'When is it due next?'}</span><input type="date" name="first" value="${esc(d.first)}" required></label>
+      ${accountChips(d.mode, 'Usually paid from')}
+      ${projectSelect(d.project, true)}
+      ${textField('note', 'Note', 'e.g. contract number', d.note, false)}
+      <p class="err"></p>
+      <button class="btn out">${old ? 'Save changes' : 'Add regular payment'}</button>
+    </form>${datalists()}`);
+}
+function saveRegular(f) {
+  const v = Object.fromEntries(new FormData(f)), old = regularOf(f.dataset.id), amount = parseAmount(v.amount), every = +v.every;
+  if (!clean(v.name)) return formErr(f, 'name', 'What is it? e.g. Land rent');
+  if (!clean(v.paidTo)) return formErr(f, 'paidTo', 'Who is paid?');
+  if (amount === null) return formErr(f, 'amount', 'Type a correct amount, like 500');
+  if (!EVERY[every]) return formErr(f, null, 'Choose how often');
+  if (!DATE_RE.test(v.first)) return formErr(f, 'first', 'Choose the date it is due');
+  const rec = { name: clean(v.name), paidTo: clean(v.paidTo), cur: formCur(f), amount, every, first: v.first, mode: v.mode === 'Cash' ? 'Cash' : 'Bank', project: v.project || '', note: clean(v.note) };
+  const by = myName() || S.lastBy || '';
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    update({ regulars: S.regulars.map(g => (g.id === old.id ? { ...g, ...rec, editedAt: stampSec(), editedBy: by } : g)), log: logWith([['Edited', old.id, changes.join(' ; ')]], by) });
+    toast('Changes saved ✓');
+    return closeSheet();
+  }
+  const [[id], seq] = nextIds('G', 1, S.seq), sugg = f.dataset.sugg && regularHints().find(s => s.key === f.dataset.sugg);
+  // a suggestion's payments are linked, each to the due date (and how many periods) it paid, counted from this first date
+  const links = new Map(sugg ? sugg.pays.map(p => [p.id, p]) : []);
+  const linked = links.size ? S.expenses.map(e => { const p = links.get(e.id); return p ? { ...e, regular: id, period: dueOn(rec.first, every, Math.max(0, stretchOf({ first: rec.first, every }, p.period))), ...(p.periods ? { periods: p.periods } : {}) } : e; }) : null;
+  update({ regulars: [...S.regulars, { id, ...rec, by, createdAt: stampSec() }], seq, ...(linked ? { expenses: linked } : {}),
+    log: logWith([['Added', id, `Regular payment: ${rec.name} — ${money(amount, rec.cur)} to ${rec.paidTo}, ${EVERY[every].toLowerCase()} from ${fmtDate(rec.first)}${links.size ? ` (${links.size} past payments linked)` : ''}`]], by) });
+  toast(links.size ? `Regular payment added ✓ — ${links.size} past payments linked` : 'Regular payment added ✓');
+  render(); regularsSheet();
+}
+async function deleteRegular(id) {
+  const g = regularOf(id);
+  if (!g || !await unlock('Enter the password to delete this regular payment.')) return;
+  const by = confirmBy(`Delete the regular payment "${g.name}"?\n\nWhat was already paid stays in the accounts. It just stops reminding you.`);
+  if (!by) return;
+  update({ regulars: S.regulars.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Regular payment: ${g.name}`]], by) });
+  toast('Deleted ✓'); closeAll(); render();
+}
+
+/* ---------- the company's bank accounts: copied or sent to a client in one tap ---------- */
+// A bank account (kind B) is only the details someone needs to pay the company — never a balance. Everyone with the app
+// can open them (owner, 11 Oct 2026); only admins add or change them. The real details are typed into the app, so they
+// live in the company Google Sheet and never in this code.
+const bankOf = id => S.banks.find(b => b.id === id && !b.deleted);
+const bankList = () => live(S.banks).sort((a, b) => a.bank.localeCompare(b.bank) || String(a.cur).localeCompare(String(b.cur)));
+const bankLines = b => [['Bank', b.bank], ['Account name', b.accName], ['Account number', b.number], ['Currency', b.cur], ['Branch', b.branch], ['SWIFT code', b.swift], ['', b.note]].filter(([, v]) => v);
+// the text that is copied or sent: what a client types into their bank to pay
+const bankText = list => `${S.company || 'Company'} — bank details\n\n${list.map(b => bankLines(b).map(([k, v]) => (k ? `${k}: ${v}` : v)).join('\n')).join('\n\n')}`;
+const waLink = text => `https://wa.me/?text=${encodeURIComponent(text)}`;
+const shareButtons = (text, act, id) => `<div class="two" style="margin-top:12px"><button class="btn in" data-act="${act}" data-id="${esc(id)}">📋 Copy</button>
+  <a class="btn ghost" href="${esc(waLink(text))}" target="_blank" rel="noopener">💬 Send on WhatsApp</a></div>
+  ${navigator.share ? `<button class="btn ghost" data-act="${act}" data-id="${esc(id)}" data-share="1" style="margin-top:10px">📤 Share another way</button>` : ''}`;
+
+function banksSheet() {
+  const list = bankList();
+  openSheet(`${head('Company bank details', 'in')}
+    <p class="hint">For anyone paying the company. Tap an account to copy it or send it on WhatsApp.</p>
+    ${list.length ? `<div class="card list inset">${list.map(b => `<button class="row in" data-act="openBank" data-id="${esc(b.id)}"><span class="dot">🏦</span>
+      <span class="main"><span class="t"><span class="tt">${esc(b.bank)}</span>${b.cur ? `<i class="tag">${esc(b.cur)}</i>` : ''}</span><span class="s">${esc([b.accName, b.number].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>
+      ${list.length > 1 ? `<h3 class="subh">All ${list.length} accounts together</h3>${shareButtons(bankText(list), 'copyBank', 'all')}` : ''}`
+      : empty('No bank accounts yet', can('settings') ? 'Add each company account once.' : 'An admin adds them.')}
+    ${can('settings') ? '<button class="btn ghost" data-act="addBank" style="margin-top:16px">＋ Add a bank account 🔒</button>' : ''}`);
+  comeBack(banksSheet);
+}
+function bankDetail(id) {
+  const b = bankOf(id);
+  if (!b) return false;
+  openSheet(`${head(b.bank, 'in', b.cur || '')}
+    <dl class="facts">${bankLines(b).map(([k, v]) => `<div><dt>${k || 'Note'}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    ${shareButtons(bankText([b]), 'copyBank', id)}
+    ${can('settings') ? `<div class="two" style="margin-top:18px"><button class="btn ghost" data-act="editBank" data-id="${esc(id)}">✏️ Edit 🔒</button><button class="btn danger" data-act="delBank" data-id="${esc(id)}">🗑 Delete 🔒</button></div>` : ''}`);
+  comeBack(() => bankDetail(id));
+}
+async function copyBank(btn) {
+  const text = bankText(btn.dataset.id === 'all' ? bankList() : [bankOf(btn.dataset.id)].filter(Boolean));
+  if (btn.dataset.share) return navigator.share({ text }).catch(() => {});
+  try { await navigator.clipboard.writeText(text); toast('Bank details copied ✓ Paste them in WhatsApp, SMS or email'); }
+  catch { prompt('Copy the bank details:', text); } // no clipboard here: the text is selected to copy by hand
+}
+
+const CUR_SUGGEST = ['USD', 'SSP', 'UGX', 'KES', 'EUR'];
+function bankForm(old) {
+  const d = old || { accName: S.company || '', cur: 'USD' };
+  openSheet(`${head(old ? 'Edit bank account' : 'New bank account', 'in', old?.id)}
+    <form data-form="bank" data-id="${esc(old?.id || '')}">
+      ${textField('bank', 'Bank', 'e.g. the bank’s full name', d.bank)}
+      ${textField('accName', 'Account name', 'As the bank writes it', d.accName)}
+      ${textField('number', 'Account number', '', d.number)}
+      <label class="fld"><span>Currency of the account</span><input name="cur" value="${esc(d.cur)}" list="dl-cur" maxlength="10" autocomplete="off" autocapitalize="characters" required></label>
+      <datalist id="dl-cur">${CUR_SUGGEST.map(c => `<option value="${c}">`).join('')}</datalist>
+      ${textField('branch', 'Branch', 'e.g. Juba main branch', d.branch, false)}
+      ${textField('swift', 'SWIFT code', 'For payments from abroad', d.swift, false)}
+      ${textField('note', 'Anything else', 'e.g. IBAN, sort code, mobile money number', d.note, false)}
+      <p class="err"></p>
+      <button class="btn in">${old ? 'Save changes' : 'Add bank account'}</button>
+    </form>`);
+}
+function saveBank(f) {
+  const v = Object.fromEntries(new FormData(f)), old = bankOf(f.dataset.id);
+  const rec = { bank: clean(v.bank), accName: clean(v.accName), number: clean(v.number), cur: clean(v.cur).toUpperCase(), branch: clean(v.branch), swift: clean(v.swift).toUpperCase(), note: clean(v.note) };
+  if (!rec.bank) return formErr(f, 'bank', 'Which bank?');
+  if (!rec.accName) return formErr(f, 'accName', 'Type the account name');
+  if (!rec.number) return formErr(f, 'number', 'Type the account number');
+  if (!rec.cur) return formErr(f, 'cur', 'Which currency is the account in?');
+  const by = myName() || S.lastBy || '';
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    update({ banks: S.banks.map(b => (b.id === old.id ? { ...b, ...rec, editedAt: stampSec(), editedBy: by } : b)), log: logWith([['Edited', old.id, changes.join(' ; ')]], by) });
+    toast('Changes saved ✓');
+    return closeSheet();
+  }
+  const [[id], seq] = nextIds('B', 1, S.seq);
+  update({ banks: [...S.banks, { id, ...rec, by, createdAt: stampSec() }], seq, log: logWith([['Added', id, `Bank account: ${rec.bank} (${rec.cur})`]], by) });
+  toast('Bank account added ✓');
+  banksSheet();
+}
+async function deleteBank(id) {
+  const b = bankOf(id);
+  if (!b || !await unlock('Enter the password to delete this bank account.')) return;
+  const by = confirmBy(`Delete ${b.bank} (${b.cur}) from the company bank details?`);
+  if (!by) return;
+  update({ banks: S.banks.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Bank account: ${b.bank} (${b.cur})`]], by) });
+  toast('Deleted ✓'); closeAll(); banksSheet();
+}
+
+/* ---------- the documents vault: licences, vehicle papers, passports — and when they expire ---------- */
+// A document (kind V) is its details; its scan is a file of type 'document' (kept in Drive under 05 DOCUMENTS). Renewing
+// one puts a new scan in place (the old one goes to CHANGES) and moves the dates. Company and vehicle papers are for
+// admins and the office manager; personal ones (IDs, passports) for admins only — the sheet never sends them to anyone
+// else (owner, 11 Oct 2026). The office manager may add papers; only admins change, renew or delete them.
+const DOC_KIND = { company: ['🏢', 'Company documents', 'Licences, certificates, contracts'], vehicle: ['🚚', 'Vehicle documents', 'Registration, insurance, road licence'], personal: ['🪪', 'Personal documents', 'Shareholders’ and staff IDs and passports — admins only'] };
+const DOC_OWNER = { company: ['Belongs to', 'e.g. the company, the Lologo warehouse'], vehicle: ['Vehicle', 'Number plate and type, e.g. KAA 123B truck'], personal: ['Person', 'Whose document is it?'] };
+const docOf = id => S.docs.find(v => v.id === id && !v.deleted);
+const docKinds = () => Object.keys(DOC_KIND).filter(k => k !== 'personal' || can('settings'));
+const remindOf = v => (Number.isFinite(v.remind) ? v.remind : 30);
+// how a document stands: expired, expiring within its reminder days, valid, or no expiry date
+function docState(v) {
+  if (!v.expires) return { tag: '', text: 'No expiry date', soon: false };
+  const n = daysTo(v.expires);
+  if (n < 0) return { tag: '<i class="tag bad">Expired</i>', text: `Expired ${fmtDate(v.expires)}`, soon: true };
+  if (n <= remindOf(v)) return { tag: '<i class="tag warn">Expires soon</i>', text: n === 0 ? 'Expires today' : `Expires in ${n} day${n === 1 ? '' : 's'} — ${fmtDate(v.expires)}`, soon: true };
+  return { tag: '', text: `Valid until ${fmtDate(v.expires)}`, soon: false };
+}
+const scanOf = id => filesFor(id, 'document').filter(f => !isOldVersion(f)).pop();
+
+// on the first page: what has expired or will within its reminder days, and a word about payments due
+function docBanners() {
+  if (!can('staff')) return '';
+  const due = live(S.docs).filter(v => docState(v).soon).sort((a, b) => a.expires.localeCompare(b.expires));
+  const pays = dueList().filter(([, d]) => isDueSoon(d)).length;
+  return due.slice(0, 3).map(v => `<div class="banner${daysTo(v.expires) < 0 ? '' : ' new'}"><span>${DOC_KIND[v.kind][0]} <b>${esc(v.title)}</b>${v.owner ? ` · ${esc(v.owner)}` : ''} — ${esc(docState(v).text)}</span><button class="btn small" data-act="openDoc" data-id="${esc(v.id)}">Open</button></div>`).join('')
+    + (due.length > 3 ? `<div class="banner"><span>📄 ${due.length - 3} more documents expire soon.</span><button class="btn small" data-act="docs">See all</button></div>` : '')
+    + (pays ? `<div class="banner new"><span>🔁 ${pays} regular payment${pays === 1 ? ' is' : 's are'} due or late.</span><button class="btn small" data-act="tab" data-tab="home">See</button></div>` : '');
+}
+
+function docsSheet() {
+  const all = live(S.docs);
+  openSheet(`${head('Documents', '')}
+    <p class="hint">Every paper the company must keep and renew. You get a reminder before each one expires.</p>
+    <button class="btn primary" data-act="addDoc">＋ Add a document</button>
+    ${docKinds().map(k => {
+      const list = all.filter(v => v.kind === k).sort((a, b) => (a.expires || '9').localeCompare(b.expires || '9') || a.title.localeCompare(b.title));
+      return `<h3 class="subh">${DOC_KIND[k][0]} ${DOC_KIND[k][1]} (${list.length})</h3>${list.length ? `<div class="card list inset">${list.map(docRow).join('')}</div>` : `<p class="muted">${DOC_KIND[k][2]}.</p>`}`;
+    }).join('')}`);
+  comeBack(docsSheet);
+}
+function docRow(v) {
+  const st = docState(v);
+  return `<button class="row" data-act="openDoc" data-id="${esc(v.id)}"><span class="dot">${DOC_KIND[v.kind][0]}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(v.title)}</span>${st.tag}</span><span class="s">${esc([v.owner, st.text].filter(Boolean).join(' · '))}</span></span></button>`;
+}
+function docDetail(id) {
+  const v = docOf(id);
+  if (!v) return false;
+  const st = docState(v), scan = scanOf(id), [ownerLabel] = DOC_OWNER[v.kind];
+  const facts = [['Kind', DOC_KIND[v.kind][1]], [ownerLabel, v.owner], ['Number', v.docNo], ['Issued', v.issued && fmtDate(v.issued)], ['Expires', v.expires ? fmtDate(v.expires) : 'No expiry date'], ['Reminder', v.expires ? `${remindOf(v)} days before` : ''], ['Note', v.note]];
+  openSheet(`${head(v.title, '', id)}
+    ${st.soon ? `<p class="note">⚠️ ${esc(st.text)}.${can('settings') ? ' Renew it below once you have the new one.' : ' Tell an admin.'}</p>` : ''}
+    ${scan ? `<button class="btn in" data-act="showFile" data-id="${esc(scan.id)}">📄 Open the document</button>` : '<p class="muted">No scan yet.</p>'}
+    <dl class="facts" style="margin-top:16px">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
+    ${can('settings') ? `<button class="btn out" data-act="renewDoc" data-id="${esc(id)}">🔄 Renew — the new document and its dates 🔒</button>
+      <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="editDoc" data-id="${esc(id)}">✏️ Edit 🔒</button><button class="btn danger" data-act="delDoc" data-id="${esc(id)}">🗑 Delete 🔒</button></div>` : ''}
+    ${filesList(filesFor(id, 'document').filter(isOldVersion), 'Earlier versions')}`);
+  comeBack(() => docDetail(id));
+}
+
+const dateField = (name, label, val, req) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input type="date" name="${name}" value="${esc(val || '')}" ${req ? 'required' : ''}></label>`;
+const scanField = label => `<label class="fld"><span>${label}</span><input type="file" name="scan" accept="image/*,application/pdf" required></label>`;
+function docForm(old, kind) {
+  const d = old || { kind: kind || 'company', remind: 30 }, kinds = old ? [d.kind] : docKinds();
+  openSheet(`${head(old ? 'Edit document' : 'New document', '', old?.id)}
+    <form data-form="doc" data-id="${esc(old?.id || '')}">
+      <div class="fld"><span>What kind?</span><div class="curseg">${kinds.map(k => `<label><input type="radio" name="kind" value="${k}" ${k === d.kind ? 'checked' : ''}><span><b>${DOC_KIND[k][0]} ${DOC_KIND[k][1].split(' ')[0]}</b><small>${k === 'personal' ? 'Admins only' : DOC_KIND[k][2].split(',')[0]}</small></span></label>`).join('')}</div></div>
+      ${textField('title', 'Document', 'e.g. Trading licence, Insurance, Passport', d.title)}
+      <label class="fld"><span class="ownl">${DOC_OWNER[d.kind][0]} <em>(optional)</em></span><input name="owner" value="${esc(d.owner)}" placeholder="${esc(DOC_OWNER[d.kind][1])}" maxlength="120" autocomplete="off"></label>
+      ${textField('docNo', 'Document number', '', d.docNo, false)}
+      ${dateField('issued', 'Issued on', d.issued, false)}
+      ${dateField('expires', 'Expires on', d.expires, false)}
+      <label class="fld"><span>Remind me this many days before it expires</span><input name="remind" inputmode="numeric" value="${esc(remindOf(d))}" maxlength="3" autocomplete="off"></label>
+      ${textField('note', 'Note', 'e.g. where the original paper is kept', d.note, false)}
+      ${old ? '' : scanField('Photo or PDF of the document')}
+      <p class="err"></p>
+      <button class="btn primary">${old ? 'Save changes' : 'Add document'}</button>
+    </form>`);
+}
+// the "Vehicle" / "Person" label follows the kind chosen
+function refreshDocKind(f) {
+  const k = f.elements.kind.value, [label, ph] = DOC_OWNER[k] || DOC_OWNER.company;
+  $('.ownl', f).innerHTML = `${esc(label)} <em>(optional)</em>`;
+  f.elements.owner.placeholder = ph;
+}
+function docFields(f) {
+  const v = Object.fromEntries(new FormData(f)), remind = v.remind === '' ? 30 : Number(v.remind);
+  const rec = { kind: v.kind, title: clean(v.title), owner: clean(v.owner), docNo: clean(v.docNo), issued: v.issued || '', expires: v.expires || '', remind, note: clean(v.note) };
+  if (!DOC_KIND[rec.kind] || (rec.kind === 'personal' && !can('settings'))) return [null, 'Choose what kind of document it is'];
+  if (!rec.title) return [null, 'What is the document called?', 'title'];
+  if (!Number.isInteger(remind) || remind < 0 || remind > 365) return [null, 'Type the number of days, like 30', 'remind'];
+  if (rec.issued && rec.expires && rec.expires < rec.issued) return [null, 'It cannot expire before it was issued', 'expires'];
+  return [rec];
+}
+async function saveDoc(f) {
+  const old = docOf(f.dataset.id), [rec, err, field] = docFields(f);
+  if (!rec) return formErr(f, field || null, err);
+  const by = myName() || S.lastBy || '';
+  if (old) {
+    const changes = diff(old, rec);
+    if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+    update({ docs: S.docs.map(v => (v.id === old.id ? { ...v, ...rec, editedAt: stampSec(), editedBy: by } : v)), log: logWith([['Edited', old.id, changes.join(' ; ')]], by) });
+    toast('Changes saved ✓');
+    return closeSheet();
+  }
+  const file = f.elements.scan.files[0];
+  if (!file) return formErr(f, 'scan', 'Choose the photo or PDF of the document');
+  $('.err', f).textContent = 'Saving…';
+  let p;
+  try { p = await prepareFile(file); } catch (e) { return formErr(f, 'scan', e.message); }
+  const [[id], seq] = nextIds('V', 1, S.seq);
+  update({ docs: [...S.docs, { id, ...rec, by, createdAt: stampSec() }], seq, log: logWith([['Added', id, `Document: ${rec.title}${rec.owner ? ` (${rec.owner})` : ''}${rec.expires ? `, expires ${fmtDate(rec.expires)}` : ''}`]], by) });
+  await keepFile({ for: id, type: 'document', name: p.name, mime: p.mime }, p.data);
+  toast('Document added ✓');
+  docDetail(id);
+}
+function renewForm(id) {
+  const v = docOf(id);
+  if (!v) return;
+  openSheet(`${head(`Renew ${v.title}`, '', id)}
+    <p class="hint">The new document takes the old one's place. The old one is kept in Drive (folder CHANGES).</p>
+    <form data-form="renew" data-id="${esc(id)}">
+      ${scanField('Photo or PDF of the new document')}
+      ${dateField('issued', 'Issued on', '', false)}
+      ${dateField('expires', 'Expires on', '', !!v.expires)}
+      <p class="err"></p>
+      <button class="btn out">Renew</button>
+    </form>`);
+}
+async function saveRenew(f) {
+  const v = docOf(f.dataset.id), file = f.elements.scan.files[0], issued = f.elements.issued.value, expires = f.elements.expires.value;
+  if (!v) return;
+  if (!file) return formErr(f, 'scan', 'Choose the photo or PDF of the new document');
+  if (v.expires && expires <= v.expires) return formErr(f, 'expires', `The new one should expire after ${fmtDate(v.expires)}`);
+  $('.err', f).textContent = 'Saving…';
+  let p;
+  try { p = await prepareFile(file); } catch (e) { return formErr(f, 'scan', e.message); }
+  const old = scanOf(v.id), by = myName() || S.lastBy || '', rec = { issued: issued || '', expires: expires || '' };
+  update({ docs: S.docs.map(x => (x.id === v.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x)),
+    log: logWith([['Renewed', v.id, `${v.title}: ${v.expires ? `expired ${fmtDate(v.expires)} → ` : ''}${expires ? `expires ${fmtDate(expires)}` : 'no expiry date'}`]], by) });
+  await keepFile({ for: v.id, type: 'document', name: p.name, mime: p.mime, ...(old ? { replaces: old.id } : {}) }, p.data);
+  if (old) await setAside(old, 'replaced');
+  toast('Renewed ✓ — the old one is kept');
+  docDetail(v.id);
+}
+async function deleteDoc(id) {
+  const v = docOf(id);
+  if (!v || !await unlock('Enter the password to delete this document.')) return;
+  const by = confirmBy(`Delete "${v.title}" from the documents?\n\nIts scans move to the Drive folder DELETED ENTRIES.`);
+  if (!by) return;
+  update({ docs: S.docs.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Document: ${v.title}`]], by) });
+  toast('Deleted ✓'); closeAll(); docsSheet();
+}
+
+/* ---------- the morning email (admins): where it goes; the sheet sends it every day at about 7 ---------- */
+async function alertsSheet() {
+  openSheet(`${head('Morning email', '')}<p class="muted">Asking the Google Sheet…</p>`);
+  let res;
+  try { res = await callServer(S.link, { op: 'alerts' }); } catch (e) { return openSheet(`${head('Morning email', '')}<p class="note">${esc(e.offline ? 'No internet. Try again when it is on.' : e.message)}</p>`); }
+  const suggest = res.email || (companyContacts().find(([k]) => /mail/i.test(k)) || [])[1] || '';
+  openSheet(`${head('Morning email', '')}
+    <p class="hint">Every morning the Google Sheet emails one list: regular payments due or late, and documents about to expire. Nothing to say — no email.</p>
+    ${res.running ? '<p class="note">✅ It runs every morning at about 7.</p>' : `<p class="note">⚠️ Not running yet. In Apps Script choose <b>allowFiles</b> and press <b>Run</b> once (tick every box on Google's screen). Then come back here.</p>`}
+    <form data-form="alerts">
+      <label class="fld"><span>Send it to</span><input name="email" type="email" value="${esc(suggest)}" placeholder="e.g. office@yourcompany.com" autocomplete="off"></label>
+      <p class="err"></p>
+      <button class="btn primary">Save</button>
+    </form>
+    <button class="btn ghost" data-act="testAlerts" style="margin-top:10px">✉️ Send a test email now</button>`);
+}
+async function saveAlerts(f, test = false) {
+  const email = clean(f.elements.email.value);
+  $('.err', f).textContent = test ? 'Sending…' : 'Saving…';
+  try {
+    const res = await callServer(S.link, { op: 'alerts', email, test });
+    $('.err', f).textContent = '';
+    toast(test ? (res.sent || 'Sent ✓') : res.email ? `Saved ✓ — it goes to ${res.email}` : 'Saved ✓ — no morning email');
+  } catch (e) { formErr(f, 'email', e.offline ? 'No internet. Try again when it is on.' : e.message); }
+}
+
+/* ---------- invoices and quotations (admins only) ---------- */
+// An invoice or a quotation (kind I) goes to a client (kind K). Its lines are quantity × unit price, and tax is a
+// percentage typed on it — none until someone types one (the tax line is "built but hidden"). The sheet numbers invoices
+// in one unbroken series, so making one needs the internet; quotations are numbered by the phone (QT-…) and work offline.
+// Once made it is never edited: a mistake is cancelled (kept, stamped) and a copy made. Payments are Money received
+// entries that name it (invoice), so what each client owes is always worked out, never typed (calc.js invoiceState).
+const invOf = id => S.invoices.find(x => x.id === id && !x.deleted);
+const clientOf = id => S.clients.find(x => x.id === id && !x.deleted);
+const invState = inv => invoiceState(inv, S.credits, today());
+const INV_STATE = { unpaid: ['Unpaid', 'warn'], part: ['Part paid', 'warn'], overdue: ['Overdue', 'bad'], paid: ['Paid', ''], cancelled: ['Cancelled', 'bad'] };
+const madeFrom = id => live(S.invoices).find(x => x.from === id && !x.cancelled); // the invoice made from a quotation
+const lineAmount = it => Math.round(it.qty * it.price * 100) / 100;
+const plusDays = (d, n) => new Date(Date.parse(d) + n * 864e5).toISOString().slice(0, 10);
+const waChat = phone => `https://wa.me/${String(phone).replace(/\D/g, '')}`;
+// what invoices still ask for: all of them, or one client's ({ amount, cur } per invoice, for sumText)
+const owedBy = clientId => live(S.invoices).filter(x => x.type === 'invoice' && (!clientId || x.client === clientId)).map(x => ({ cur: x.cur, amount: invState(x).due })).filter(x => x.amount);
+function invTag(inv) {
+  if (inv.type === 'quote') return inv.cancelled ? '<i class="tag bad">Cancelled</i>' : madeFrom(inv.id) ? '<i class="tag">Invoiced</i>' : inv.due && inv.due < today() ? '<i class="tag">Expired</i>' : '';
+  const [text, tone] = INV_STATE[invState(inv).state];
+  return `<i class="tag ${tone}">${text}</i>`;
+}
+function invRow(x) {
+  const k = clientOf(x.client), st = invState(x);
+  return `<button class="row in" data-act="openInvoice" data-id="${esc(x.id)}"><span class="dot">${x.type === 'quote' ? '📝' : '🧾'}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(x.no)}</span>${invTag(x)}</span><span class="s">${esc([k ? k.name : '—', fmtDate(x.date), x.type === 'invoice' && st.due && !x.cancelled ? `${money(st.due, x.cur)} owed` : ''].filter(Boolean).join(' · '))}</span></span>
+    <span class="amt">${money(st.total, x.cur)}</span></button>`;
+}
+const invList = (list, none) => (list.length ? `<div class="card list inset">${list.map(invRow).join('')}</div>` : `<p class="muted">${none}</p>`);
+
+function salesSheet() {
+  const all = live(S.invoices).sort((a, b) => b.date.localeCompare(a.date) || b.no.localeCompare(a.no));
+  const open = all.filter(x => x.type === 'invoice' && ['unpaid', 'part', 'overdue'].includes(invState(x).state)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9'));
+  const quotes = all.filter(x => x.type === 'quote' && !x.cancelled && !madeFrom(x.id));
+  const done = all.filter(x => !open.includes(x) && !quotes.includes(x)).slice(0, 50), owed = owedBy();
+  openSheet(`${head('Invoices & quotations', 'in')}
+    <div class="two"><button class="btn in" data-act="newInvoice" data-type="invoice">＋ Invoice</button><button class="btn ghost" data-act="newInvoice" data-type="quote">＋ Quotation</button></div>
+    <button class="btn ghost" data-act="clients" style="margin-top:10px">👥 Clients (${live(S.clients).length})</button>
+    <p class="note" style="margin-top:14px">Owed by clients: <b>${owed.length ? sumText(owed) : 'nothing'}</b></p>
+    <h3 class="subh">Waiting for payment (${open.length})</h3>${invList(open, 'Nothing is owed.')}
+    <h3 class="subh">Open quotations (${quotes.length})</h3>${invList(quotes, 'None.')}
+    ${done.length ? `<details class="gone"><summary>Paid, cancelled and invoiced (${done.length})</summary>${invList(done, '')}</details>` : ''}`);
+  comeBack(salesSheet);
+}
+
+/* ---------- clients ---------- */
+function clientsSheet() {
+  const ks = live(S.clients).sort((a, b) => a.name.localeCompare(b.name));
+  openSheet(`${head('Clients', 'in')}
+    <button class="btn in" data-act="addClient">＋ Add a client</button>
+    ${ks.length ? `<div class="card list inset" style="margin-top:14px">${ks.map(k => { const o = owedBy(k.id); return `<button class="row" data-act="openClient" data-id="${esc(k.id)}"><span class="dot">👤</span>
+      <span class="main"><span class="t"><span class="tt">${esc(k.name)}</span></span><span class="s">${esc([k.phone, k.address].filter(Boolean).join(' · '))}</span></span>
+      ${o.length ? `<span class="amt">${sumText(o)}<small>owes</small></span>` : ''}</button>`; }).join('')}</div>`
+      : `<div style="height:14px"></div>${empty('No clients yet', 'Add one here, or while making an invoice.')}`}`);
+  comeBack(clientsSheet);
+}
+function clientDetail(id) {
+  const k = clientOf(id);
+  if (!k) return false;
+  const invs = live(S.invoices).filter(x => x.client === id).sort((a, b) => b.date.localeCompare(a.date)), o = owedBy(id);
+  openSheet(`${head(k.name, 'in', id)}
+    <p class="note">${o.length ? `Owes <b>${sumText(o)}</b>.` : 'Owes nothing.'}</p>
+    <div class="two"><button class="btn in" data-act="newInvoice" data-type="invoice" data-client="${esc(id)}">＋ Invoice</button><button class="btn ghost" data-act="newInvoice" data-type="quote" data-client="${esc(id)}">＋ Quotation</button></div>
+    <dl class="facts" style="margin-top:16px">${[['Phone', k.phone], ['Address', k.address], ['TIN', k.tin], ['Note', k.note]].filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
+    ${k.phone ? `<a class="btn ghost" href="${esc(waChat(k.phone))}" target="_blank" rel="noopener">💬 WhatsApp chat</a>` : ''}
+    <h3 class="subh">Invoices and quotations (${invs.length})</h3>${invList(invs, 'None yet.')}
+    <div class="two" style="margin-top:16px"><button class="btn ghost" data-act="editClient" data-id="${esc(id)}">✏️ Edit</button>${invs.length ? '' : `<button class="btn danger" data-act="delClient" data-id="${esc(id)}">🗑 Delete 🔒</button>`}</div>`);
+  comeBack(() => clientDetail(id));
+}
+function clientForm(old) {
+  const d = old || {};
+  openSheet(`${head(old ? 'Edit client' : 'New client', 'in', old?.id)}
+    <form data-form="client" data-id="${esc(old?.id || '')}">
+      ${textField('name', 'Name', 'Company or person', d.name)}
+      <label class="fld"><span>Phone (WhatsApp) <em>(optional)</em></span><input name="phone" type="tel" value="${esc(d.phone)}" maxlength="30" autocomplete="off"></label>
+      ${textField('address', 'Address', 'Town, street', d.address, false)}
+      ${textField('tin', 'Tax number (TIN)', '', d.tin, false)}
+      ${textField('note', 'Note', '', d.note, false)}
+      <p class="err"></p>
+      <button class="btn in">${old ? 'Save changes' : 'Add client'}</button>
+    </form>`);
+}
+const clientFields = v => ({ name: clean(v.name), phone: clean(v.phone), address: clean(v.address), tin: clean(v.tin), note: clean(v.note) });
+function newClient(rec) {
+  const [[id], seq] = nextIds('K', 1, S.seq), by = myName() || S.lastBy || '';
+  update({ clients: [...S.clients, { id, ...rec, by, createdAt: stampSec() }], seq, log: logWith([['Added', id, `Client: ${rec.name}`]], by) });
+  return id;
+}
+function saveClient(f) {
+  const old = clientOf(f.dataset.id), rec = clientFields(Object.fromEntries(new FormData(f)));
+  if (!rec.name) return formErr(f, 'name', 'Type the client’s name');
+  if (!old) { const id = newClient(rec); toast('Client added ✓'); return clientDetail(id); }
+  const changes = diff(old, rec), by = myName() || S.lastBy || '';
+  if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
+  update({ clients: S.clients.map(k => (k.id === old.id ? { ...k, ...rec, editedAt: stampSec(), editedBy: by } : k)), log: logWith([['Edited', old.id, changes.join(' ; ')]], by) });
+  toast('Changes saved ✓'); closeSheet();
+}
+async function deleteClient(id) {
+  const k = clientOf(id);
+  if (!k || live(S.invoices).some(x => x.client === id) || !await unlock('Enter the password to delete this client.')) return;
+  const by = confirmBy(`Delete the client "${k.name}"?`);
+  if (!by) return;
+  update({ clients: S.clients.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Client: ${k.name}`]], by) });
+  toast('Deleted ✓'); closeAll(); clientsSheet();
+}
+
+/* ---------- making one ---------- */
+const lineRow = (it = {}) => `<div class="iline"><input name="t" placeholder="What — e.g. Cement 42.5, 50 kg bags" value="${esc(it.t)}" maxlength="200" autocomplete="off" aria-label="Description">
+  <div class="iline-n"><input name="qty" inputmode="decimal" placeholder="Qty" value="${esc(it.qty ?? '')}" autocomplete="off" aria-label="Quantity"><input name="unit" placeholder="Unit" value="${esc(it.unit)}" maxlength="20" autocomplete="off" aria-label="Unit, e.g. bags">
+  <input name="price" inputmode="decimal" placeholder="Unit price" value="${esc(it.price ?? '')}" autocomplete="off" aria-label="Unit price"><button type="button" class="x" data-act="delLine" aria-label="Remove line">×</button></div></div>`;
+// src: a quotation to invoice, or an earlier one to copy; client: made from a client's page
+function invoiceForm(type, src, client) {
+  const last = live(S.invoices).filter(x => x.type === type).pop() || {}, ks = live(S.clients).sort((a, b) => a.name.localeCompare(b.name));
+  const d = src ? { ...src } : { client: client || '', cur: defCur(), items: [{}], tax: last.tax || 0, notes: last.notes || '', bank: last.bank || '', project: '' };
+  const fromQuote = src && src.type === 'quote' && type === 'invoice';
+  openSheet(`${head(type === 'quote' ? 'New quotation' : 'New invoice', 'in')}
+    ${fromQuote ? `<p class="note">From quotation ${esc(src.no)}. Check the lines, then make the invoice.</p>` : ''}
+    <form data-form="invoice" data-type="${type}" data-from="${esc(fromQuote ? src.id : '')}">
+      <label class="fld"><span>Client</span><select name="client">${ks.map(k => `<option value="${esc(k.id)}" ${k.id === d.client ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}<option value="__new" ${ks.length ? '' : 'selected'}>＋ New client…</option></select></label>
+      <div class="newk" ${ks.length ? 'hidden' : ''}>${textField('kname', 'New client’s name', 'Company or person', '', false)}<label class="fld"><span>Their phone (WhatsApp) <em>(optional)</em></span><input name="kphone" type="tel" maxlength="30" autocomplete="off"></label></div>
+      <label class="fld"><span>Date</span><input type="date" name="date" value="${today()}" required></label>
+      <label class="fld"><span>${type === 'quote' ? 'Valid until' : 'Pay by'}</span><input type="date" name="due" value="${plusDays(today(), type === 'quote' ? 30 : 14)}"></label>
+      ${curChips(d.cur)}
+      <div class="fld"><span>Lines</span><div class="ilines">${(d.items.length ? d.items : [{}]).map(lineRow).join('')}</div><button type="button" class="btn small ghost" data-act="addLine">＋ Add a line</button></div>
+      <label class="fld"><span>Tax % <em>(optional — empty for none)</em></span><input name="tax" inputmode="decimal" value="${d.tax || ''}" placeholder="e.g. 18" autocomplete="off"></label>
+      <p class="note itotal"></p>
+      <label class="fld"><span>Pay into <em>(printed on it)</em></span><select name="bank"><option value="">— no bank details —</option>${bankList().map(b => `<option value="${esc(b.id)}" ${b.id === d.bank ? 'selected' : ''}>${esc(`${b.bank} · ${b.cur} · ${b.number}`)}</option>`).join('')}</select></label>
+      ${projectSelect(d.project || '', true)}
+      <label class="fld"><span>Notes and terms <em>(optional)</em></span><textarea class="plain" name="notes" rows="3" maxlength="600" placeholder="e.g. Delivery to site included.">${esc(d.notes)}</textarea></label>
+      ${mySigField()}
+      <p class="err"></p>
+      <button class="btn in">Make the ${type === 'quote' ? 'quotation' : 'invoice'} (PDF)</button>
+    </form>`);
+  refreshInvoice($('#sheet form'));
+  showMySigField();
+}
+// the lines typed, and which one is not complete; empty lines are skipped
+function invoiceLines(f) {
+  const rows = $$('.iline', f).map(el => ({ t: clean($('[name=t]', el).value), q: $('[name=qty]', el).value.trim(), unit: clean($('[name=unit]', el).value), p: $('[name=price]', el).value.trim(), el }))
+    .filter(r => r.t || r.q || r.p);
+  const items = rows.map(r => ({ t: r.t, qty: parseAmount(r.q), unit: r.unit, price: parseAmount(r.p) }));
+  const bad = rows.find((r, i) => !items[i].t || items[i].qty === null || items[i].price === null);
+  return { items, bad };
+}
+function refreshInvoice(f) {
+  const { items } = invoiceLines(f), ok = items.filter(it => it.t && it.qty && it.price), tax = parseAmount(f.elements.tax.value) || 0, cur = formCur(f);
+  const t = invoiceTotals({ items: ok, tax });
+  $('.itotal', f).innerHTML = ok.length ? `${ok.length} line${ok.length === 1 ? '' : 's'} · ${tax ? `${money(t.sub, cur)} + tax ${plain(tax)}% ${money(t.tax, cur)} = ` : ''}<b>${money(t.total, cur)}</b>` : 'Type each line: what, quantity, unit price.';
+  $('.newk', f).hidden = f.elements.client.value !== '__new';
+}
+async function saveInvoice(f) {
+  const type = f.dataset.type, v = Object.fromEntries(new FormData(f)), cur = formCur(f), { items, bad } = invoiceLines(f);
+  const tax = v.tax.trim() ? parseAmount(v.tax) : 0, newName = clean(v.kname);
+  if (v.client === '__new' ? !newName : !clientOf(v.client)) return formErr(f, v.client === '__new' ? 'kname' : 'client', 'Who is it for?');
+  if (!items.length) return formErr(f, null, 'Add at least one line: what, quantity and unit price.');
+  if (bad) { $('[name=t]', bad.el).focus(); return formErr(f, null, 'Each line needs what it is, a quantity and a unit price.'); }
+  if (tax === null || tax > 100) return formErr(f, 'tax', 'Type the tax as a percentage, like 18 — or leave it empty');
+  if (!DATE_RE.test(v.date)) return formErr(f, 'date', 'Choose the date');
+  if (v.due && v.due < v.date) return formErr(f, 'due', 'It cannot be due before its date');
+  let no;
+  $('.err', f).textContent = 'Making it…';
+  if (type === 'invoice') { // the next number in the company's one series, from the sheet
+    if (!S.link) return formErr(f, null, 'Invoices are numbered by the Google Sheet. Connect this phone to it first.');
+    try { no = (await callServer(S.link, { op: 'number' })).no; }
+    catch (e) { return formErr(f, null, e.offline ? 'Making an invoice needs the internet: the Google Sheet gives it the next number, so numbers never repeat or skip.' : e.message); }
+  } else { const [[q], seq] = nextIds('QT', 1, S.seq); update({ seq }); no = q; }
+  const client = v.client === '__new' ? newClient({ name: newName, phone: clean(v.kphone), address: '', tin: '', note: '' }) : v.client;
+  const by = myName() || S.lastBy || '', [[id], seq] = nextIds('I', 1, S.seq);
+  const inv = { id, type, no, client, date: v.date, due: v.due || '', cur, items, tax: tax || 0, bank: bankOf(v.bank) ? v.bank : '', project: v.project || '', notes: String(v.notes || '').trim().slice(0, 600),
+    ...(f.dataset.from ? { from: f.dataset.from } : {}), check: newCheck(), by, createdAt: stampSec() };
+  update({ invoices: [...S.invoices, inv], seq, log: logWith([['Made', id, `${type === 'quote' ? 'Quotation' : 'Invoice'} ${no} for ${clientOf(client).name}: ${money(invoiceTotals(inv).total, cur)}`]], by) });
+  await makeInvoicePdf(inv, await approvalFrom(f));
+}
+// the PDF, kept with it (and sent up to Drive), then offered for sending
+async function makeInvoicePdf(inv, approval) {
+  toast('Making the PDF…');
+  try {
+    const blob = await renderStatement(invoiceSpec(inv, approval)), k = clientOf(inv.client), name = `${inv.no} ${fileSafe(k ? k.name : '')}.pdf`;
+    await keepFile({ for: inv.id, type: inv.type, no: inv.no, name, mime: 'application/pdf', check: inv.check }, await blob.arrayBuffer());
+    readySheet(inv.type === 'quote' ? 'QUOTATION' : 'INVOICE', inv.no, blob, name);
+  } catch (e) { alert(`The PDF could not be made: ${e.message}\n\nOpen it from the list to try again.`); invoiceDetail(inv.id); }
+}
+function invoiceSpec(inv, approval) {
+  const k = clientOf(inv.client) || {}, t = invoiceTotals(inv), isQ = inv.type === 'quote', b = bankOf(inv.bank);
+  return { title: isQ ? 'QUOTATION' : 'INVOICE', no: inv.no, date: fmtDate(inv.date), check: inv.check, stampDate: inv.date.split('-').reverse().join('-'), ref: inv.id,
+    info: [[isQ ? 'Quotation for' : 'Bill to', k.name || '—'], [isQ ? 'Valid until' : 'Pay by', inv.due ? fmtDate(inv.due) : '—'], ['Phone', k.phone || '—'], ['Address', k.address || '—'], ...(k.tin ? [['TIN', k.tin]] : [])],
+    sections: [{ title: isQ ? 'Quoted' : 'Items', cols: [{ h: 'Description', w: 430, wrap: true }, { h: 'Qty', w: 110, right: true }, { h: 'Unit', w: 110 }, { h: 'Unit price', w: 190, right: true }, { h: 'Amount', w: 220, right: true }],
+      rows: inv.items.map(it => [it.t, plain(it.qty), it.unit || '', slipMoney(it.price, inv.cur), slipMoney(lineAmount(it), inv.cur)]) }],
+    summary: [...(t.tax ? [['Subtotal', slipMoney(t.sub, inv.cur)], [`Tax ${plain(inv.tax)}%`, slipMoney(t.tax, inv.cur)]] : []), [isQ ? 'Total' : 'Total due', slipMoney(t.total, inv.cur), true]],
+    verdict: null,
+    notes: [['Amount in words', [amountInWords(t.total, inv.cur)]], ...(b ? [['Pay into', bankLines(b).map(([kk, vv]) => (kk ? `${kk}: ${vv}` : vv))]] : []), ...(inv.notes ? [['Notes', inv.notes.split('\n')]] : [])],
+    approvals: true, preparedBy: inv.by || '', preparedSign: approval && approval.name === inv.by ? approval : null, approval };
+}
+
+/* ---------- one invoice or quotation ---------- */
+function invoiceDetail(id) {
+  const inv = invOf(id);
+  if (!inv) return false;
+  const k = clientOf(inv.client), st = invState(inv), t = invoiceTotals(inv), isQ = inv.type === 'quote', made = isQ && madeFrom(id), b = bankOf(inv.bank);
+  const pdfFile = filesFor(id).filter(f => f.type === inv.type).pop(), pays = live(S.credits).filter(c => c.invoice === id).sort(byAt);
+  const status = inv.cancelled ? `Cancelled on ${fmtAbs(String(inv.cancelled).slice(0, 16))}${inv.cancelledBy ? ` by ${inv.cancelledBy}` : ''}${inv.cancelReason ? ` — ${inv.cancelReason}` : ''}.`
+    : isQ ? (made ? `Invoiced as ${made.no}.` : inv.due && inv.due < today() ? `Expired on ${fmtDate(inv.due)}.` : '')
+    : st.state === 'paid' ? '✅ Paid in full.' : `${INV_STATE[st.state][0]}: ${money(st.due, inv.cur)} still owed${inv.due ? ` · pay by ${fmtDate(inv.due)}` : ''}.`;
+  openSheet(`${head(`${isQ ? 'Quotation' : 'Invoice'} ${inv.no}`, 'in', k ? k.name : '')}
+    <div class="dbig in">${money(t.total, inv.cur)}</div>
+    ${status ? `<p class="note">${esc(status)}</p>` : ''}
+    <div class="two">${pdfFile ? `<button class="btn ghost" data-act="showFile" data-id="${esc(pdfFile.id)}">📄 Open or send</button>` : `<button class="btn ghost" data-act="remakeInvoice" data-id="${esc(id)}">📄 Make the PDF</button>`}
+      ${!isQ && !inv.cancelled && st.due ? `<button class="btn in" data-act="payInvoice" data-id="${esc(id)}">💵 Record payment</button>` : ''}
+      ${isQ && !inv.cancelled && !made ? `<button class="btn in" data-act="quoteToInvoice" data-id="${esc(id)}">🧾 Make the invoice</button>` : ''}</div>
+    <dl class="facts" style="margin-top:16px">${[['Client', k && k.name], ['Date', fmtDate(inv.date)], [isQ ? 'Valid until' : 'Pay by', inv.due && fmtDate(inv.due)], ['Pay into', b && `${b.bank} · ${b.number}`], ['Project', inv.project && projName(inv.project)], ['Check code', inv.check]]
+      .filter(x => x[1]).map(([a, v]) => `<div><dt>${a}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    <h3 class="subh">Lines</h3><div class="card list inset">${inv.items.map(it => `<div class="mrow"><span>${esc(it.t)}</span><span class="muted">${plain(it.qty)} ${esc(it.unit || '')} × ${money(it.price, inv.cur)}</span><b>${money(lineAmount(it), inv.cur)}</b></div>`).join('')}</div>
+    ${t.tax ? `<p class="muted">${money(t.sub, inv.cur)} + tax ${plain(inv.tax)}% ${money(t.tax, inv.cur)} = ${money(t.total, inv.cur)}</p>` : ''}
+    ${isQ ? '' : `<h3 class="subh">Payments (${pays.length})</h3>${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}`}
+    ${k && k.phone ? `<a class="btn ghost" style="margin-top:14px" href="${esc(waChat(k.phone))}" target="_blank" rel="noopener">💬 WhatsApp chat with ${esc(k.name)}</a>` : ''}
+    <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="copyInvoice" data-id="${esc(id)}">📋 Copy as new</button>${!inv.cancelled && !pays.length ? `<button class="btn danger" data-act="cancelInvoice" data-id="${esc(id)}">🚫 Cancel 🔒</button>` : ''}</div>`);
+  comeBack(() => invoiceDetail(id));
+}
+function payInvoice(id) {
+  const inv = invOf(id), st = inv && invState(inv), k = inv && clientOf(inv.client);
+  if (!st || !st.due) return;
+  creditForm(null, inv.project, { cur: inv.cur, amount: st.due, note: `${inv.no} — ${k ? k.name : ''}`, invoice: id, hint: `🧾 Payment for invoice ${inv.no}: ${money(st.due, inv.cur)} still owed. Change the amount if they paid part.` });
+}
+async function cancelInvoice(id) {
+  const inv = invOf(id);
+  if (!inv || inv.cancelled || live(S.credits).some(c => c.invoice === id) || !await unlock('Enter the password to cancel it.')) return;
+  const why = clean(prompt(`Why is ${inv.no} cancelled? (printed on the stamped copy)`, 'Made by mistake'));
+  if (!why) return;
+  const by = confirmBy(`Cancel ${inv.no}? It is kept, stamped CANCELLED. Make a copy to send a corrected one.`);
+  if (!by) return;
+  const at = stampSec();
+  update({ invoices: S.invoices.map(x => (x.id === id ? { ...x, cancelled: at, cancelledBy: by, cancelReason: why } : x)), log: logWith([['Cancelled', id, `${inv.no}: ${why}`]], by) });
+  const f = filesFor(id).filter(x => x.type === inv.type && !x.cancelled).pop();
+  if (f) await patchFile(f, { cancelled: at, cancelledBy: by, cancelReason: why });
+  toast('Cancelled ✓ — kept, stamped');
+  invoiceDetail(id);
+}
+async function remakeInvoice(id) {
+  const inv = invOf(id), sig = inv && await mySignature();
+  if (inv) makeInvoicePdf(inv, sig ? { sig, name: myName(), date: fmtDate(today()) } : null);
+}
+
+/* ---------- supplier advances: paid once, goods taken from it over time ---------- */
+// An advance is an expense marked advance: true — money paid to a supplier before the goods. The cash left that day and
+// the supplier signed for the whole amount (advanceTotal). Each time goods are taken, "Take from advance" splits it: a
+// new expense for what was taken (its own reason and project; the advance's day and account, so cash and bank never
+// move) and the advance shrinks by that much. The last piece turns the advance itself into what was taken
+// (advance: false, advanceTotal kept). The signed voucher stays valid: what was signed for is advanceTotal (signedFacts).
+const openAdvances = () => live(S.expenses).filter(e => e.advance);
+const takenFrom = id => live(S.expenses).filter(e => e.from === id).sort(byAt);
+const advanceTag = x => (x.advance ? `<i class="tag warn">Advance · ${esc(money(x.amount, x.cur))} left</i>` : x.from ? '<i class="tag">From advance</i>' : '');
+// entries typed before this existed, that look like an advance to a supplier
+const looksLikeAdvance = e => !e.advance && !e.advanceTotal && !e.from && !e.worker && !e.regular && /advance/i.test(`${e.reason} ${e.paidTo}`);
+
+// on an expense's page: where it stands as an advance, or a way to make it one
+function advanceBlock(r) {
+  if (r.from) {
+    const p = S.expenses.find(x => x.id === r.from);
+    return `<p class="note">🏪 Taken from the advance paid to ${esc(r.paidTo)}${p ? ` on ${esc(fmtDate(p.at.slice(0, 10)))}` : ''}${r.received ? ` · collected ${esc(fmtDate(r.received))}` : ''}.</p>
+      ${p && !p.deleted ? `<button class="btn ghost" data-act="open" data-kind="E" data-id="${esc(p.id)}" style="margin-bottom:10px">🏪 Open the advance</button>` : ''}`;
+  }
+  if (!r.advance && !r.advanceTotal) return can('edit') && !r.worker && !r.regular ? `<button class="btn ghost" data-act="makeAdvance" data-id="${esc(r.id)}" style="margin-bottom:10px">🏪 This was an advance to a supplier</button>` : '';
+  const taken = takenFrom(r.id), total = r.advanceTotal || r.amount, used = minus(total, r.advance ? r.amount : 0);
+  return `<div class="note">🏪 <b>Advance to ${esc(r.paidTo)}</b>: ${money(total, r.cur)} paid · ${money(used, r.cur)} taken · <b>${r.advance ? `${money(r.amount, r.cur)} left` : 'all taken'}</b></div>
+    ${r.advance && can('edit') ? `<button class="btn out" data-act="takeAdvance" data-id="${esc(r.id)}" style="margin:10px 0">➖ Take from the advance</button>` : ''}
+    ${taken.length ? `<h3 class="subh">Taken so far (${taken.length})</h3><div class="card list inset" style="margin-bottom:12px">${taken.map(x => itemRow(x, 'E', true)).join('')}</div>` : ''}`;
+}
+function advancesSheet() {
+  const open = openAdvances().sort(byAt), maybe = can('edit') ? live(S.expenses).filter(looksLikeAdvance).sort((a, b) => byAt(b, a)).slice(0, 20) : [];
+  openSheet(`${head('Advances with suppliers', 'out')}
+    <p class="hint">Money paid to a supplier before the goods. Each time you collect something, open the advance and tap <b>Take from the advance</b>.</p>
+    ${open.length ? `<p class="note">Still with suppliers: <b>${sumText(open)}</b></p><div class="card list inset">${open.map(x => itemRow(x, 'E', true)).join('')}</div>` : empty('No open advances', 'Tick "Advance to a supplier" when you add the payment.')}
+    ${maybe.length ? `<h3 class="subh">Entries that look like advances</h3><p class="muted">Open one and tap "This was an advance to a supplier".</p><div class="card list inset">${maybe.map(x => itemRow(x, 'E', true)).join('')}</div>` : ''}`);
+  comeBack(advancesSheet);
+}
+async function makeAdvance(id) {
+  const r = S.expenses.find(x => x.id === id && !x.deleted);
+  if (!r || !await unlock('Enter the password to mark this as an advance.')) return;
+  if (!confirm(`Mark ${money(r.amount, r.cur)} to ${r.paidTo} as an advance?\n\nThen each time goods are collected you take them from it, and it shows what is left.`)) return;
+  const by = myName() || S.lastBy || '';
+  update({ expenses: S.expenses.map(x => (x.id === id ? { ...x, advance: true, advanceTotal: x.amount, editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', id, `Marked as an advance to ${r.paidTo} (${money(r.amount, r.cur)})`]], by) });
+  toast('Marked as an advance ✓');
+  detail('E', id);
+}
+function takeForm(id) {
+  const r = S.expenses.find(x => x.id === id && x.advance && !x.deleted);
+  if (!r) return;
+  openSheet(`${head('Take from the advance', 'out', `${r.paidTo} · ${money(r.amount, r.cur)} left`)}
+    <form data-form="take" data-id="${esc(id)}">
+      ${amountField('', r.cur, 'amount', `Worth (up to ${money(r.amount, r.cur)})`)}
+      ${textField('reason', 'What did you collect?', 'e.g. Steel 16mm, 100 bars', '')}
+      ${projectSelect(r.project, true)}
+      <label class="fld"><span>Collected on</span><input type="date" name="received" value="${today()}" max="${today()}" required></label>
+      <p class="muted">No money moves now: it left when the advance was paid.</p>
+      <p class="err"></p>
+      <button class="btn out">Take it from the advance</button>
+    </form>${datalists()}`);
+}
+function saveTake(f) {
+  const r = S.expenses.find(x => x.id === f.dataset.id && x.advance && !x.deleted);
+  if (!r) return closeSheet();
+  const v = Object.fromEntries(new FormData(f)), amount = parseAmount(v.amount), reason = clean(v.reason), project = v.project || '';
+  if (amount === null) return formErr(f, 'amount', 'Type what it was worth, like 300');
+  if (cents(amount) > cents(r.amount)) return formErr(f, 'amount', `Only ${money(r.amount, r.cur)} is left of this advance. Take that much, and add the rest as a normal payment.`);
+  if (!reason) return formErr(f, 'reason', 'What did you collect?');
+  const received = DATE_RE.test(v.received) ? v.received : today(), by = myName() || S.lastBy || '', total = r.advanceTotal || r.amount, at = stampSec();
+  const what = `Took ${money(amount, r.cur)} from the advance to ${r.paidTo}: ${reason}`;
+  if (cents(amount) === cents(r.amount)) { // the last of it: the advance itself becomes what was collected
+    update({ expenses: S.expenses.map(x => (x.id === r.id ? { ...x, advance: false, advanceTotal: total, reason, project, received, editedAt: at, editedBy: by } : x)), log: logWith([['Edited', r.id, `${what} — the advance is used up`]], by) });
+  } else {
+    const [[id], seq] = nextIds('E', 1, S.seq);
+    const piece = { id, cur: r.cur, ...(r.rate ? { rate: r.rate } : {}), amount, paidTo: r.paidTo, reason, location: r.location || '', project, mode: r.mode, at: r.at, manualDate: r.manualDate || false, from: r.id, received, by, createdAt: at };
+    update({ expenses: [...S.expenses.map(x => (x.id === r.id ? { ...x, amount: minus(r.amount, amount), advanceTotal: total, editedAt: at, editedBy: by } : x)), piece], seq, log: logWith([['Edited', r.id, what]], by) });
+  }
+  toast('Taken from the advance ✓');
+  detail('E', r.id);
+}
+
 /* ---------- import old entries (paste rows from a list or sheet) ---------- */
 // One entry per line: Date | Currency | Amount | Paid to | Reason | Location | Project | Paid from | Entered by
 // "Paid from" is Cash or Bank. Writing "Cash → Bank" (or "Bank → Cash") there makes the line a move
@@ -4224,9 +5090,49 @@ const ACTIONS = {
   workerStatement: b => workerStatement(b.dataset.id),
   projectStatement: b => projectStatement(b.dataset.id),
   payeeStatement: b => payeeStatement(b.dataset.name),
+  regulars: () => regularsSheet(),
+  addRegular: async () => { if (await unlock('Enter the password to add a regular payment.')) regularForm(); },
+  openRegular: b => regularDetail(b.dataset.id),
+  editRegular: async b => { if (await unlock('Enter the password to change this regular payment.')) regularForm(regularOf(b.dataset.id)); },
+  delRegular: b => deleteRegular(b.dataset.id),
+  payRegular: b => payRegular(b.dataset.id),
+  banks: () => banksSheet(),
+  addBank: async () => { if (await unlock('Enter the password to add a bank account.')) bankForm(); },
+  openBank: b => bankDetail(b.dataset.id),
+  editBank: async b => { if (await unlock('Enter the password to change this bank account.')) bankForm(bankOf(b.dataset.id)); },
+  delBank: b => deleteBank(b.dataset.id),
+  copyBank: b => copyBank(b),
+  docs: () => docsSheet(),
+  addDoc: () => docForm(),
+  openDoc: b => docDetail(b.dataset.id),
+  editDoc: async b => { if (await unlock('Enter the password to change this document.')) docForm(docOf(b.dataset.id)); },
+  renewDoc: async b => { if (await unlock('Enter the password to renew this document.')) renewForm(b.dataset.id); },
+  delDoc: b => deleteDoc(b.dataset.id),
+  alerts: async () => { if (await unlock('Enter the password to change the morning email.')) alertsSheet(); },
+  testAlerts: () => saveAlerts($('#sheet form[data-form=alerts]'), true),
+  sales: () => salesSheet(),
+  newInvoice: b => invoiceForm(b.dataset.type, null, b.dataset.client),
+  clients: () => clientsSheet(),
+  addClient: () => clientForm(),
+  openClient: b => clientDetail(b.dataset.id),
+  editClient: b => clientForm(clientOf(b.dataset.id)),
+  delClient: b => deleteClient(b.dataset.id),
+  openInvoice: b => invoiceDetail(b.dataset.id),
+  payInvoice: b => payInvoice(b.dataset.id),
+  quoteToInvoice: b => invoiceForm('invoice', invOf(b.dataset.id)),
+  copyInvoice: b => { const x = invOf(b.dataset.id); if (x) invoiceForm(x.type, x); },
+  cancelInvoice: b => cancelInvoice(b.dataset.id),
+  remakeInvoice: b => remakeInvoice(b.dataset.id),
+  addLine: () => { $('.ilines').insertAdjacentHTML('beforeend', lineRow()); $('.iline:last-child input').focus(); },
+  advances: () => advancesSheet(),
+  makeAdvance: b => makeAdvance(b.dataset.id),
+  takeAdvance: async b => { if (await unlock('Enter the password to take from the advance.')) takeForm(b.dataset.id); },
+  useSuggestion: b => useSuggestion(b.dataset.key),
+  notRegular: b => notRegular(b.dataset.key),
+  delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -4261,7 +5167,9 @@ document.addEventListener('input', e => {
   if (t.name === 'rate' && t.form) refreshRate(t.form);
   if (t.name === 'zoom' && t.form && t.form._frame) zoomFramer(t.form, +t.value);
   if (t.form && t.form.dataset.form === 'pay') { if (t.name === 'amount') t.form.dataset.typed = '1'; refreshPay(t.form, t); }
+  if (t.form && t.form.dataset.form === 'expense' && t.name === 'amount') t.form.dataset.typed = '1'; // a regular payment's amount no longer follows the periods
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
+  if (t.form && t.form.dataset.form === 'invoice') refreshInvoice(t.form);
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
   if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
@@ -4281,6 +5189,9 @@ document.addEventListener('change', e => {
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
+  if (t.name === 'kind' && t.form && t.form.dataset.form === 'doc') refreshDocKind(t.form);
+  if (t.name === 'periods' && t.form && t.form.dataset.form === 'expense') refreshPeriods(t.form);
+  if (t.form && t.form.dataset.form === 'invoice') refreshInvoice(t.form);
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }

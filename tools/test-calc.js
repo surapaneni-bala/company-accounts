@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ TextEncoder });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd };', ctx);
-const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd } = ctx.api;
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars };', ctx);
+const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars } = ctx.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 
 /* ---------- days on a 30-day month: joining and leaving days both count, day 31 counts as day 30 ---------- */
@@ -101,5 +101,46 @@ const at2 = two.lastIndexOf('\nxref\n') + 1, rows2 = two.slice(at2).split('\n');
 assert.strictEqual(rows2[1], '0 9', 'catalog, page list and 3 objects per page');
 rows2.slice(3, 11).map(r => Number(r.slice(0, 10))).forEach((o, i) => assert.ok(two.startsWith(`${i + 1} 0 obj`, o), `object ${i + 1} is where the xref says`));
 assert.strictEqual(Number(two.slice(two.indexOf('startxref') + 10).trim().split('\n')[0]), at2);
+
+/* ---------- regular payments: due dates every 1, 3, 6 or 12 months, and what is paid ---------- */
+assert.deepStrictEqual([0, 1, 2, 3].map(k => dueOn('2026-01-31', 1, k)), ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30'], 'the 31st falls on the last day of a shorter month, and comes back');
+assert.deepStrictEqual([0, 1, 2].map(k => dueOn('2026-11-15', 3, k)), ['2026-11-15', '2027-02-15', '2027-05-15'], 'every 3 months, across the year end');
+assert.strictEqual(dueOn('2024-02-29', 12, 1), '2025-02-28', 'every year from 29 February');
+const rent = { first: '2026-09-01', every: 1 };
+assert.deepStrictEqual(plain(regularDue(rent, [], '2026-08-20')), { next: '2026-09-01', late: 0 }, 'not due yet');
+assert.deepStrictEqual(plain(regularDue(rent, [], '2026-09-01')), { next: '2026-09-01', late: 0 }, 'due today is not late');
+assert.deepStrictEqual(plain(regularDue(rent, [], '2026-10-11')), { next: '2026-09-01', late: 2 }, 'September and October unpaid: the oldest comes first');
+assert.deepStrictEqual(plain(regularDue(rent, ['2026-09-01'], '2026-10-11')), { next: '2026-10-01', late: 1 }, 'September paid');
+assert.deepStrictEqual(plain(regularDue(rent, ['2026-09-01', '2026-10-01'], '2026-10-11')), { next: '2026-11-01', late: 0 }, 'paid up: the next one');
+assert.deepStrictEqual(plain(regularDue(rent, ['2026-09-01', '2026-10-01', '2026-11-01'], '2026-10-11')), { next: '2026-12-01', late: 0 }, 'paid ahead');
+assert.deepStrictEqual(plain(regularDue({ first: '2026-09-05', every: 1 }, ['2026-09-01', '2026-10-01'], '2026-10-11')), { next: '2026-11-05', late: 0 }, 'the due day moved from the 1st to the 5th: payments still count for their month');
+assert.deepStrictEqual(plain(regularDue({ first: '2026-01-10', every: 12 }, ['2026-01-10'], '2026-10-11')), { next: '2027-01-10', late: 0 }, 'a yearly licence');
+
+/* ---------- invoices: lines, tax, what is paid and what is left ---------- */
+const inv = { id: 'I-1', cur: 'USD', due: '2026-10-20', tax: 0, items: [{ t: 'Cement 42.5', qty: 3, unit: 'bags', price: 19.99 }, { t: 'Delivery', qty: 1, price: 50 }] };
+assert.deepStrictEqual(plain(invoiceTotals(inv)), { sub: 109.97, tax: 0, total: 109.97 }, 'quantity × price to the cent (3 × 19.99 is 59.97, not 59.970000001)');
+assert.deepStrictEqual(plain(invoiceTotals({ ...inv, tax: 18 })), { sub: 109.97, tax: 19.79, total: 129.76 }, 'tax on the sum, rounded to the cent');
+const paid = (amount, extra = {}) => ({ invoice: 'I-1', cur: 'USD', amount, ...extra });
+assert.deepStrictEqual(plain(invoiceState(inv, [], '2026-10-11')), { total: 109.97, paid: 0, due: 109.97, state: 'unpaid' });
+assert.strictEqual(invoiceState(inv, [paid(50)], '2026-10-11').state, 'part', 'part paid');
+assert.deepStrictEqual(plain(invoiceState(inv, [paid(50), paid(59.97)], '2026-10-11')), { total: 109.97, paid: 109.97, due: 0, state: 'paid' });
+assert.strictEqual(invoiceState(inv, [paid(50)], '2026-10-21').state, 'overdue', 'past the due date with money still owed');
+assert.strictEqual(invoiceState(inv, [paid(500)], '2026-10-21').due, 0, 'paid more: nothing owed');
+assert.strictEqual(invoiceState(inv, [paid(50, { deleted: 'x' }), paid(50, { cur: 'SSP' }), paid(50, { invoice: 'I-2' })], '2026-10-11').paid, 0, 'a deleted entry, another currency or another invoice does not count');
+assert.strictEqual(invoiceState({ ...inv, cancelled: '2026-10-12T10:00' }, [], '2026-10-30').state, 'cancelled');
+
+/* ---------- several periods paid at once, and spotting regular payments among old entries ---------- */
+assert.deepStrictEqual(plain(regularDue(rent, [{ period: '2026-09-01', periods: 6 }], '2026-10-11')), { next: '2027-03-01', late: 0 }, 'six months of rent paid at once');
+assert.deepStrictEqual(plain(regularDue({ first: '2026-01-15', every: 3 }, [{ period: '2026-01-15', periods: 2 }], '2026-10-11')), { next: '2026-07-15', late: 1 }, 'two quarters at once, the third late');
+const ex = (id, at, amount, extra = {}) => ({ id, at: at + 'T10:00', amount, cur: 'USD', paidTo: 'Wani', reason: 'Land rent', mode: 'Cash', project: '', ...extra });
+const found = plain(findRegulars([ex('E1', '2026-03-03', 500), ex('E2', '2026-04-04', 500), ex('E3', '2026-05-02', 500), ex('E4', '2026-06-05', 3000, { reason: 'Rent 6 months' }),
+  ex('S1', '2026-05-01', 40, { paidTo: 'Hardware shop', reason: 'Nails' }), ex('S2', '2026-05-03', 260, { paidTo: 'Hardware shop' }), ex('S3', '2026-05-20', 15, { paidTo: 'hardware  shop' }), ex('S4', '2026-06-02', 90, { paidTo: 'Hardware Shop' }),
+  ex('L1', '2025-01-10', 300, { paidTo: 'Authority', reason: 'Trading licence' }), ex('L2', '2026-01-12', 310, { paidTo: 'Authority', reason: 'Trading licence' }),
+  ex('W1', '2026-03-01', 300, { paidTo: 'John', worker: 'W-1', pay: 'salary' }), ex('W2', '2026-04-01', 300, { paidTo: 'John', worker: 'W-1', pay: 'salary' }), ex('W3', '2026-05-01', 300, { paidTo: 'John', worker: 'W-1', pay: 'salary' }),
+  ex('X1', '2026-03-01', 50, { paidTo: 'Internet co' }), ex('X2', '2026-04-01', 50, { paidTo: 'Internet co' }), ex('X3', '2026-05-01', 50, { paidTo: 'Internet co', regular: 'G-1' })]));
+assert.deepStrictEqual(found.map(f => [f.paidTo, f.every, f.amount]), [['Wani', 1, 500], ['Authority', 12, 305]], 'monthly rent and a yearly licence; not a shop bought from often, not salaries, not what is already linked');
+assert.deepStrictEqual(found[0].pays, [{ id: 'E1', period: '2026-03-03' }, { id: 'E2', period: '2026-04-03' }, { id: 'E3', period: '2026-05-03' }, { id: 'E4', period: '2026-06-03', periods: 6 }], 'each payment pays its month; 3000 = six months at once');
+assert.deepStrictEqual(plain(regularDue(found[0], found[0].pays, '2026-10-11')), { next: '2026-12-03', late: 0 }, 'so rent is paid up to November');
+assert.deepStrictEqual(found[0].reason, 'Land rent', 'the usual reason');
 
 console.log('Pay maths, words and PDF: all checks passed');

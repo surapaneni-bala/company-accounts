@@ -11,7 +11,6 @@ const RIGHTS = {
   manager: ['add', 'suggest', 'date', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval; no money (balances)
   store: ['add'],
 };
-const NOTHING_SEEN = { expenses: [], credits: [], transfers: [], projects: [], log: [], changes: [], workers: [], absences: [], files: [] };
 
 // { token, user: { id, name, username, role }, check: { salt, hash } } — or { out: true, why } once signed out
 let session = loadSession();
@@ -65,7 +64,7 @@ async function signOut() {
   saveSession({ out: true }); // the sign-in screen shows at once, so nothing new can be added meanwhile
   closeAll(); render(); dropFileCopies();
   try { await callServer(S.link, { op: 'logout', token }); } catch { /* already signed out on the sheet: fine */ }
-  if (!S.dirty.length) { S = { ...S, ...NOTHING_SEEN, link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
+  if (!S.dirty.length) { S = { ...S, ...noRecords(), link: { ...S.link, since: 0 } }; save(); } // never drop anything unsent
   render();
 }
 

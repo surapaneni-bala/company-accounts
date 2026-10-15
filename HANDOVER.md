@@ -331,6 +331,13 @@ git commit -m "fix: …" && git push
 
 ## 6. Where things stand (open items)
 
+**RELEASED 15 Oct 2026: live app bb5f039cda + sheet script v18** (`main` merged from `office`): regular payments (with
+old-entry suggestions and several periods at once), company bank details, the documents vault + morning email, invoices &
+quotations with clients and payment tracking, supplier advances, upload-once + spare-copy tidy, the office manager's own
+expenses (as v17/v18 hiddenFor_). Checked: all tests; every feature end to end on the mock (practice copy 76fa49011e, same
+source) at 375/320 px; release build opens online and offline. Owner: paste v18 (sheet-script.txt?v=19) into the REAL sheet,
+Run allowFiles (Drive + Mail + the daily trigger; refiles everything once: LAYOUT '3'), New version; Settings → Morning email.
+
 **RELEASED 12 Oct 2026 (night): live app 0b7485d474 + sheet script v14** (from `manager-own`): the office manager sees only the
 expenses she entered. The sheet (`hiddenFor_`) stops sending her other people's expenses, their files and change requests —
 except an admin's payment to an employee (`worker`) or of a regular payment (`regular`), for the Employees screens; her
@@ -646,6 +653,17 @@ folder, which is temporary:
   `06 INVOICES` / `07 QUOTATIONS` by year and month). **Morning email**: `allowFiles` creates a daily `morningEmail` trigger;
   admins set the address with op `alerts` (Settings → Morning email, with a test send); `alertLines_` picks what to say.
   `noRecords()` (core.js) is the one list of record kinds for new companies, sign-ins and migration.
+- **Old entries become regular payments, several periods at once, supplier advances, no spare copies** (owner, 15 Oct 2026;
+  script v18). `findRegulars` (calc.js) spots repeating payments (same payee and currency, about every 1/3/6/12 months,
+  similar amounts; a whole multiple = several periods); an admin confirms ("Found in your past entries") and the payments are
+  linked (`regular`, `period`, `periods`). A payment may cover up to 24 periods (`periods`; `regularDue` counts stretches by
+  month). Supplier advances (src/advances.js): an expense with `advance: true` + `advanceTotal`; "Take from the advance"
+  splits off a new expense (`from`, `received`; the advance's day and account, so cash never moves) and shrinks the advance;
+  the last piece turns the advance itself into what was taken (`advance: false`). `signedFacts` uses `advanceTotal`, so the
+  supplier's voucher stays valid. Spare copies in Drive came from uploads re-sent after a lost answer on slow connections:
+  the phone now sends `key` (its F id) and the sheet answers with the copy it already made; `tidySpares_` (refiling, LAYOUT
+  '3', and the daily job) bins exact twins of filed files and moves other unnamed uploads (a day old) to `10 UNFILED`.
+  `tools/build.js` now refuses a build whose code does not parse.
 - **Deleting is for good, so a deleted record's waiting files are never sent** (`forDeleted` in `uploadFiles`, which also
   removes them from the phone). Before 9 Oct test entries deleted before their upload still went to Drive.
 - **Don't trust caches:** anything the service worker stores must be fetched with `cache: 'reload'`.
