@@ -952,7 +952,7 @@ async function renderStatement(st) {
       sec.cols.forEach((c, i) => { g.fillStyle = C.label; g.font = `700 17px ${SANS}`; spaced(g, c.h.toUpperCase(), c.right ? xs[i] + c.w - 14 : xs[i] + 14, y + 28, 1.2, c.right ? 'right' : 'left'); });
       y += 44;
     };
-    if (y + 170 + (sec.photos && sec.photos.length ? 160 : 0) > limit) page();
+    if (y + 250 + (sec.photos && sec.photos.length ? 166 : 0) > limit) page(); // a heading never sits alone at the foot of a page
     g.fillStyle = C.navy; g.font = `700 24px ${SANS}`; g.fillText(fitText(g, sec.title, W), L, y + 24); y += 40;
     if (sec.sub) { g.fillStyle = C.label; g.font = `500 20px ${SANS}`; g.fillText(fitText(g, sec.sub, W), L, y + 8); y += 30; }
     if (sec.photos && sec.photos.length) { // the item's photos, to compare against what is there

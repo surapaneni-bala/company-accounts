@@ -2,7 +2,7 @@
 // All drawn by renderStatement (files.js) on the letterhead: a section per category or per item. The inspection checklist
 // has every detail of each item and the usual checks as lines with an OK and a Not OK box — empty to print and tick at the
 // factory, or ticked from what was saved on the phone — with the item's photos to compare against.
-const BUY_COLS = [{ h: 'Item', w: 330, wrap: true }, { h: 'Details', w: 360, wrap: true }, { h: 'Qty', w: 110, right: true }, { h: 'For', w: 160, wrap: true }, { h: 'Status', w: 100 }];
+const BUY_COLS = [{ h: 'Item', w: 300, wrap: true }, { h: 'Details', w: 340, wrap: true }, { h: 'Qty', w: 110, right: true }, { h: 'For', w: 170, wrap: true }, { h: 'Status', w: 140, wrap: true }];
 const buyRow = n => [n.sub ? `${n.t} (${n.sub})` : n.t, [...(n.specs || []).map(([k, v]) => `${k}: ${v}`), n.notes].filter(Boolean).join('; '), qtyText(n), [n.project && projName(n.project), n.area].filter(Boolean).join(' · '), BUY_STATE[n.status][1]];
 const pdfName = (title, words) => `${title} ${fileSafe(words)} ${today()}.pdf`;
 async function buyListPdf() {
@@ -15,7 +15,7 @@ async function tripPdf(id) {
   const j = tripOf(id), open = j ? tripItems(id).filter(n => ['idea', 'tobuy'].includes(n.status)) : [];
   if (!j) return;
   await shareStatement({ title: 'TRIP BUYING LIST', no: statementNo(), date: fmtDate(today()), ref: id, info: tripInfo(j),
-    sections: needGroups(open).map(([c, l]) => ({ title: c, cols: [...BUY_COLS.slice(0, 4), { h: 'Target', w: 100, right: true }], rows: l.map(n => [...buyRow(n).slice(0, 4), n.target ? cost(n.target, n.cur || 'USD') : '']) })),
+    sections: needGroups(open).map(([c, l]) => ({ title: c, cols: [...BUY_COLS.slice(0, 4), { h: 'Target', w: 140, right: true }], rows: l.map(n => [...buyRow(n).slice(0, 4), n.target ? cost(n.target, n.cur || 'USD') : '']) })),
     summary: [['Items to buy', String(open.length), true]], verdict: null }, pdfName('Trip list', j.to));
 }
 const tripInfo = j => [['Where to', j.to], ['When', tripDays(j)], ['Who', j.who.join(', ')], ['Why', j.purpose || '—']];
