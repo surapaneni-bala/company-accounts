@@ -18,7 +18,7 @@ const FILE_COLS = ['fileId', 'uid', 'key']; // key = the phone's id for the file
 // the first bytes of each kind of file allowed: a file must be what it says it is
 const MAGIC = { 'image/jpeg': [0xFF, 0xD8, 0xFF], 'image/png': [0x89, 0x50, 0x4E, 0x47], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pdf' };
-const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Documents', 'Invoices', 'Files'];
+const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Documents', 'Invoices', 'Buying list', 'Suppliers', 'Trips', 'Files'];
 // record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
 // File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …),
@@ -26,9 +26,13 @@ const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves',
 // reGular payment (rent, internet, licence fees: due every 1, 3, 6 or 12 months), Bank account (the company's, to be paid into),
 // Vault document (a licence, a vehicle's papers, a passport…: its file is an F record of type 'document'),
 // Klient (who invoices and quotations go to) and Invoice (an invoice or a quotation: its PDF is an F record) — admins only
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 'K', 'I'];
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 'K', 'I', 'N', 'U', 'J'];
 const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement', 'document', 'invoice', 'quote'];
 const SALES_KINDS = ['K', 'I']; // what clients are charged and owe: admins only (owner, 11 Oct 2026)
+// buying: the list of what to buy (N), suppliers and factories (U) and buying trips (J): admins only (owner, 16 Oct 2026)
+const BUY_KINDS = ['N', 'U', 'J'];
+const BUY_STATES = ['idea', 'tobuy', 'ordered', 'inspected', 'shipped', 'received', 'dropped'];
+const CUR_CODE = /^[A-Z]{3}$/; // what goods are priced in abroad: CNY, UGX, KES, AED… (payments stay USD or SSP)
 // the vault's kinds of document: company and vehicle papers are for admins and the office manager; personal ones (the
 // shareholders' and staff's IDs and passports) for admins only (owner, 11 Oct 2026)
 const DOC_KINDS = ['company', 'vehicle', 'personal'];
@@ -55,7 +59,7 @@ const SHAPES = {
   E: d => money_(d) && str_(d.paidTo) && str_(d.reason) && extras_(d),
   R: d => money_(d) && extras_(d),
   T: d => money_(d) && ACCOUNTS.indexOf(d.from) >= 0 && ACCOUNTS.indexOf(d.to) >= 0 && d.from !== d.to,
-  P: d => str_(d.name),
+  P: d => str_(d.name) && (d.buyBudget === undefined || (num_(d.buyBudget) && d.buyBudget >= 0)), // buyBudget: what may be spent buying for it, in dollars
   L: d => str_(d.text) && str_(d.at),
   S: d => str_(d.company) && isObj_(d.pass) && str_(d.pass.salt) && str_(d.pass.hash),
   // a change request: an edit (only editable fields), a delete, or an advance above the monthly limit
@@ -79,7 +83,23 @@ const SHAPES = {
     && CURS.indexOf(d.cur) >= 0 && Array.isArray(d.items) && d.items.length > 0 && d.items.length <= 100
     && d.items.every(it => isObj_(it) && str_(it.t) && num_(it.qty) && it.qty > 0 && num_(it.price) && it.price >= 0 && (it.unit === undefined || str_(it.unit)))
     && (d.tax === undefined || (num_(d.tax) && d.tax >= 0 && d.tax <= 100)) && ['bank', 'from'].every(k => !d[k] || SAFE_ID.test(d[k])) && ['notes', 'project'].every(k => d[k] === undefined || str_(d[k])),
+  // an item to buy: what, its category, every detail as spec lines (label, value), suppliers' quotes, the order, the inspection
+  N: d => str_(d.t) && d.t.length > 0 && BUY_STATES.indexOf(d.status) >= 0 && strs_(d, ['cat', 'sub', 'area', 'unit', 'notes', 'link', 'where', 'ship', 'project'])
+    && (d.cur === undefined || CUR_CODE.test(d.cur)) && ['qty', 'target'].every(k => d[k] === undefined || (num_(d[k]) && d[k] >= 0)) && (d.pri === undefined || [1, 2, 3].indexOf(d.pri) >= 0)
+    && ['trip', 'from', 'under'].every(k => !d[k] || SAFE_ID.test(d[k])) && (d.tags === undefined || (Array.isArray(d.tags) && d.tags.length <= 20 && d.tags.every(str_)))
+    && (d.specs === undefined || (Array.isArray(d.specs) && d.specs.length <= 40 && d.specs.every(x => Array.isArray(x) && x.length === 2 && str_(x[0]) && str_(x[1]))))
+    && (d.quotes === undefined || (Array.isArray(d.quotes) && d.quotes.length <= 30 && d.quotes.every(q => isObj_(q) && SAFE_ID.test(q.id) && SAFE_ID.test(q.sup) && num_(q.price) && q.price >= 0 && CUR_CODE.test(q.cur))))
+    && (d.order === undefined || (isObj_(d.order) && SAFE_ID.test(d.order.sup) && num_(d.order.price) && d.order.price >= 0 && CUR_CODE.test(d.order.cur) && num_(d.order.qty) && d.order.qty > 0 && DATE_RE.test(d.order.date)
+      && (d.order.rate === undefined || (num_(d.order.rate) && d.order.rate > 0)) // 1 USD = rate in the order's currency
+      && (d.order.alloc === undefined || (Array.isArray(d.order.alloc) && d.order.alloc.length <= 20 && d.order.alloc.every(a => isObj_(a) && SAFE_ID.test(a.p) && num_(a.q) && a.q > 0)
+        && d.order.alloc.reduce((t, a) => t + a.q, 0) <= d.order.qty + 1e-9)))) // each project's share; the rest is extra
+    && (d.insp === undefined || (isObj_(d.insp) && DATE_RE.test(d.insp.date) && ['pass', 'fail', 'open'].indexOf(d.insp.result) >= 0))
+    && (d.steps === undefined || (isObj_(d.steps) && Object.keys(d.steps).every(k => BUY_STATES.indexOf(k) >= 0 && DATE_RE.test(d.steps[k])))),
+  U: d => str_(d.name) && d.name.length > 0 && strs_(d, ['kind', 'city', 'country', 'market', 'person', 'phone', 'wechat', 'email', 'note']),
+  J: d => str_(d.to) && d.to.length > 0 && DATE_RE.test(d.out) && (!d.back || DATE_RE.test(d.back)) && Array.isArray(d.who) && d.who.length <= 20 && d.who.every(str_) && strs_(d, ['country', 'purpose', 'note'])
+    && (d.budget === undefined || (num_(d.budget) && d.budget >= 0)),
 };
+const strs_ = (d, ks) => ks.every(k => d[k] === undefined || str_(d[k]));
 const EVERY_MONTHS = [1, 3, 6, 12];
 const num_ = v => typeof v === 'number' && isFinite(v);
 // optional fields on money records: the SSP rate of the day, and the employee a payment belongs to
@@ -90,7 +110,8 @@ const extras_ = d => (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (
   && (d.invoice === undefined || SAFE_ID.test(d.invoice)) // money received for an invoice
   && (d.periods === undefined || (num_(d.periods) && d.periods >= 1 && d.periods <= 24 && d.periods % 1 === 0)) // a regular payment, several periods at once
   && (d.advance === undefined || typeof d.advance === 'boolean') && (d.advanceTotal === undefined || (num_(d.advanceTotal) && d.advanceTotal > 0)) // an advance to a supplier
-  && (d.from === undefined || SAFE_ID.test(d.from)) && (d.received === undefined || DATE_RE.test(d.received)); // goods taken from an advance
+  && (d.from === undefined || SAFE_ID.test(d.from)) && (d.received === undefined || DATE_RE.test(d.received)) // goods taken from an advance
+  && (d.trip === undefined || SAFE_ID.test(d.trip)) && (d.need === undefined || SAFE_ID.test(d.need)); // a buying trip's cost, an item bought
 const str_ = v => typeof v === 'string';
 const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
@@ -98,7 +119,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 18; // shown when the web app link is opened in a browser
+const VERSION = 19; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -245,9 +266,9 @@ function hiddenFor_(rows, user) {
   return out;
 }
 function managerView_(user, rec) {
-  if (MONEY_KINDS.indexOf(rec.k) >= 0 || SALES_KINDS.indexOf(rec.k) >= 0) return null;
-  if (rec.k === 'F' && /^[IK]-/.test(String(rec.d.for))) return null; // invoice and quotation PDFs
-  if (rec.k === 'P') { const d = Object.assign({}, rec.d); delete d.value; delete d.valueCur; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
+  if (MONEY_KINDS.indexOf(rec.k) >= 0 || SALES_KINDS.indexOf(rec.k) >= 0 || BUY_KINDS.indexOf(rec.k) >= 0) return null;
+  if (rec.k === 'F' && /^[IKNUJ]-/.test(String(rec.d.for))) return null; // invoice and quotation PDFs, the buying list's photos and reports
+  if (rec.k === 'P') { const d = Object.assign({}, rec.d); delete d.value; delete d.valueCur; delete d.buyBudget; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
   if (rec.k === 'C' && MONEY_KINDS.indexOf(rec.d.kind) >= 0) return null;
   if (rec.k === 'F' && /^[RT]-/.test(String(rec.d.for))) return null;
   if (rec.k === 'L' && rec.d.uid !== user.id) return null;
@@ -259,6 +280,7 @@ function allowed_(user, p, before) {
   if (before) return false; // only admins change what is already there (an office manager's edit is a change request)
   if (p.d.uid !== user.id || p.d.deleted) return false; // a new record carries its sender's login and isn't born deleted
   if (p.k === 'F' && BRAND_FILES.indexOf(p.d.type) >= 0) return false; // the company letterhead and stamp: admins only
+  if (p.k === 'F' && /^[IKNUJ]-/.test(String(p.d.for))) return false; // nor photos or PDFs on invoices, clients or the buying list
   if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A', 'V'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0)) && (p.k !== 'V' || p.d.kind !== 'personal');
   return p.k === 'E' || p.k === 'L' || p.k === 'F'; // store keeper: own expenses, notes and their receipts
 }
@@ -430,7 +452,7 @@ function uploads_() {
    away, except the unstamped original of a cancelled paper once its stamped copy is in. A Drive problem never stops a sync. */
 const LAYOUT = '3'; // bump when the layout changes: every sheet then refiles everything once
 const DOC_FOLDER = { company: 'COMPANY', vehicle: 'VEHICLES', personal: 'PERSONAL' };
-const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', docs: '05 DOCUMENTS', invoices: '06 INVOICES', quotes: '07 QUOTATIONS', unfiled: '10 UNFILED', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
+const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', docs: '05 DOCUMENTS', invoices: '06 INVOICES', quotes: '07 QUOTATIONS', unfiled: '10 UNFILED', buying: '11 BUYING', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
 const TYPE_FOLDER = { idphoto: 'ID DOCUMENT', profile: 'PROFILE PHOTO', statement: 'STATEMENTS', letterhead: 'LETTERHEAD', stamp: 'STAMP' };
 const MONTHS_ = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
 const upper_ = s => String(s || '').replace(/[\\/]/g, '-').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 60);
@@ -501,6 +523,10 @@ function fileHome_(f, byId, files) {
     const k = byId[o.client], who = k && k.k === 'K' ? k.d.name : '';
     return { path: [o.type === 'quote' ? FOLDER.quotes : FOLDER.invoices].concat(changes, dated_(String(o.date || ''))), name: `${o.no} ${upper_(who)}${ext}`.replace(' ' + ext, ext), status: status };
   }
+  if (BUY_KINDS.indexOf(owner.k) >= 0) { // buying: a folder per item (by category), per supplier and per trip
+    const seg = owner.k === 'N' ? [upper_(o.cat) || 'OTHER', idSeg_(upper_(o.t), owner.id)] : owner.k === 'U' ? ['SUPPLIERS', idSeg_(upper_(o.name), owner.id)] : ['TRIPS', idSeg_(`${o.out} ${upper_(o.to)}`, owner.id)];
+    return { path: (gone ? [FOLDER.gone, FOLDER.buying] : [FOLDER.buying].concat(changes)).concat(seg), name: name, status: status };
+  }
   if (owner.k === 'V') { // the vault: one folder per document, its older versions under CHANGES
     const doc = [DOC_FOLDER[o.kind] || FOLDER.other, idSeg_(upper_(o.title), owner.id)];
     return { path: (gone ? [FOLDER.gone, FOLDER.docs] : [FOLDER.docs].concat(changes)).concat(doc), name: `${upper_(o.title)} ${String(f.createdAt || '').slice(0, 10)}${ext}`, status: status };
@@ -512,7 +538,7 @@ function fileHome_(f, byId, files) {
 }
 const homeText_ = h => (h.w ? [h.w.d.deleted ? FOLDER.staffGone : FOLDER.staff, staffName_(h.w)] : []).concat(h.path).map(segName_).join(' / ');
 const homeFolder_ = (h, cache) => (h.w ? h.path.reduce(child_, staffFolder_(h.w, cache)) : folderAt_(h.path, cache));
-const SECTIONS = [FOLDER.pay, FOLDER.received, FOLDER.staff, FOLDER.company, FOLDER.docs, FOLDER.invoices, FOLDER.quotes, FOLDER.staffGone, FOLDER.gone];
+const SECTIONS = [FOLDER.pay, FOLDER.received, FOLDER.staff, FOLDER.company, FOLDER.docs, FOLDER.invoices, FOLDER.quotes, FOLDER.staffGone, FOLDER.gone, FOLDER.buying];
 // folders a move left empty go to the bin, up to the sections (the sections and the company folder always stay)
 function tidyUp_(folder, rootId) {
   while (folder && folder.getId() !== rootId && SECTIONS.indexOf(folder.getName()) < 0 && !folder.getFiles().hasNext() && !folder.getFolders().hasNext()) {
@@ -795,6 +821,7 @@ function rebuild_(ss, all) {
   banks_(ss, ctx, of('B').filter(x => !x.deleted));
   docs_(ss, ctx, of('V').filter(x => !x.deleted), recs);
   invoices_(ss, ctx, of('I').filter(x => !x.deleted), of('K'));
+  buying_(ss, ctx, of('N').filter(x => !x.deleted), of('U'), of('J'));
   filesTab_(ss, ctx, recs);
   // keep the tabs in a fixed order right after "Read me"
   VIEW_TABS.forEach((name, i) => {
@@ -826,7 +853,7 @@ const only_ = (x, cur) => (x.cur === cur ? x.amount : '');
 // a typed "=…" must stay text, never become a formula
 const safe_ = v => (typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v);
 const remarks_ = x => [x.advance ? 'Supplier advance: ' + (x.advanceTotal || x.amount) + ' paid, ' + x.amount + ' left' : x.advanceTotal ? 'Supplier advance of ' + x.advanceTotal + ', used up' : '',
-  x.from ? 'Taken from advance ' + x.from + (x.received ? ' on ' + x.received : '') : '', x.periods > 1 ? x.periods + ' periods paid at once' : '', x.batch ? 'Bulk ' + x.batch : '', x.editedAt ? 'Edited by ' + (x.editedBy || '?') + ' ' + when_(x.editedAt) : '', x.manualDate ? 'Date set manually' : ''].filter(String).join(' · ');
+  x.from ? 'Taken from advance ' + x.from + (x.received ? ' on ' + x.received : '') : '', x.trip ? 'Trip ' + x.trip : '', x.need ? 'Buying list ' + x.need : '', x.periods > 1 ? x.periods + ' periods paid at once' : '', x.batch ? 'Bulk ' + x.batch : '', x.editedAt ? 'Edited by ' + (x.editedBy || '?') + ' ' + when_(x.editedAt) : '', x.manualDate ? 'Date set manually' : ''].filter(String).join(' · ');
 const now_ = () => Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'd MMM yyyy, h:mm a');
 
 function freshTab_(ss, name, color) {
@@ -1086,6 +1113,46 @@ function invoices_(ss, c, invs, clients) {
     }), ['', '', '', 'date', 'date', '', 'num', 'num', 'num'], [110, 100, 220, 105, 120, 80, 120, 120, 120, 100, 120], null);
 }
 
+/* ---------- buying: the list, suppliers and trips (the app's buying.js) ---------- */
+const BUY_TEXT = { idea: 'Idea', tobuy: 'To buy', ordered: 'Ordered', inspected: 'Inspected', shipped: 'Shipped', received: 'Received', dropped: 'Dropped' };
+const PRI_TEXT = { 1: 'Urgent', 2: 'Normal', 3: 'Some day' };
+// who an order is for (the app's calc.js orderShares): each project's share, the rest extra; and in dollars at its rate
+function shares_(o, project) {
+  const al = o.alloc && o.alloc.length ? o.alloc : project ? [{ p: project, q: o.qty }] : [], used = al.reduce((t, a) => t + a.q, 0), rest = Math.round((o.qty - used) * 1000) / 1000;
+  return al.concat(rest > 0 ? [{ p: '', q: rest }] : []);
+}
+const usd_ = (amount, o) => (o.cur === 'USD' ? amount : o.rate > 0 ? Math.round(amount / o.rate * 100) / 100 : '');
+function buying_(ss, c, items, sups, trips) {
+  const sup = Object.create(null), trip = Object.create(null), cost = Object.create(null);
+  sups.forEach(u => { sup[u.id] = u; });
+  trips.forEach(j => { trip[j.id] = j; });
+  c.E.filter(x => x.trip).forEach(x => { const k = x.trip + '|' + x.cur; cost[k] = (cost[k] || 0) + cents_(x.amount); });
+  const supName = id => (sup[id] ? sup[id].name : ''), tripName = id => (trip[id] ? trip[id].to + ' ' + trip[id].out : ''), byId = Object.create(null);
+  items.forEach(n => { byId[n.id] = n; });
+  const goodsUsd = id => Math.round(items.filter(n => n.order && n.status !== 'dropped' && (n.order.trip === id || n.trip === id)).reduce((t, n) => t + (Number(usd_(n.order.qty * n.order.price, n.order)) || 0), 0) * 100) / 100;
+  const best = n => (n.quotes || []).filter(q => !n.cur || q.cur === n.cur).sort((a, b) => a.price - b.price)[0];
+  dataTab_(ss, c.company, 'Buying list', '#7c3aed',
+    ['No.', 'Item', 'Category', 'Sub-category', 'Project', 'Area / room', 'Tags', 'Qty', 'Unit', 'Details', 'Notes', 'Where to buy', 'Priority', 'Status', 'Target price', 'Currency', 'Quotes', 'Lowest quote', 'Ordered from', 'Unit price', 'Qty ordered', 'Order total', 'Order currency', 'Ordered on', 'Trip', 'Inspection', 'Shipment', 'Received on', 'Added by', 'Added on', 'For (projects / extra)', '1 USD =', 'Order total USD', 'Part of'],
+    items.slice().sort((a, b) => String(a.cat || '').localeCompare(String(b.cat || '')) || String(a.t).localeCompare(String(b.t))).map(n => {
+      const q = best(n), o = n.order || {}, st = n.steps || {};
+      return [n.id, n.t, n.cat || '', n.sub || '', n.project ? c.pname(n.project) : '', n.area || '', (n.tags || []).join(', '), n.qty || '', n.unit || '', (n.specs || []).map(x => x[0] + ': ' + x[1]).join('; '), n.notes || '',
+        n.where || '', PRI_TEXT[n.pri] || '', BUY_TEXT[n.status], n.target || '', n.cur || '', (n.quotes || []).length || '', q ? q.cur + ' ' + q.price + ' (' + supName(q.sup) + ')' : '',
+        supName(o.sup), o.price === undefined ? '' : o.price, o.qty || '', o.qty ? Math.round(o.qty * o.price * 100) / 100 : '', o.cur || '', o.date || '', tripName(n.trip || o.trip),
+        n.insp ? ({ pass: 'Passed ', fail: 'FAILED ', open: 'Checked in part ' })[n.insp.result] + n.insp.date : '', n.ship || '', st.received || '', n.by || '', when_(n.createdAt),
+        n.order ? shares_(o, n.project).map(sh => (sh.p ? c.pname(sh.p) : 'Extra') + ' ' + sh.q).join('; ') : '', o.rate || '', n.order ? usd_(Math.round(o.qty * o.price * 100) / 100, o) : '', n.under && byId[n.under] ? byId[n.under].t : ''];
+    }), ['', '', '', '', '', '', '', 'num', '', '', '', '', '', '', 'num', '', '', '', '', 'num', 'num', 'num', '', 'date', '', '', '', 'date', '', '', '', 'num', 'USD'],
+    [110, 220, 150, 150, 160, 120, 120, 70, 70, 320, 220, 100, 80, 90, 100, 70, 70, 170, 170, 100, 90, 110, 80, 105, 170, 130, 130, 105, 110, 150, 220, 80, 120, 180], null);
+  const live = sups.filter(u => !u.deleted);
+  dataTab_(ss, c.company, 'Suppliers', '#0f766e', ['No.', 'Name', 'Kind', 'City / market', 'Country', 'Contact person', 'Phone / WhatsApp', 'WeChat', 'Email', 'Quotes given', 'Items ordered', 'Note'],
+    live.map(u => [u.id, u.name, u.kind || '', [u.city, u.market].filter(Boolean).join(' · '), u.country || '', u.person || '', u.phone || '', u.wechat || '', u.email || '',
+      items.filter(n => (n.quotes || []).some(q => q.sup === u.id)).length, items.filter(n => n.order && n.order.sup === u.id).length, u.note || '']),
+    [], [110, 200, 90, 200, 100, 150, 150, 130, 180, 90, 90, 260], null);
+  dataTab_(ss, c.company, 'Trips', '#1d4ed8', ['No.', 'Destination', 'Country', 'Who travelled', 'Left on', 'Back on', 'Days', 'Purpose', 'Items on the list', 'Items ordered', 'Trip costs USD', 'Trip costs SSP', 'Note', 'Budget USD', 'Goods ordered USD'],
+    trips.filter(j => !j.deleted).sort((a, b) => (a.out < b.out ? -1 : 1)).map(j => [j.id, j.to, j.country || '', j.who.join(', '), j.out, j.back || '', j.back ? daysBetween_(j.out, j.back) + 1 : '', j.purpose || '',
+      items.filter(n => n.trip === j.id).length, items.filter(n => n.order && (n.order.trip === j.id || n.trip === j.id)).length, (cost[j.id + '|USD'] || 0) / 100, (cost[j.id + '|SSP'] || 0) / 100, j.note || '', j.budget || '', goodsUsd(j.id)]),
+    ['', '', '', '', 'date', 'date', 'num', '', 'num', 'num', 'USD', 'SSP', '', 'USD', 'USD'], [110, 200, 100, 200, 105, 105, 60, 200, 90, 90, 120, 130, 260, 120, 140], null);
+}
+
 /* ---------- the morning email: what needs doing today ---------- */
 // Sent by a daily trigger (allowFiles sets it up) to the address an admin chose in the app (Settings → Morning email).
 // Payments: due in 3 days, today, or late (every morning until paid). Documents: on their reminder day, 7 days and 1 day
@@ -1103,6 +1170,12 @@ function alertLines_(recs, t) {
     const left = daysBetween_(t, v.expires), who = v.owner ? ' (' + v.owner + ')' : '';
     if (left < 0 && monday) lines.push('EXPIRED: ' + v.title + who + ' — expired on ' + v.expires);
     else if (left >= 0 && [remindOf_(v), 7, 1, 0].indexOf(left) >= 0) lines.push((left ? 'Expires in ' + left + ' day' + (left === 1 ? '' : 's') : 'Expires TODAY') + ': ' + v.title + who + ' (' + v.expires + ')');
+  });
+  // a buying trip a week, a day and on the day before it leaves: what is still on its list
+  const N = live('N');
+  live('J').forEach(j => {
+    const left = daysBetween_(t, j.out), open = N.filter(n => n.trip === j.id && ['idea', 'tobuy'].indexOf(n.status) >= 0).length;
+    if ([7, 1, 0].indexOf(left) >= 0) lines.push('Trip ' + (left ? 'in ' + left + ' day' + (left === 1 ? '' : 's') : 'TODAY') + ': ' + j.to + (j.who.length ? ' (' + j.who.join(', ') + ')' : '') + ' — ' + open + ' item' + (open === 1 ? '' : 's') + ' on its buying list');
   });
   return lines;
 }
