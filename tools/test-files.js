@@ -328,4 +328,31 @@ delete drv().files[upX.fileId];
 const gone = post({ token: owner, since: 0, push: [exp('E-OW1-0101', 54, 'x', { deleted: '2026-10-09T21:06:00', deletedBy: 'Owner' })] });
 assert.ok(gone.ok && !gone.refused.length, 'sync still works when a file cannot be moved');
 
+/* ---------- buying: items, suppliers and trips are admins only; every detail and the order are checked ---------- */
+const sup = (id, u, extra = {}) => ({ id, k: 'U', u, d: { id, name: 'Sofa Factory One', kind: 'factory', city: 'Foshan', country: 'China', ...extra } });
+const trip = (id, u, extra = {}) => ({ id, k: 'J', u, d: { id, to: 'Guangzhou & Foshan', country: 'China', who: ['Owner', 'Partner'], out: inDays(7), back: inDays(14), ...extra } });
+const item = (id, u, extra = {}) => ({ id, k: 'N', u, d: { id, t: 'Sofa, L-shape', cat: 'Furniture & décor', status: 'ordered', qty: 2, unit: 'pcs', trip: 'J-OW1-0001',
+  specs: [['Colour', 'Beige'], ['Size', '3.2 m × 1.8 m'], ['Seating', 'L-shape 3+2']], quotes: [{ id: 'q1', sup: 'U-OW1-0001', price: 900, cur: 'CNY' }],
+  order: { sup: 'U-OW1-0001', price: 880, cur: 'CNY', qty: 2, date: '2026-10-20' }, ...extra } });
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [sup('U-OW1-0001', 140), trip('J-OW1-0001', 140), item('N-OW1-0001', 140), item('N-OW1-0002', 140, { status: 'maybe' }),
+  item('N-OW1-0003', 140, { specs: [['Colour']] }), item('N-OW1-0004', 140, { order: { sup: 'U-OW1-0001', price: 880, cur: 'yuan', qty: 2, date: '2026-10-20' } }), item('N-OW1-0005', 140, { t: '' }),
+  trip('J-OW1-0002', 140, { who: 'Owner' }), sup('U-OW1-0002', 140, { name: '' }),
+  exp('E-OW1-0200', 140, 'x', { trip: 'J-OW1-0001', reason: 'Flights' }), exp('E-OW1-0201', 140, 'x', { trip: '<b>' })] }).refused.sort(),
+  ['E-OW1-0201', 'J-OW1-0002', 'N-OW1-0002', 'N-OW1-0003', 'N-OW1-0004', 'N-OW1-0005', 'U-OW1-0002'], 'a known status, spec lines as label and value, a currency code, names; a payment may name its trip');
+const itemPhoto = upload('sofa.png');
+post({ token: owner, since: 0, push: [file('F-OW1-0600', 141, 'x', { for: 'N-OW1-0001', fileId: itemPhoto, name: 'sofa.png' })] });
+assert.ok(!post({ token: m.token, since: 0, push: [] }).pull.some(p => ['N', 'U', 'J'].includes(p.k) || p.id === 'F-OW1-0600'), 'the office manager sees no buying list, suppliers, trips or their photos');
+assert.ok(!post({ token: s.token, since: 0, push: [] }).pull.some(p => ['N', 'U', 'J'].includes(p.k) || p.id === 'F-OW1-0600'), 'nor the store keeper');
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [item('N-AG1-0001', 142, { uid: m.me.id })] }).refused, ['N-AG1-0001'], 'nor adds to it');
+assert.strictEqual(pathOf(itemPhoto).split(' / ').slice(1).join(' / '), '11 BUYING / FURNITURE & DÉCOR / SOFA, L-SHAPE (N-OW1-0001)', 'an item’s photos: a folder per item, by category');
+const listRow = rows('Buying list').find(r => r[0] === 'N-OW1-0001');
+assert.deepStrictEqual([listRow[1], listRow[2], listRow[9], listRow[13]], ['Sofa, L-shape', 'Furniture & décor', 'Colour: Beige; Size: 3.2 m × 1.8 m; Seating: L-shape 3+2', 'Ordered'], 'the Buying list tab: every detail in one cell');
+assert.ok(rows('Trips').some(r => r[0] === 'J-OW1-0001' && r[3] === 'Owner, Partner'), 'the Trips tab');
+assert.ok(rows('Suppliers').some(r => r[0] === 'U-OW1-0001' && r[10] === 1), 'the Suppliers tab counts what was ordered there');
+post({ op: 'alerts', token: owner, email: 'office@example.com' });
+post({ token: owner, since: 0, push: [item('N-OW1-0006', 143, { status: 'tobuy', order: undefined })] });
+gas.mails.length = 0;
+gas.morningEmail();
+assert.ok(/Trip in 7 days: Guangzhou & Foshan \(Owner, Partner\) — 1 item on its buying list/.test(gas.mails[0].body), 'a week before a trip: what is still to buy on it');
+
 console.log('Employees and files: all checks passed');

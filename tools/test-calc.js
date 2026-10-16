@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ TextEncoder });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars };', ctx);
-const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars } = ctx.api;
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat };', ctx);
+const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat } = ctx.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 
 /* ---------- days on a 30-day month: joining and leaving days both count, day 31 counts as day 30 ---------- */
@@ -160,5 +160,11 @@ assert.deepStrictEqual(plain(findRegulars([exA('A5', '2026-08-17', 1000, 'Exchan
 assert.deepStrictEqual(ahead.filter(s => s.twins).map(s => [s.pays[0].id, s.twins]), [['A2', ['A3']], ['A3', ['A2']]], 'the same 4,200 up to the same month on the same day: maybe typed twice');
 assert.deepStrictEqual(plain(findRegulars([exA('A2', '2026-10-15', 4200, 'House rent payment till Jan 2027', { regular: 'G-1' }), exA('A3', '2026-10-15', 4200, 'Rent payment up to jan2027')])).map(s => s.twins), [['A2']], 'confirming one keeps the warning on the other');
 assert.deepStrictEqual(plain(regularDue(ahead[0], ahead[0].pays, '2026-10-16')), { next: '2027-01-24', late: 0 }, 'the internet is paid up to December');
+
+/* ---------- buying: a category guessed from a line typed in a hurry ---------- */
+assert.deepStrictEqual(['Sofa, L-shape', 'Wardrobe with sliding doors', 'Concrete block machine for the new venture', 'Opaque light-blocking window film', 'Smart switches, Zigbee', 'Floor tiles 60x60 matt beige',
+  'Kitchen cabinets', 'Hollow blocks 6 inch', 'Chandelier for the hall', 'Cordless drill', 'Water pump 1 HP', 'Something else'].map(guessCat),
+  ['Furniture & décor', 'Furniture & décor', 'Machinery & vehicles', 'Doors & windows', 'Home automation & security', 'Finishes', 'Kitchen & appliances', 'Structure & civil', 'Lighting', 'Tools & hardware', 'Plumbing & sanitary', 'Other'],
+  'a block is not a lock; smart switches are home automation; a machine for blocks is a machine');
 
 console.log('Pay maths, words and PDF: all checks passed');

@@ -8,10 +8,10 @@ const SYNC_TIMEOUT_MS = 45000, SLOWEST_BPS = 4000; // a request gets 45 s plus t
 const APP_URL = 'https://app.b-e-p-l.com/';
 // the order is the order records are sent in: an employee before a change request about them, files last
 // (the sheet only takes a file record whose entry it already has)
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', I: 'invoices', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', I: 'invoices', U: 'suppliers', J: 'trips', N: 'needs', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
-const KINDS_SEEN = 5; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I)
+const KINDS_SEEN = 6; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I), 6 = the buying list (N), suppliers (U), trips (J)
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string' && okRate(d),
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && okRate(d),
@@ -26,6 +26,10 @@ const VALID = {
   V: d => typeof d.id === 'string' && typeof d.title === 'string' && ['company', 'vehicle', 'personal'].includes(d.kind),
   K: d => typeof d.id === 'string' && typeof d.name === 'string',
   I: d => typeof d.id === 'string' && ['invoice', 'quote'].includes(d.type) && typeof d.no === 'string' && CURS.includes(d.cur) && DATE_RE.test(d.date) && Array.isArray(d.items) && d.items.every(it => it && typeof it.t === 'string' && Number.isFinite(it.qty) && Number.isFinite(it.price)),
+  N: d => typeof d.id === 'string' && typeof d.t === 'string' && BUY_STATES.includes(d.status) && (d.specs === undefined || (Array.isArray(d.specs) && d.specs.every(x => Array.isArray(x) && x.length === 2 && x.every(v => typeof v === 'string'))))
+    && (d.quotes === undefined || (Array.isArray(d.quotes) && d.quotes.every(q => q && SAFE_ID.test(q.id) && SAFE_ID.test(q.sup) && Number.isFinite(q.price)))) && (d.order === undefined || (!!d.order && SAFE_ID.test(d.order.sup) && Number.isFinite(d.order.price) && Number.isFinite(d.order.qty))),
+  U: d => typeof d.id === 'string' && typeof d.name === 'string',
+  J: d => typeof d.id === 'string' && typeof d.to === 'string' && DATE_RE.test(d.out) && Array.isArray(d.who) && d.who.every(w => typeof w === 'string'),
   F: d => typeof d.id === 'string' && /^[\w-]{10,100}$/.test(d.fileId) && typeof d.name === 'string' && FILE_MIMES.includes(d.mime) && SAFE_ID.test(d.for) && typeof d.type === 'string',
 };
 const DATE_RE = /^\d{4}-\d\d-\d\d$/;
@@ -35,7 +39,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 18; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 19; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';

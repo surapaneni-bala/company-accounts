@@ -913,7 +913,7 @@ async function renderSlip(s) {
           preparedBy, preparedSign, checkedBy, approval, stampDate, check, ref } */
 const fitText = (g, t, w) => { t = String(t ?? ''); if (g.measureText(t).width <= w) return t; while (t && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; };
 async function renderStatement(st) {
-  const [lh, stampImg, logo, wm] = await Promise.all([letterheadImage(), st.sign || st.approvals ? brandImage('stamp') : null, wideLogo(), watermark()]);
+  const [lh, stampImg, logo, wm] = await Promise.all([letterheadImage(), (st.sign || st.approvals) && !st.noStamp ? brandImage('stamp') : null, wideLogo(), watermark()]);
   const C = SLIP_C, L = 90, R = SLIP_W - 90, W = R - L, top = lh ? 268 : 200, limit = SLIP_H - 80, pages = [];
   let g, y;
   const page = () => {
@@ -952,18 +952,24 @@ async function renderStatement(st) {
       sec.cols.forEach((c, i) => { g.fillStyle = C.label; g.font = `700 17px ${SANS}`; spaced(g, c.h.toUpperCase(), c.right ? xs[i] + c.w - 14 : xs[i] + 14, y + 28, 1.2, c.right ? 'right' : 'left'); });
       y += 44;
     };
-    if (y + 170 > limit) page();
-    g.fillStyle = C.navy; g.font = `700 24px ${SANS}`; g.fillText(sec.title, L, y + 24); y += 40;
+    if (y + 170 + (sec.photos && sec.photos.length ? 160 : 0) > limit) page();
+    g.fillStyle = C.navy; g.font = `700 24px ${SANS}`; g.fillText(fitText(g, sec.title, W), L, y + 24); y += 40;
+    if (sec.sub) { g.fillStyle = C.label; g.font = `500 20px ${SANS}`; g.fillText(fitText(g, sec.sub, W), L, y + 8); y += 30; }
+    if (sec.photos && sec.photos.length) { // the item's photos, to compare against what is there
+      sec.photos.slice(0, 5).forEach((img, i) => { const x = L + i * 212; g.strokeStyle = C.rule; g.lineWidth = 1.5; g.strokeRect(x, y, 200, 150); fitInto(g, img, x + 2, y + 2, 196, 146, false); });
+      y += 166;
+    }
     headRow();
     if (!sec.rows.length) { g.fillStyle = C.label; g.font = `italic 22px ${SANS}`; g.fillText('Nothing yet.', L + 14, y + 30); y += 44; }
     sec.rows.forEach((row, ri) => {
       // a wrap column takes as many lines as its text needs, and the row grows with it
-      const cells = row.map((cell, i) => { const c = sec.cols[i]; g.font = `${c.right ? 600 : 500} 22px ${SANS}`; return c.wrap ? wrapText(g, String(cell ?? ''), c.w - 28) : [fitText(g, cell, c.w - 28)]; });
+      const cells = row.map((cell, i) => { const c = sec.cols[i]; g.font = `${c.right ? 600 : 500} 22px ${SANS}`; return c.box ? [''] : c.wrap ? wrapText(g, String(cell ?? ''), c.w - 28) : [fitText(g, cell, c.w - 28)]; });
       const rh = 40 + (Math.max(1, ...cells.map(c => c.length)) - 1) * 30;
       if (y + rh > limit - 60) { page(); headRow(); }
       if (ri % 2) { g.fillStyle = C.stripe; g.fillRect(L, y, W, rh); }
       cells.forEach((lines, i) => {
         const c = sec.cols[i];
+        if (c.box) return tickBox(g, xs[i] + c.w / 2 - 13, y + 7, row[i]);
         g.fillStyle = C.ink; g.font = `${c.right ? 600 : 500} 22px ${SANS}`;
         lines.forEach((t, li) => { if (c.right) { g.textAlign = 'right'; g.fillText(t, xs[i] + c.w - 14, y + 27 + li * 30); g.textAlign = 'left'; } else g.fillText(t, xs[i] + 14, y + 27 + li * 30); });
       });
@@ -1019,7 +1025,8 @@ async function renderStatement(st) {
   if (st.sign || st.approvals) {
     const colW = W / 3;
     if (stampImg) drawStamp(g, stampImg, R - 104, y - 45, 180, st.stampDate, stampImg.place); // clear of the page number below
-    [['Prepared by', st.preparedBy || '', st.preparedSign], ['Checked by', st.checkedBy || '', null], ['Approved by', st.approval ? st.approval.name : '', st.approval]].forEach(([lab, name, sign], i) => {
+    const labs = st.signLabels || ['Prepared by', 'Checked by', 'Approved by'];
+    [[labs[0], st.preparedBy || '', st.preparedSign], [labs[1], st.checkedBy || '', null], [labs[2], st.approval ? st.approval.name : '', st.approval]].forEach(([lab, name, sign], i) => {
       const x = L + i * colW;
       drawSigned(g, x, y, colW - 40, sign, st.check ? `${st.no} · ${st.check}` : '');
       g.fillStyle = C.ink; g.font = `600 24px ${SANS}`; if (name) g.fillText(name, x, y - 14);
@@ -1036,6 +1043,16 @@ async function renderStatement(st) {
   });
   const jpegs = await Promise.all(pages.map(async c => ({ data: new Uint8Array(await (await canvasJpeg(c, PDF_Q)).arrayBuffer()), w: SLIP_W, h: SLIP_H })));
   return new Blob([pdfPages(jpegs)], { type: 'application/pdf' });
+}
+// a box to tick on paper: empty, ticked (ok), crossed (bad), "n/a" — or none (skip)
+function tickBox(g, x, y, v) {
+  if (v === 'skip') return;
+  if (v === 'na') { g.fillStyle = SLIP_C.label; g.font = `600 18px ${SANS}`; g.fillText('n/a', x - 2, y + 20); return; }
+  g.strokeStyle = SLIP_C.navy; g.lineWidth = 2; g.strokeRect(x, y, 26, 26);
+  g.beginPath();
+  if (v === 'ok') { g.moveTo(x + 5, y + 14); g.lineTo(x + 11, y + 21); g.lineTo(x + 22, y + 5); g.strokeStyle = '#0E7C57'; }
+  else if (v === 'bad') { g.moveTo(x + 6, y + 6); g.lineTo(x + 20, y + 20); g.moveTo(x + 20, y + 6); g.lineTo(x + 6, y + 20); g.strokeStyle = SLIP_C.accent; }
+  g.lineWidth = 4; g.stroke();
 }
 // the voucher or receipt number made for an entry, if any
 const docNo = id => (filesFor(id).filter(f => f.no && !f.cancelled).pop() || {}).no || '';

@@ -5,8 +5,16 @@
 const bankOf = id => S.banks.find(b => b.id === id && !b.deleted);
 const bankList = () => live(S.banks).sort((a, b) => a.bank.localeCompare(b.bank) || String(a.cur).localeCompare(String(b.cur)));
 const bankLines = b => [['Bank', b.bank], ['Account name', b.accName], ['Account number', b.number], ['Currency', b.cur], ['Branch', b.branch], ['SWIFT code', b.swift], ['', b.note]].filter(([, v]) => v);
-// the text that is copied or sent: what a client types into their bank to pay
-const bankText = list => `${S.company || 'Company'} — bank details\n\n${list.map(b => bankLines(b).map(([k, v]) => (k ? `${k}: ${v}` : v)).join('\n')).join('\n\n')}`;
+// the text that is copied or sent: what a client types into their bank to pay. Accounts at the same bank, branch and name
+// (one in SSP, one in USD) are one block with each number and its currency.
+function bankText(list) {
+  const groups = [];
+  list.forEach(b => { const k = [b.bank, b.accName, b.branch, b.swift].join('|'), g = groups.find(x => x.k === k); if (g) g.list.push(b); else groups.push({ k, list: [b] }); });
+  const no = b => `${b.number}${b.cur ? ` (${b.cur})` : ''}${b.note ? ` — ${b.note}` : ''}`;
+  const block = ([b, ...more]) => [`Bank: ${b.bank}`, b.accName && `Account name: ${b.accName}`, more.length ? `Account numbers:\n${[b, ...more].map(x => `• ${no(x)}`).join('\n')}` : `Account number: ${no(b)}`,
+    b.branch && `Branch: ${b.branch}`, b.swift && `SWIFT code: ${b.swift}`].filter(Boolean).join('\n');
+  return `${S.company || 'Company'} — bank details\n\nPlease pay by bank transfer to:\n\n${groups.map(g => block(g.list)).join('\n\n')}`;
+}
 const waLink = text => `https://wa.me/?text=${encodeURIComponent(text)}`;
 const shareButtons = (text, act, id) => `<div class="two" style="margin-top:12px"><button class="btn in" data-act="${act}" data-id="${esc(id)}">📋 Copy</button>
   <a class="btn ghost" href="${esc(waLink(text))}" target="_blank" rel="noopener">💬 Send on WhatsApp</a></div>

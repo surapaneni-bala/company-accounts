@@ -119,6 +119,42 @@ const ACTIONS = {
   remakeInvoice: b => remakeInvoice(b.dataset.id),
   addLine: () => { $('.ilines').insertAdjacentHTML('beforeend', lineRow()); $('.iline:last-child input').focus(); },
   advances: () => advancesSheet(),
+  buying: () => buyingSheet(),
+  addNeed: () => needForm(),
+  openNeed: b => needDetail(b.dataset.id),
+  editNeed: b => needForm(needOf(b.dataset.id)),
+  copyNeed: b => copyNeed(b.dataset.id),
+  delNeed: b => deleteNeed(b.dataset.id),
+  needStep: b => needStep(b.dataset.id, b.dataset.to),
+  addQuote: b => quoteForm(b.dataset.id),
+  delQuote: b => deleteQuote(b.dataset.id, b.dataset.q),
+  orderNeed: b => orderForm(b.dataset.id, b.dataset.q),
+  shipNeed: b => shipForm(b.dataset.id),
+  addSpec: b => { // a detail line; a suggested label fills the first empty line
+    const rows = $('#sheet .specs'), free = $$('.spec-row', rows).find(r => !$('[name=sk]', r).value && !$('[name=sv]', r).value);
+    if (b.dataset.k && free) $('[name=sk]', free).value = b.dataset.k; else rows.insertAdjacentHTML('beforeend', specRow([b.dataset.k || '', '']));
+    const row = b.dataset.k && free ? free : rows.lastElementChild; $(b.dataset.k ? '[name=sv]' : '[name=sk]', row).focus();
+  },
+  delSpec: b => b.closest('.spec-row').remove(),
+  buyListPdf: () => buyListPdf(),
+  suppliers: () => suppliersSheet(),
+  addSupplier: () => supplierForm(),
+  openSupplier: b => supplierDetail(b.dataset.id),
+  editSupplier: b => supplierForm(supOf(b.dataset.id)),
+  delSupplier: b => deleteSupplier(b.dataset.id),
+  inspect: b => inspectSheet(b.dataset.id),
+  inspPdf: b => { const f = $('#sheet form[data-form=inspect]'); if (f) keepInspDraft(f); inspPdf(b.dataset.id, !!b.dataset.blank); },
+  trips: () => tripsSheet(),
+  addTrip: () => tripForm(),
+  openTrip: b => tripDetail(b.dataset.id),
+  editTrip: b => tripForm(tripOf(b.dataset.id)),
+  delTrip: b => deleteTrip(b.dataset.id),
+  pickForTrip: b => pickForTrip(b.dataset.id),
+  linkTripCosts: b => linkTripCosts(b.dataset.id),
+  tripPdf: b => tripPdf(b.dataset.id),
+  tripText: b => tripTextSheet(b.dataset.id),
+  tripReport: b => tripReport(b.dataset.id),
+  copyText: b => copyText(b),
   makeAdvance: b => makeAdvance(b.dataset.id),
   undoAdvance: b => undoAdvance(b.dataset.id),
   notAdvance: b => notAdvance(b.dataset.id, !!b.closest('.sugg')),
@@ -129,7 +165,8 @@ const ACTIONS = {
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance };
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
+  idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -170,6 +207,8 @@ document.addEventListener('input', e => {
   if (t.name === 'rows' && t.form && t.form.dataset.form === 'import') previewImport(t.form);
   if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
+  if (t.form && t.form.dataset.form === 'buyFilter' && t.name === 'q') filterBuying(t.form);
+  if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form);
 });
 document.addEventListener('change', e => {
   const t = e.target;
@@ -190,6 +229,11 @@ document.addEventListener('change', e => {
   if (t.name === 'periods' && t.form && t.form.dataset.form === 'expense') refreshPeriods(t.form);
   if (t.form && t.form.dataset.form === 'invoice') refreshInvoice(t.form);
   if (t.name === 'pick' && t.form) updatePick(t.form);
+  if (t.form && t.form.dataset.form === 'buyFilter' && t.name !== 'q') filterBuying(t.form);
+  if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form);
+  if (t.name === 'cat' && t.form && t.form.dataset.form === 'need') { $('.newcat', t.form).hidden = t.value !== '__new'; $('.spec-sugg', t.form).outerHTML = specChips(t.value); }
+  if (t.name === 'sup' && t.form) { const ns = $('.newsup', t.form); if (ns) ns.hidden = t.value !== '__new'; }
+  if (t.name === 'pay' && t.form && t.form.dataset.form === 'order') $('.payf', t.form).hidden = !t.checked;
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }
   if (t.id === 'month') { histMonth = t.value; $('#histRes').innerHTML = histResults(); }
