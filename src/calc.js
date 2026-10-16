@@ -103,18 +103,22 @@ const dayNo = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10))
 // A payment for several months at once says so in its reason: "till Dec 2026", "up to jan2027", "until March", "for 6
 // months", "1 year". coverOf: the last month it pays (a month number), or how many months; null when it says neither.
 const MONTH_ABC = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-const UNTIL_RE = /\b(?:till|until|untill|upto|up ?to|through|thru)\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?[\s,]*('?\d{4}|'?\d{2}(?!\d))?/i;
-const SPAN_RE = /\b(\d{1,2}|two|three|four|five|six|twelve)\s*(months?|years?)\b/i, NUMBER = { two: 2, three: 3, four: 4, five: 5, six: 6, twelve: 12 };
+// a year is four figures ("Dec 2026", "jan2027") or 'NN — "till Jan 27" is the 27th of January, not 2027
+const UNTIL_RE = /\b(?:till|until|untill|upto|up ?to|through|thru)\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?[\s,]*(\d{4}|'\d{2}(?!\d))?/i;
+// "for 6 months", "6 months rent / advance / paid" — not "every 6 months" or "12 months credit"
+const SPAN_N = '(\\d{1,2}|two|three|four|five|six|twelve)\\s*(months?|years?)';
+const SPAN_RE = new RegExp(`\\b(?:for|of)\\s+${SPAN_N}\\b|\\b${SPAN_N}\\s+(?:rent|advance|paid|payment|subscription|ahead|in advance)\\b`, 'i'), NUMBER = { two: 2, three: 3, four: 4, five: 5, six: 6, twelve: 12 };
+const MAX_AHEAD = 24; // months one payment may pay for (the sheet's limit on periods)
 function coverOf(text, at) {
   const t = String(text || ''), u = t.match(UNTIL_RE), paid = monthNo(at);
   if (u) {
     let y = u[2] ? +u[2].replace("'", '') : 0;
     if (y && y < 100) y += 2000;
     const m = MONTH_ABC.indexOf(u[1].toLowerCase()), last = y ? y * 12 + m : Math.floor(paid / 12) * 12 + m + (Math.floor(paid / 12) * 12 + m < paid ? 12 : 0); // "till March" paid in November: next March
-    return last >= paid && last - paid < 36 ? { last } : null;
+    return last >= paid && last - paid < MAX_AHEAD ? { last } : null;
   }
-  const n = t.match(SPAN_RE), k = n ? (NUMBER[n[1].toLowerCase()] || +n[1]) * (/^y/i.test(n[2]) ? 12 : 1) : 0;
-  return k >= 2 && k <= 36 ? { months: k } : null;
+  const n = t.match(SPAN_RE), num = n && (n[1] || n[3]), unit = n && (n[2] || n[4]), k = n ? (NUMBER[num.toLowerCase()] || +num) * (/^y/i.test(unit) ? 12 : 1) : 0;
+  return k >= 2 && k <= MAX_AHEAD ? { months: k } : null;
 }
 // The months it pays: from the month paid (the owner's way: 400 in September "till Dec" is Sep–Dec, 100 a month) — or from the
 // next month when that gives the rounder monthly amount (4,200 in October "till Jan" is Nov–Jan at 1,400, not 1,050). The

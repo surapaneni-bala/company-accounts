@@ -135,7 +135,7 @@ function saveRegular(f) {
   // a suggestion's payments are linked, each to the due date (and how many periods) it paid, counted from this first date
   const links = new Map(sugg ? sugg.pays.map(p => [p.id, p]) : []);
   // one payment for several months pays from the first due date, as many periods as its money covers at the amount set
-  const ahead = e => ({ period: rec.first, periods: Math.min(36, Math.max(1, Math.round(e.amount / amount))) });
+  const ahead = e => ({ period: rec.first, periods: Math.min(MAX_AHEAD, Math.max(1, Math.round(e.amount / amount))) });
   const linked = links.size ? S.expenses.map(e => { const p = links.get(e.id); return p ? { ...e, regular: id, ...(sugg.ahead ? ahead(e) : { period: dueOn(rec.first, every, Math.max(0, stretchOf({ first: rec.first, every }, p.period))), ...(p.periods ? { periods: p.periods } : {}) }) } : e; }) : null;
   update({ regulars: [...S.regulars, { id, ...rec, by, createdAt: stampSec() }], seq, ...(linked ? { expenses: linked } : {}),
     log: logWith([['Added', id, `Regular payment: ${rec.name} — ${money(amount, rec.cur)} to ${rec.paidTo}, ${EVERY[every].toLowerCase()} from ${fmtDate(rec.first)}${links.size ? ` (${links.size} past payments linked)` : ''}`]], by) });

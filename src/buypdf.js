@@ -46,7 +46,7 @@ async function inspPdf(supId, blank) {
   if (!items.length) return toast(blank ? 'Nothing ordered here to inspect.' : 'Nothing ticked yet: tick the lines first, or make the checklist to print.');
   toast('Making the PDF…');
   const pics = await Promise.all(items.map(n => Promise.all(filesFor(n.id).filter(f => isPic(f) && !f.removed && !f.replaced).slice(-5).map(f => fileBlob(f.id).then(imgFrom).catch(() => null))).then(a => a.filter(Boolean))));
-  const res = items.map(n => (blank ? null : inspOf(n))), fails = res.filter((r, i) => r && inspResult(r, items[i]) === 'fail').length;
+  const res = items.map(n => (blank ? null : inspOf(n))), fails = res.filter((r, i) => r && inspResult(r, items[i]) === 'fail').length, part = res.filter((r, i) => r && inspResult(r, items[i]) === 'open').length;
   const by = blank ? '' : (items.map(n => n.insp && n.insp.by).find(Boolean) || myName() || '');
   const cols = [{ h: 'Check', w: 380, wrap: true }, { h: 'Should be', w: 330, wrap: true }, { h: 'OK', w: 80, box: true }, { h: 'Not OK', w: 100, box: true }, { h: 'Note', w: 170, wrap: true }];
   const mark = v => [v === 'ok' ? 'ok' : v === 'na' ? 'na' : '', v === 'bad' ? 'bad' : v === 'na' ? 'na' : ''];
@@ -56,10 +56,10 @@ async function inspPdf(supId, blank) {
       const r = res[i], o = n.order;
       return { title: `${i + 1}. ${n.t}`, sub: [`${plain(o.qty)} ${n.unit || ''} ordered ${fmtDate(o.date)} at ${cost(o.price, o.cur)}`, n.project && projName(n.project), n.area].filter(Boolean).join(' · '), photos: pics[i], cols,
         rows: [...(n.specs || []).map(([k, v], si) => [k, v, ...mark(r && r.specs[si]), '']),
-          ...STD_CHECKS.map(([k, label]) => [label, k === 'qty' ? `${plain(o.qty)} ${n.unit || ''}`.trim() : '', ...mark(r && r.std[k]), k === 'qty' && r && r.counted !== '' ? `${r.counted} counted` : '']),
+          ...STD_CHECKS.map(([k, label]) => [label, k === 'qty' ? `${plain(o.qty)} ${n.unit || ''}`.trim() : '', ...mark(r && r.std[k]), k === 'qty' && r && countOf(r) !== null ? `${plain(countOf(r))} counted` : '']),
           ...(r && r.note ? [['Note', r.note, 'skip', 'skip', '']] : blank ? [['Note', '', 'skip', 'skip', '']] : [])] };
     }),
-    summary: blank ? [['Items to inspect', String(items.length), true]] : [['Items inspected', String(items.length)], ['Not OK', String(fails), true]],
-    verdict: blank ? null : { text: fails ? `${fails} ITEM${fails === 1 ? '' : 'S'} NOT OK` : 'ALL ITEMS OK', good: !fails },
+    summary: blank ? [['Items to inspect', String(items.length), true]] : [['Items inspected', String(items.length)], ['Not fully checked', String(part)], ['Not OK', String(fails), true]],
+    verdict: blank ? null : { text: fails ? `${fails} ITEM${fails === 1 ? '' : 'S'} NOT OK` : part ? `${part} NOT FULLY CHECKED` : 'ALL ITEMS OK', good: !fails && !part },
     approvals: true, noStamp: true, signLabels: ['Inspected by', 'For the supplier', 'Approved by'], preparedBy: by }, pdfName(blank ? 'Inspection checklist' : 'Inspection report', u.name));
 }

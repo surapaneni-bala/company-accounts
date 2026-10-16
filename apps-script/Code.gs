@@ -90,7 +90,7 @@ const SHAPES = {
     && (d.specs === undefined || (Array.isArray(d.specs) && d.specs.length <= 40 && d.specs.every(x => Array.isArray(x) && x.length === 2 && str_(x[0]) && str_(x[1]))))
     && (d.quotes === undefined || (Array.isArray(d.quotes) && d.quotes.length <= 30 && d.quotes.every(q => isObj_(q) && SAFE_ID.test(q.id) && SAFE_ID.test(q.sup) && num_(q.price) && q.price >= 0 && CUR_CODE.test(q.cur))))
     && (d.order === undefined || (isObj_(d.order) && SAFE_ID.test(d.order.sup) && num_(d.order.price) && d.order.price >= 0 && CUR_CODE.test(d.order.cur) && num_(d.order.qty) && d.order.qty > 0 && DATE_RE.test(d.order.date)))
-    && (d.insp === undefined || (isObj_(d.insp) && DATE_RE.test(d.insp.date) && ['pass', 'fail'].indexOf(d.insp.result) >= 0))
+    && (d.insp === undefined || (isObj_(d.insp) && DATE_RE.test(d.insp.date) && ['pass', 'fail', 'open'].indexOf(d.insp.result) >= 0))
     && (d.steps === undefined || (isObj_(d.steps) && Object.keys(d.steps).every(k => BUY_STATES.indexOf(k) >= 0 && DATE_RE.test(d.steps[k])))),
   U: d => str_(d.name) && d.name.length > 0 && strs_(d, ['kind', 'city', 'country', 'market', 'person', 'phone', 'wechat', 'email', 'note']),
   J: d => str_(d.to) && d.to.length > 0 && DATE_RE.test(d.out) && (!d.back || DATE_RE.test(d.back)) && Array.isArray(d.who) && d.who.length <= 20 && d.who.every(str_) && strs_(d, ['country', 'purpose', 'note']),
@@ -276,6 +276,7 @@ function allowed_(user, p, before) {
   if (before) return false; // only admins change what is already there (an office manager's edit is a change request)
   if (p.d.uid !== user.id || p.d.deleted) return false; // a new record carries its sender's login and isn't born deleted
   if (p.k === 'F' && BRAND_FILES.indexOf(p.d.type) >= 0) return false; // the company letterhead and stamp: admins only
+  if (p.k === 'F' && /^[IKNUJ]-/.test(String(p.d.for))) return false; // nor photos or PDFs on invoices, clients or the buying list
   if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A', 'V'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0)) && (p.k !== 'V' || p.d.kind !== 'personal');
   return p.k === 'E' || p.k === 'L' || p.k === 'F'; // store keeper: own expenses, notes and their receipts
 }
@@ -1125,7 +1126,7 @@ function buying_(ss, c, items, sups, trips) {
       return [n.id, n.t, n.cat || '', n.sub || '', n.project ? c.pname(n.project) : '', n.area || '', (n.tags || []).join(', '), n.qty || '', n.unit || '', (n.specs || []).map(x => x[0] + ': ' + x[1]).join('; '), n.notes || '',
         n.where || '', PRI_TEXT[n.pri] || '', BUY_TEXT[n.status], n.target || '', n.cur || '', (n.quotes || []).length || '', q ? q.cur + ' ' + q.price + ' (' + supName(q.sup) + ')' : '',
         supName(o.sup), o.price === undefined ? '' : o.price, o.qty || '', o.qty ? Math.round(o.qty * o.price * 100) / 100 : '', o.cur || '', o.date || '', tripName(n.trip || o.trip),
-        n.insp ? (n.insp.result === 'pass' ? 'Passed ' : 'FAILED ') + n.insp.date : '', n.ship || '', st.received || '', n.by || '', when_(n.createdAt)];
+        n.insp ? ({ pass: 'Passed ', fail: 'FAILED ', open: 'Checked in part ' })[n.insp.result] + n.insp.date : '', n.ship || '', st.received || '', n.by || '', when_(n.createdAt)];
     }), ['', '', '', '', '', '', '', 'num', '', '', '', '', '', '', 'num', '', '', '', '', 'num', 'num', 'num', '', 'date', '', '', '', 'date'],
     [110, 220, 150, 150, 160, 120, 120, 70, 70, 320, 220, 100, 80, 90, 100, 70, 70, 170, 170, 100, 90, 110, 80, 105, 170, 130, 130, 105, 110, 150], null);
   const live = sups.filter(u => !u.deleted);

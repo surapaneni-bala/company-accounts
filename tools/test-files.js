@@ -344,6 +344,11 @@ post({ token: owner, since: 0, push: [file('F-OW1-0600', 141, 'x', { for: 'N-OW1
 assert.ok(!post({ token: m.token, since: 0, push: [] }).pull.some(p => ['N', 'U', 'J'].includes(p.k) || p.id === 'F-OW1-0600'), 'the office manager sees no buying list, suppliers, trips or their photos');
 assert.ok(!post({ token: s.token, since: 0, push: [] }).pull.some(p => ['N', 'U', 'J'].includes(p.k) || p.id === 'F-OW1-0600'), 'nor the store keeper');
 assert.deepStrictEqual(post({ token: m.token, since: 0, push: [item('N-AG1-0001', 142, { uid: m.me.id })] }).refused, ['N-AG1-0001'], 'nor adds to it');
+const upB = post({ op: 'upload', token: m.token, name: 'b.png', mime: 'image/png', data: png });
+post({ token: m.token, since: 0, push: [exp('E-AG1-0601', 144, m.me.id)] });
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [file('F-AG1-0601', 145, m.me.id, { for: 'N-OW1-0001', fileId: upB.fileId }), file('F-AG1-0602', 145, m.me.id, { for: 'I-OW1-0001', fileId: upB.fileId }),
+  file('F-AG1-0603', 145, m.me.id, { for: 'E-AG1-0601', fileId: upB.fileId })] }).refused.sort(), ['F-AG1-0601', 'F-AG1-0602'], 'nor attaches photos to it, or to an invoice (her own payment: yes)');
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [item('N-OW1-0007', 146, { order: undefined, trip: undefined, insp: { date: '2026-10-22', result: 'open' } }), item('N-OW1-0008', 146, { order: undefined, trip: undefined, insp: { date: '2026-10-22', result: 'maybe' } })] }).refused, ['N-OW1-0008'], 'an inspection passed, failed or checked in part');
 assert.strictEqual(pathOf(itemPhoto).split(' / ').slice(1).join(' / '), '11 BUYING / FURNITURE & DÉCOR / SOFA, L-SHAPE (N-OW1-0001)', 'an item’s photos: a folder per item, by category');
 const listRow = rows('Buying list').find(r => r[0] === 'N-OW1-0001');
 assert.deepStrictEqual([listRow[1], listRow[2], listRow[9], listRow[13]], ['Sofa, L-shape', 'Furniture & décor', 'Colour: Beige; Size: 3.2 m × 1.8 m; Seating: L-shape 3+2', 'Ordered'], 'the Buying list tab: every detail in one cell');

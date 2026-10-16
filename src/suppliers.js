@@ -83,7 +83,8 @@ async function deleteSupplier(id) {
 }
 
 /* ---------- the inspection: ticked on the phone at the factory ---------- */
-// What is ticked is kept on this phone while the screen is open (a photo taken in between redraws it); Save writes it on the items.
+// What is ticked is kept on this phone while the screen is open (a photo taken in between redraws it); Save writes only the
+// items changed on it, so an item inspected on an earlier day keeps its date and inspector.
 let inspDraft = {};
 const okRow = (name, label, val, na) => `<div class="okrow"><span>${esc(label)}</span><div class="okbad">
   <label><input type="radio" name="${name}" value="ok" ${val === 'ok' ? 'checked' : ''}><span aria-label="OK">✓</span></label><label class="no"><input type="radio" name="${name}" value="bad" ${val === 'bad' ? 'checked' : ''}><span aria-label="Not OK">✗</span></label>
@@ -94,7 +95,7 @@ function inspCard(n) {
   const r = inspOf(n), id = n.id;
   return `<section class="insp card pad">
     <label class="fld check"><input type="checkbox" name="i|${esc(id)}" ${r.inc ? 'checked' : ''}> <b>${esc(n.t)}</b></label>
-    <p class="muted">${esc([`${plain(n.order.qty)} ${n.unit || ''} ordered ${fmtDate(n.order.date)}`, n.project && projName(n.project), n.area].filter(Boolean).join(' · '))}${n.insp ? ` · last check ${esc(fmtDate(n.insp.date))}: ${n.insp.result === 'pass' ? 'OK' : '<b>NOT OK</b>'}` : ''}</p>
+    <p class="muted">${esc([`${plain(n.order.qty)} ${n.unit || ''} ordered ${fmtDate(n.order.date)}`, n.project && projName(n.project), n.area].filter(Boolean).join(' · '))}${n.insp ? ` · last check ${esc(fmtDate(n.insp.date))}: ${n.insp.result === 'fail' ? '<b>NOT OK</b>' : INSP_TEXT[n.insp.result]}` : ''}</p>
     ${photoStrip(id)}
     <div class="checks">${(n.specs || []).map(([k, v], i) => okRow(`c|${id}|s|${i}`, `${k}: ${v}`, r.specs[i])).join('')}
       ${STD_CHECKS.map(([k, label]) => okRow(`c|${id}|d|${k}`, label, r.std[k], true)).join('')}</div>
@@ -128,26 +129,39 @@ function readInspection(f) {
   });
   return out;
 }
-const keepInspDraft = f => { inspDraft = { ...inspDraft, ...readInspection(f) }; };
-// passed: nothing ticked not OK, and as many counted as ordered (when counted)
-const inspResult = (r, n) => (r.specs.includes('bad') || Object.values(r.std).includes('bad') || (r.counted !== '' && +r.counted < n.order.qty) ? 'fail' : 'pass');
+// the item a changed field belongs to (its name is "c|N-…|s|0", "n|N-…" …)
+function keepInspDraft(f, field) {
+  const id = String(field && field.name || '').split('|')[1];
+  if (!id) return;
+  const r = readInspection(f)[id];
+  if (r) inspDraft = { ...inspDraft, [id]: r };
+}
+// how many were counted: a number ("1,200" too), 0, or null when nothing (or nonsense) was typed
+const countOf = r => (r.counted === '' ? null : /^0+([.,]0*)?$/.test(r.counted) ? 0 : parseAmount(r.counted));
+// fail: a line not OK, or fewer counted than ordered; pass: every line ticked OK (or n/a) and none short; else checked in part
+function inspResult(r, n) {
+  const c = countOf(r);
+  if (r.specs.includes('bad') || Object.values(r.std).includes('bad') || (c !== null && c < n.order.qty)) return 'fail';
+  return (n.specs || []).every((_, i) => r.specs[i]) && STD_CHECKS.every(([k]) => r.std[k]) ? 'pass' : 'open';
+}
+const INSP_TEXT = { pass: 'all good', fail: 'NOT OK', open: 'checked in part' };
 const inspTouched = r => r.specs.some(Boolean) || Object.keys(r.std).length || r.counted !== '' || r.note;
 function saveInspection(f) {
-  const res = readInspection(f), by = clean(f.elements.by.value), items = toInspect(f.dataset.id).filter(n => res[n.id].inc && inspTouched(res[n.id]));
+  const res = readInspection(f), by = clean(f.elements.by.value), items = toInspect(f.dataset.id).filter(n => res[n.id].inc && inspDraft[n.id] && inspTouched(res[n.id]));
   if (!by) return formErr(f, 'by', 'Who inspected?');
   if (!items.length) return formErr(f, null, 'Tick at least one line of an item first.');
-  const bad = items.find(n => res[n.id].counted !== '' && parseAmount(res[n.id].counted) === null && res[n.id].counted !== '0');
+  const bad = items.find(n => res[n.id].counted !== '' && countOf(res[n.id]) === null);
   if (bad) return formErr(f, `n|${bad.id}`, 'Type how many were counted, like 2');
   const at = stampSec(), day = today(), lines = [];
   const done = new Map(items.map(n => {
     const r = res[n.id], result = inspResult(r, n);
-    lines.push(['Edited', n.id, `${n.t}: inspected at ${supOf(n.order.sup).name} — ${result === 'pass' ? 'OK' : 'NOT OK'}`]);
-    return [n.id, { date: day, by, specs: r.specs, std: r.std, ...(r.counted !== '' ? { counted: +r.counted } : {}), note: r.note.slice(0, 600), result }];
+    lines.push(['Edited', n.id, `${n.t}: inspected at ${supOf(n.order.sup).name} — ${INSP_TEXT[result]}`]);
+    return [n.id, { date: day, by, specs: r.specs, std: r.std, ...(countOf(r) !== null ? { counted: countOf(r) } : {}), note: r.note.slice(0, 600), result }];
   }));
   update({ needs: S.needs.map(x => { const i = done.get(x.id); return i ? { ...x, insp: i, status: i.result === 'pass' ? 'inspected' : 'ordered', steps: { ...(x.steps || {}), ...(i.result === 'pass' ? { inspected: day } : {}) }, editedAt: at, editedBy: by } : x; }),
     log: logWith(lines, by), lastBy: by });
   items.forEach(n => { delete inspDraft[n.id]; });
-  const fails = [...done.values()].filter(i => i.result === 'fail').length;
-  toast(fails ? `Saved — ${fails} item${fails === 1 ? '' : 's'} NOT OK` : 'Saved ✓ — all OK');
+  const fails = [...done.values()].filter(i => i.result === 'fail').length, open = [...done.values()].filter(i => i.result === 'open').length;
+  toast(fails ? `Saved — ${fails} item${fails === 1 ? '' : 's'} NOT OK` : open ? `Saved — ${open} not fully checked yet` : 'Saved ✓ — all OK');
   inspectSheet(f.dataset.id);
 }

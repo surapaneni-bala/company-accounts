@@ -136,7 +136,7 @@ function needForm(old, preset = {}) {
       <label class="fld"><span>Notes <em>(optional — anything to remember)</em></span><textarea class="plain" name="notes" rows="3" maxlength="2000" placeholder="e.g. Same fabric as the sample in the office; must fit through a 90 cm door.">${esc(d.notes)}</textarea></label>
       <label class="fld"><span>Link <em>(optional — a product page, an Alibaba listing)</em></span><input name="link" type="url" value="${esc(d.link)}" maxlength="500" autocomplete="off" placeholder="https://"></label>
       <div class="two"><label class="fld"><span>Target price per unit <em>(optional)</em></span><input name="target" inputmode="decimal" value="${esc(d.target ?? '')}" autocomplete="off"></label>
-        <label class="fld"><span>In</span><select name="cur">${BUY_CURS.map(c => `<option ${c === (d.cur || 'USD') ? 'selected' : ''}>${c}</option>`).join('')}</select></label></div>
+        <label class="fld"><span>In</span>${curSelect(d.cur || 'USD', 'tcur')}</label></div>
       <label class="fld"><span>Where to buy it</span><input name="where" value="${esc(d.where)}" list="dl-where" maxlength="60" autocomplete="off"></label>${listFrom('dl-where', [...WHERES, ...all.map(n => n.where)])}
       <div class="fld"><span>How soon?</span><div class="chips">${Object.entries(PRI).map(([k, t]) => `<label><input type="radio" name="pri" value="${k}" ${+k === (d.pri || 2) ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></div>
       <label class="fld"><span>Tags <em>(optional — words to find it by, with commas: villa, new hotel, gift)</em></span><input name="tags" value="${esc((d.tags || []).join(', '))}" maxlength="200" autocomplete="off"></label>
@@ -161,7 +161,7 @@ function saveNeed(f) {
   if (target === null) return formErr(f, 'target', 'Type a price, like 250 — or leave it empty');
   if (v.link && !/^https?:\/\//i.test(v.link.trim())) return formErr(f, 'link', 'A link starts with https://');
   const rec = { t: clean(v.t), cat, sub: clean(v.sub), project: v.project || '', area: clean(v.area), qty, unit: clean(v.unit), specs: specsFrom(f), notes: String(v.notes || '').trim().slice(0, 2000),
-    link: String(v.link || '').trim(), target, cur: BUY_CURS.includes(v.cur) ? v.cur : 'USD', where: clean(v.where) || 'Anywhere', pri: +v.pri || 2, tags: tagsFrom(v.tags) };
+    link: String(v.link || '').trim(), target, cur: BUY_CURS.includes(v.tcur) ? v.tcur : 'USD', where: clean(v.where) || 'Anywhere', pri: +v.pri || 2, tags: tagsFrom(v.tags) };
   if (!old) { const n = newNeed({ ...rec, status: v.status === 'idea' ? 'idea' : 'tobuy', ...(tripOf(v.trip) ? { trip: v.trip } : {}) }); toast('Added to the list ✓'); return needDetail(n.id); }
   const changes = changedOf(old, rec, NEED_LABELS), by = myName() || S.lastBy || '';
   if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
@@ -191,7 +191,7 @@ function needDetail(id) {
     ${n.notes ? `<h3 class="subh">Notes</h3><p class="pre">${esc(n.notes)}</p>` : ''}
     ${n.link ? `<a class="btn ghost" href="${esc(n.link)}" target="_blank" rel="noopener noreferrer" style="margin-bottom:10px">🔗 Open the link</a>` : ''}
     ${o ? `<div class="note">🧾 <b>Ordered from ${esc(sup ? sup.name : 'a supplier')}</b> on ${esc(fmtDate(o.date))}: ${esc(plain(o.qty))} × ${esc(cost(o.price, o.cur))} = <b>${esc(cost(needTotal(n), o.cur))}</b>${o.note ? `<br>${esc(o.note)}` : ''}</div>` : ''}
-    ${n.insp ? `<div class="note">🔍 Inspected on ${esc(fmtDate(n.insp.date))}${n.insp.by ? ` by ${esc(n.insp.by)}` : ''}: <b>${n.insp.result === 'pass' ? 'all good' : 'NOT OK'}</b>${n.insp.note ? ` — ${esc(n.insp.note)}` : ''}</div>` : ''}
+    ${n.insp ? `<div class="note">🔍 Inspected on ${esc(fmtDate(n.insp.date))}${n.insp.by ? ` by ${esc(n.insp.by)}` : ''}: <b>${INSP_TEXT[n.insp.result] || ''}</b>${n.insp.note ? ` — ${esc(n.insp.note)}` : ''}</div>` : ''}
     ${n.ship ? `<p class="muted">🚢 Shipment: ${esc(n.ship)}</p>` : ''}
     ${needActions(n)}
     <h3 class="subh">Quotes (${(n.quotes || []).length})</h3>
@@ -253,7 +253,8 @@ function supFrom(f) {
   const name = clean(f.elements.supName.value);
   return name ? newSupplier({ name, kind: 'factory', phone: clean(f.elements.supPhone.value), city: '', country: '' }) : '';
 }
-const curSelect = (cur, name = 'cur') => `<select name="${name}" aria-label="Currency">${BUY_CURS.map(c => `<option ${c === cur ? 'selected' : ''}>${c}</option>`).join('')}</select>`;
+// prices abroad: any currency; never named "cur", which belongs to the payment fields (USD / SSP, their symbol and preview)
+const curSelect = (cur, name = 'pcur') => `<select name="${name}" aria-label="Currency">${BUY_CURS.map(c => `<option ${c === cur ? 'selected' : ''}>${c}</option>`).join('')}</select>`;
 function quoteForm(id) {
   const n = needOf(id);
   if (!n) return;
@@ -277,7 +278,7 @@ function saveQuote(f) {
   const sup = supFrom(f);
   if (!sup) return formErr(f, f.elements.sup.value === '__new' ? 'supName' : 'sup', 'Which supplier?');
   const by = myName() || S.lastBy || '', trip = currentTrip();
-  const q = { id: newQid(), sup, price, cur: BUY_CURS.includes(v.cur) ? v.cur : 'USD', moq: clean(v.moq), lead: clean(v.lead), note: clean(v.note), at: today(), ...(trip ? { trip: trip.id } : {}) };
+  const q = { id: newQid(), sup, price, cur: BUY_CURS.includes(v.pcur) ? v.pcur : 'USD', moq: clean(v.moq), lead: clean(v.lead), note: clean(v.note), at: today(), ...(trip ? { trip: trip.id } : {}) };
   update({ needs: S.needs.map(x => (x.id === n.id ? { ...x, quotes: [...(x.quotes || []), q], editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', n.id, `${n.t}: quote ${cost(price, q.cur)} from ${supOf(sup).name}`]], by) });
   toast('Quote saved ✓');
   needDetail(n.id);
@@ -289,8 +290,8 @@ function deleteQuote(id, qid) {
   update({ needs: S.needs.map(x => (x.id === id ? { ...x, quotes: x.quotes.filter(y => y.id !== qid), editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', id, `${n.t}: quote ${cost(q.price, q.cur)} removed`]], by) });
   needDetail(id);
 }
-// the trip someone is on today (or the last one that started), to file quotes and orders under
-const currentTrip = () => live(S.trips).filter(j => j.out <= today() && (!j.back || j.back >= today())).sort((a, b) => b.out.localeCompare(a.out))[0];
+// the trip someone is on today, to file quotes and orders under (one with no return day counts for 30 days)
+const currentTrip = () => live(S.trips).filter(j => j.out <= today() && (j.back || plusDays(j.out, 30)) >= today()).sort((a, b) => b.out.localeCompare(a.out))[0];
 
 /* ---------- ordering: from one supplier, at a price; the payment offered filled in ---------- */
 function orderForm(id, qid) {
@@ -322,7 +323,7 @@ function saveOrder(f) {
   if (paid === null) return formErr(f, 'paid', 'Type what was paid in dollars, like 500 — or leave it empty');
   const sup = supFrom(f);
   if (!sup) return formErr(f, f.elements.sup.value === '__new' ? 'supName' : 'sup', 'Who was it ordered from?');
-  const by = myName() || S.lastBy || '', trip = tripOf(v.trip) ? v.trip : '', at = stampSec(), cur = BUY_CURS.includes(v.cur) ? v.cur : 'USD';
+  const by = myName() || S.lastBy || '', trip = tripOf(v.trip) ? v.trip : '', at = stampSec(), cur = BUY_CURS.includes(v.pcur) ? v.pcur : 'USD';
   const order = { sup, price, cur, qty, date: v.date, note: clean(v.note), ...(trip ? { trip } : {}) };
   let ids = S.seq, rest = null, pay = null;
   if (n.qty && qty < n.qty) { // part of it: the rest stays to buy, with every detail

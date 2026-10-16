@@ -144,7 +144,7 @@ const ACTIONS = {
   editSupplier: b => supplierForm(supOf(b.dataset.id)),
   delSupplier: b => deleteSupplier(b.dataset.id),
   inspect: b => inspectSheet(b.dataset.id),
-  inspPdf: b => { const f = $('#sheet form[data-form=inspect]'); if (f) keepInspDraft(f); inspPdf(b.dataset.id, !!b.dataset.blank); },
+  inspPdf: b => inspPdf(b.dataset.id, !!b.dataset.blank),
   trips: () => tripsSheet(),
   addTrip: () => tripForm(),
   openTrip: b => tripDetail(b.dataset.id),
@@ -209,7 +209,7 @@ document.addEventListener('input', e => {
   if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
   if (t.form && t.form.dataset.form === 'buyFilter' && t.name === 'q') filterBuying(t.form);
-  if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form);
+  if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form, t);
   if (t.name === 'list' && t.form && t.form.dataset.form === 'pasteList') countPasted(t.form);
 });
 document.addEventListener('change', e => {
@@ -232,7 +232,7 @@ document.addEventListener('change', e => {
   if (t.form && t.form.dataset.form === 'invoice') refreshInvoice(t.form);
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.form && t.form.dataset.form === 'buyFilter' && t.name !== 'q') filterBuying(t.form);
-  if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form);
+  if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form, t);
   if (t.name === 'cat' && t.form && t.form.dataset.form === 'need') { $('.newcat', t.form).hidden = t.value !== '__new'; $('.spec-sugg', t.form).outerHTML = specChips(t.value); }
   if (t.name === 'sup' && t.form) { const ns = $('.newsup', t.form); if (ns) ns.hidden = t.value !== '__new'; }
   if (t.name === 'pay' && t.form && t.form.dataset.form === 'order') $('.payf', t.form).hidden = !t.checked;
