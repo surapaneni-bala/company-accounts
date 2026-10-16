@@ -24,11 +24,11 @@ function banksSheet() {
   const list = bankList();
   openSheet(`${head('Company bank details', 'in')}
     <p class="hint">For anyone paying the company. Tap an account to copy it or send it on WhatsApp.</p>
+    ${can('settings') ? '<button class="btn in" data-act="addBank" style="margin-bottom:14px">＋ Add a bank account 🔒</button>' : ''}
     ${list.length ? `<div class="card list inset">${list.map(b => `<button class="row in" data-act="openBank" data-id="${esc(b.id)}"><span class="dot">🏦</span>
       <span class="main"><span class="t"><span class="tt">${esc(b.bank)}</span>${b.cur ? `<i class="tag">${esc(b.cur)}</i>` : ''}</span><span class="s">${esc([b.accName, b.number].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>
       ${list.length > 1 ? `<h3 class="subh">All ${list.length} accounts together</h3>${shareButtons(bankText(list), 'copyBank', 'all')}` : ''}`
-      : empty('No bank accounts yet', can('settings') ? 'Add each company account once.' : 'An admin adds them.')}
-    ${can('settings') ? '<button class="btn ghost" data-act="addBank" style="margin-top:16px">＋ Add a bank account 🔒</button>' : ''}`);
+      : empty('No bank accounts yet', can('settings') ? 'Add each company account once.' : 'An admin adds them.')}`);
   comeBack(banksSheet);
 }
 function bankDetail(id) {

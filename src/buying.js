@@ -26,12 +26,12 @@ const needTotal = n => (n.order ? Math.round(n.order.qty * n.order.price * 100) 
 const bestQuote = n => (n.quotes || []).filter(q => supOf(q.sup)).sort((a, b) => a.price - b.price)[0];
 const qtyText = n => (n.qty ? `${plain(n.qty)} ${n.unit || ''}`.trim() : '');
 // what a line of the list says under the item's name
-const needLine = n => [qtyText(n), n.project && projName(n.project), n.area, n.where, ...(n.tags || []).map(t => `#${t}`)].filter(Boolean).join(' · ');
+const needLine = n => [qtyText(n), n.project && projName(n.project), n.area, n.where !== 'Anywhere' && n.where, ...(n.tags || []).map(t => `#${t}`)].filter(Boolean).join(' · ');
 const needAmt = n => (n.order ? cost(needTotal(n), n.order.cur) : n.target ? `<small>target</small>${esc(cost(n.target, n.cur || 'USD'))}` : '');
 const stateTag = n => { const [, text, tone] = BUY_STATE[n.status]; return `<i class="tag ${tone}">${text}</i>`; };
 function needRow(n) {
   return `<button class="row" data-act="openNeed" data-id="${esc(n.id)}"><span class="dot">${BUY_STATE[n.status][0]}</span>
-    <span class="main"><span class="t"><span class="tt">${esc(n.t)}</span>${n.pri === 1 ? '<i class="tag bad">Urgent</i>' : ''}${n.status === 'tobuy' ? '' : stateTag(n)}${n.insp && n.insp.result === 'fail' ? '<i class="tag bad">Failed check</i>' : ''}</span>
+    <span class="main"><span class="t"><span class="tt">${esc(n.t)}</span>${n.pri === 1 ? '<i class="tag bad">Urgent</i>' : ''}${['idea', 'tobuy'].includes(n.status) ? '' : stateTag(n)}${n.insp && n.insp.result === 'fail' ? '<i class="tag bad">Failed check</i>' : ''}</span>
     <span class="s">${esc(needLine(n) || n.sub || '')}</span></span><span class="amt">${needAmt(n)}</span></button>`;
 }
 // grouped by category (in the usual order), then by sub-category and name
@@ -49,7 +49,7 @@ function buyingSheet() {
   const count = v => all.filter(n => BUY_VIEWS[v][1].includes(n.status)).length;
   openSheet(`${head('Buying', 'out')}
     <form data-form="idea" class="idea-box"><input name="t" placeholder="💡 What do we need, or an idea?" maxlength="160" autocomplete="off" aria-label="What to buy, or an idea"><button class="btn out small">Add</button></form>
-    <p class="hint">Type it the moment you think of it: the app puts it in a category. Add the details later.</p>
+    <p class="hint">Type it the moment you think of it: the app puts it in a category. Add the details later. <button type="button" class="link" data-act="pasteList">📋 Paste a whole list</button></p>
     <div class="two"><button class="btn ghost" data-act="addNeed">＋ With all details</button><button class="btn ghost" data-act="trips">✈️ Trips (${live(S.trips).length})</button></div>
     <button class="btn ghost" data-act="suppliers" style="margin-top:10px">🏭 Suppliers and factories (${live(S.suppliers).length})</button>
     <form class="buy-filter" data-form="buyFilter" style="margin-top:16px">
@@ -74,6 +74,37 @@ function saveIdea(f) {
   if (!t) return f.elements.t.focus();
   const n = newNeed({ t, cat: guessCat(t), status: 'idea', pri: 2, where: 'Anywhere' });
   toast(`Added to ${n.cat} ✓`);
+  buyingSheet();
+}
+// A list pasted at once (a checklist from WhatsApp or notes): one idea per line, each in its guessed category. Ticks,
+// bullets and numbers at the start of a line are left out; the words stay as typed, to tidy up later.
+const listLines = text => String(text || '').split(/\r?\n/).map(l => l.replace(/^\s*(?:[-*•▪◦–]\s*)?(?:\[[ xX✓]?\]\s*)?(?:\d{1,3}[.)]\s+)?/, '').replace(/\s+/g, ' ').trim()).filter(l => /\w/.test(l)).map(l => l.slice(0, 160));
+function pasteListSheet(text = '') {
+  openSheet(`${head('Paste a list', 'out')}
+    <form data-form="pasteList">
+      <p class="hint">One thing per line. Each becomes an idea on the buying list, in its own category.</p>
+      <label class="fld"><span>The list</span><textarea class="plain" name="list" rows="12" maxlength="20000" placeholder="TV 55 inch\nCeiling fans\nRoofing tiles…">${esc(text)}</textarea></label>
+      <p class="note list-count"></p>
+      ${projectSelect('', true)}
+      ${tripPick('')}
+      <p class="err"></p>
+      <button class="btn out">Add them</button>
+    </form>`);
+  countPasted($('#sheet form'));
+}
+function countPasted(f) {
+  const lines = listLines(f.elements.list.value), groups = needGroups(lines.map(t => ({ t, cat: guessCat(t) })));
+  $('.list-count', f).innerHTML = lines.length ? `<b>${lines.length}</b> item${lines.length === 1 ? '' : 's'}: ${groups.map(([c, l]) => `${esc(c)} ${l.length}`).join(' · ')}` : 'Paste or type the list above.';
+}
+function savePasteList(f) {
+  const lines = listLines(f.elements.list.value), by = myName() || S.lastBy || '', at = stampSec(), project = f.elements.project ? f.elements.project.value : '', trip = f.elements.trip && tripOf(f.elements.trip.value) ? f.elements.trip.value : '';
+  if (!lines.length) return formErr(f, 'list', 'Paste the list: one thing per line.');
+  if (lines.length > 300) return formErr(f, 'list', 'That is more than 300 lines: add it in parts.');
+  const [ids, seq] = nextIds('N', lines.length, S.seq);
+  const items = lines.map((t, i) => ({ id: ids[i], t, cat: guessCat(t), status: 'idea', pri: 2, where: 'Anywhere', project, ...(trip ? { trip } : {}), steps: { idea: today() }, by, createdAt: at }));
+  update({ needs: [...S.needs, ...items], seq, log: logWith([['Added', ids[0], `Buying list: ${items.length} ideas pasted at once (${items.map(n => n.t).slice(0, 5).join(', ')}${items.length > 5 ? '…' : ''})`]], by) });
+  toast(`${items.length} added ✓`);
+  buyView = { view: 'open', project: '', q: '' };
   buyingSheet();
 }
 function newNeed(rec) {

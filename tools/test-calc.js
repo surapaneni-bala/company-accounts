@@ -162,9 +162,17 @@ assert.deepStrictEqual(plain(findRegulars([exA('A2', '2026-10-15', 4200, 'House 
 assert.deepStrictEqual(plain(regularDue(ahead[0], ahead[0].pays, '2026-10-16')), { next: '2027-01-24', late: 0 }, 'the internet is paid up to December');
 
 /* ---------- buying: a category guessed from a line typed in a hurry ---------- */
-assert.deepStrictEqual(['Sofa, L-shape', 'Wardrobe with sliding doors', 'Concrete block machine for the new venture', 'Opaque light-blocking window film', 'Smart switches, Zigbee', 'Floor tiles 60x60 matt beige',
-  'Kitchen cabinets', 'Hollow blocks 6 inch', 'Chandelier for the hall', 'Cordless drill', 'Water pump 1 HP', 'Something else'].map(guessCat),
-  ['Furniture & décor', 'Furniture & décor', 'Machinery & vehicles', 'Doors & windows', 'Home automation & security', 'Finishes', 'Kitchen & appliances', 'Structure & civil', 'Lighting', 'Tools & hardware', 'Plumbing & sanitary', 'Other'],
-  'a block is not a lock; smart switches are home automation; a machine for blocks is a machine');
+const guessed = [['Sofa, L-shape', 'Furniture & décor'], ['Wardrobe with sliding doors', 'Furniture & décor'], ['Concrete block machine for the new venture', 'Machinery & vehicles'],
+  ['Opaque light-blocking window film', 'Doors & windows'], ['Smart switches, Zigbee', 'Home automation & security'], ['Floor tiles 60x60 matt beige', 'Finishes'], ['Kitchen cabinets', 'Kitchen'],
+  ['Hollow blocks 6 inch', 'Structure & civil'], ['Chandelier for the hall', 'Lighting'], ['Cordless drill', 'Tools & hardware'], ['Water pump 1 HP', 'Plumbing & sanitary'], ['Something else', 'Other'],
+  // a list typed for a buying trip
+  ['T.V 100 inch, 50 inch & 30 inch (1,2,1)', 'Electronics & appliances'], ['Modular kitchen', 'Kitchen'], ['Cooking range', 'Kitchen'], ['Ceiling fans', 'Electronics & appliances'],
+  ['Table fans', 'Electronics & appliances'], ['AC', 'Electronics & appliances'], ['Solar CCTV', 'Home automation & security'], ['Refrigerators', 'Electronics & appliances'],
+  ['Exterior lights', 'Lighting'], ['Carpets', 'Furniture & décor'], ['Curtain and curtain rods', 'Furniture & décor'], ['Wall panels & false ceiling', 'Finishes'],
+  ['Roofing tiles, top ridge and gutters', 'Structure & civil'], ['Computers', 'Office & IT'], ['Big tool box, multiple drawers', 'Tools & hardware'], ['Car wash equipment', 'Machinery & vehicles'],
+  ['Modern cabinets', 'Furniture & décor'], ['Kitchen utensils', 'Kitchen'], ['Monitor mounts', 'Office & IT'], ['Moulds for pillars', 'Structure & civil'], ['Paintings', 'Furniture & décor'],
+  ['Sintered stone', 'Finishes'], ['Overall clothing for workers', 'Tools & hardware'], ['Gloves and safety equipment', 'Tools & hardware'], ['Concrete pump', 'Machinery & vehicles'],
+  ['Generator', 'Electrical & solar'], ['Tiles', 'Finishes'], ['Second hand clothes', 'Goods for trading']];
+assert.deepStrictEqual(guessed.map(([t]) => [t, guessCat(t)]), guessed, 'a block is not a lock; smart switches are home automation; table fans are not tables; roofing tiles are roofing; second-hand clothes are for trading');
 
 console.log('Pay maths, words and PDF: all checks passed');

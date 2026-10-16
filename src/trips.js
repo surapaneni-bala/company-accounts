@@ -142,7 +142,7 @@ function tripTextSheet(id) {
   openSheet(`${head('The list as a message', 'out')}
     <textarea class="plain" rows="14" readonly>${esc(text)}</textarea>
     ${shareButtons(text, 'copyText', '')}`);
-  $('#sheet [data-act=copyText]').dataset.text = text;
+  $$('#sheet [data-act=copyText]').forEach(b => { b.dataset.text = text; });
 }
 async function copyText(btn) {
   const text = btn.dataset.text || '';

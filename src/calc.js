@@ -134,11 +134,11 @@ const whatOf = t => String(t || '').replace(UNTIL_RE, '').replace(SPAN_RE, '').r
 // [category, its sub-categories, words that suggest it, the details worth writing down for it]; any other category can be typed
 const BUY_CATS = [
   ['Furniture & décor', ['Sofas & seating', 'Beds & mattresses', 'Wardrobes & storage', 'Tables & dining', 'Office furniture', 'Outdoor furniture', 'Curtains & blinds', 'Rugs & carpets', 'Décor & art'],
-    /sofa|couch|chair|table|bed\b|beds|mattress|wardrobe|cupboard|furniture|desk|curtain|blind|rug|carpet|d[eé]cor|mirror|shelf|dresser|stool|bench/i, ['Colour', 'Fabric / material', 'Size (L × W × H)', 'Seating arrangement', 'Cushions', 'Legs / finish', 'Pieces in the set']],
+    /sofa|couch|chair|table|bed\b|beds|mattress|wardrobe|cupboard|cabinet|furniture|desk|curtain|blind|rug|carpet|d[eé]cor|mirror|shelf|dresser|stool|bench|painting|artwork|frames? for/i, ['Colour', 'Fabric / material', 'Size (L × W × H)', 'Seating arrangement', 'Cushions', 'Legs / finish', 'Pieces in the set']],
   ['Doors & windows', ['Doors', 'Windows', 'Frames', 'Locks & handles', 'Glass', 'Window film', 'Shutters & grills', 'Gates & garage doors'],
     /door|window|frame|lock|handle|hinge|glass|film|tint|shutter|grill|gate/i, ['Size (W × H)', 'Material', 'Colour / finish', 'Glass', 'Opening side', 'Locks & handles', 'Wall thickness']],
   ['Finishes', ['Floor tiles', 'Wall tiles', 'Marble & stone', 'Paint', 'Ceiling & gypsum', 'Wall panels & cladding', 'Wooden & vinyl floors', 'Skirting & trims', 'Wallpaper'],
-    /tile|marble|granite|stone|paint|gypsum|ceiling|cladding|panel|parquet|laminate|vinyl|skirting|wallpaper|plaster/i, ['Size', 'Finish (matt / gloss)', 'Colour / pattern', 'Thickness', 'Area to cover (m²)', 'Pieces or m² per box', 'Extra for breakage']],
+    /tile|marble|granite|stone|sintered|cintered|paint|gypsum|ceiling|false ceiling|cladding|panel|parquet|laminate|vinyl|skirting|wallpaper|plaster/i, ['Size', 'Finish (matt / gloss)', 'Colour / pattern', 'Thickness', 'Area to cover (m²)', 'Pieces or m² per box', 'Extra for breakage']],
   ['Lighting', ['Indoor lights', 'Outdoor lights', 'Chandeliers', 'LED strips', 'Flood & street lights', 'Bulbs & drivers'],
     /light|lamp|chandelier|\bled\b|bulb|flood|spotlight|downlight/i, ['Type', 'Watts', 'Colour of the light (K)', 'Finish', 'Size / cut-out', 'Dimmable', 'IP rating (outdoor)', 'Voltage']],
   ['Electrical & solar', ['Cables & wires', 'Switches & sockets', 'Breakers & boards', 'Solar panels', 'Inverters & batteries', 'Generators', 'Conduits & earthing'],
@@ -147,20 +147,24 @@ const BUY_CATS = [
     /smart|automation|cctv|camera|intercom|doorbell|wi-?fi|router|network|sensor|alarm|access control|zigbee/i, ['Brand / system', 'Model', 'Works with (Wi-Fi / Zigbee)', 'Voltage', 'App', 'Warranty']],
   ['Plumbing & sanitary', ['Pipes & fittings', 'Toilets', 'Basins & sinks', 'Taps & mixers', 'Showers & bathtubs', 'Water heaters', 'Tanks & pumps', 'Bathroom accessories'],
     /pipe|fitting|toilet|\bwc\b|basin|sink|\btaps?\b|mixer|shower|bath|heater|tank|pump|valve|drain/i, ['Size', 'Material', 'Colour / finish', 'Brand / model', 'Fixing (wall / floor)', 'Pressure']],
-  ['Kitchen & appliances', ['Kitchen cabinets', 'Countertops', 'Cookers & ovens', 'Fridges & freezers', 'Air conditioners', 'Washing machines', 'Small appliances'],
-    /kitchen|counter|cooker|oven|\bhob\b|hood|fridge|freezer|air ?con|\bac\b|washing machine|microwave|appliance|dishwasher/i, ['Size', 'Colour / finish', 'Material', 'Brand / model', 'Voltage', 'Warranty']],
+  ['Kitchen', ['Modular kitchens & cabinets', 'Countertops', 'Cooking ranges & ovens', 'Hoods & hobs', 'Sinks', 'Utensils & cookware'],
+    /kitchen|counter ?tops?|cooker|cooking|oven|hob\b|hood|utensil|cookware/i, ['Size / layout', 'Colour / finish', 'Material', 'Brand / model', 'Gas or electric', 'Voltage']],
+  ['Electronics & appliances', ['TVs & screens', 'Air conditioners', 'Fans', 'Fridges & freezers', 'Washing machines', 'Small appliances', 'Sound systems'],
+    /tv\b|t\.v|television|air ?con|ac\b|fans?\b|fridge|refrigerat|freezer|washing machine|dryer|microwave|appliance|dishwasher|speaker|sound system|water dispenser/i, ['Brand / model', 'Size', 'Capacity / power', 'Voltage / plug', 'Colour', 'Warranty']],
   ['Structure & civil', ['Cement', 'Steel & rebar', 'Blocks & bricks', 'Sand & aggregate', 'Roofing', 'Waterproofing', 'Formwork & scaffolding'],
-    /cement|steel|rebar|block|brick|sand|aggregate|gravel|murrum|roof|iron sheet|waterproof|scaffold|formwork|concrete/i, ['Grade / type', 'Size', 'Standard', 'Brand']],
+    /cement|steel|rebar|block|brick|sand|aggregate|gravel|murrum|roof|ridge|gutter|iron sheet|waterproof|scaffold|formwork|mou?lds?\b|concrete/i, ['Grade / type', 'Size', 'Colour', 'Standard', 'Brand']],
   ['Machinery & vehicles', ['Construction machines', 'Mixers & vibrators', 'Compressors & pumps', 'Production machines', 'Vehicles', 'Spare parts'],
-    /machine|excavator|vibrator|compressor|\bjcb\b|loader|truck|vehicle|tyre|tire|spare|engine|crusher|plant/i, ['Brand / model', 'Capacity', 'Power (kW / HP)', 'Voltage / phase', 'Fuel', 'Year', 'Spare parts included', 'Manuals in English', 'Warranty']],
+    /machine|excavator|vibrator|compressor|concrete pump|jcb\b|loader|truck|vehicle|tyre|tire|spare|engine|crusher|plant|car wash|pressure washer/i, ['Brand / model', 'Capacity', 'Power (kW / HP)', 'Voltage / phase', 'Fuel', 'Year', 'Spare parts included', 'Manuals in English', 'Warranty']],
   ['Tools & hardware', ['Power tools', 'Hand tools', 'Fasteners & fixings', 'Safety gear', 'Measuring tools', 'Welding'],
-    /drill|grinder|\bsaw\b|tool|hammer|spanner|screw|bolt|nail|anchor|helmet|glove|boots|\bppe\b|weld/i, ['Brand / model', 'Power', 'Voltage / battery', 'Accessories']],
-  ['Office & IT', ['Computers & phones', 'Printers', 'Stationery', 'Software'], /computer|laptop|phone|printer|stationery|software|tablet|monitor/i, ['Brand / model', 'Specs', 'Warranty']],
+    /drill|grinder|saw\b|tool|hammer|spanner|screw|bolt|nail|anchor|helmet|glove|boots|ppe\b|safety|saftey|overall|coverall|uniform|workwear|reflective|weld/i, ['Brand / model', 'Size', 'Power', 'Voltage / battery', 'Accessories']],
+  ['Office & IT', ['Computers & phones', 'Monitors & mounts', 'Printers', 'Stationery', 'Software'], /computer|laptop|phone|printer|stationery|software|tablet|monitor/i, ['Brand / model', 'Specs', 'Size', 'Warranty']],
+  ['Goods for trading', ['Clothes', 'Food & drinks', 'Building materials', 'Other goods'], /second ?hand|resale|re-sale|wholesale|bales?\b|for sale|to sell|trading/i, ['Grade / quality', 'Size / pack', 'Quantity per pack', 'Price to sell at']],
   ['Other', [], null, ['Size', 'Colour', 'Material', 'Brand / model']],
 ];
 // Each word must start a word ("block" is not a "lock"); the narrower categories are tried first, so "smart switches"
-// are home automation (not electrical) and a "concrete block machine" is a machine (not blocks).
-const GUESS_FIRST = ['Home automation & security', 'Machinery & vehicles', 'Kitchen & appliances', 'Furniture & décor', 'Doors & windows'];
+// are home automation (not electrical), a "concrete block machine" is a machine (not blocks), table fans are appliances
+// (not tables) and roofing tiles are roofing (not floor tiles).
+const GUESS_FIRST = ['Home automation & security', 'Goods for trading', 'Machinery & vehicles', 'Electronics & appliances', 'Kitchen', 'Furniture & décor', 'Doors & windows', 'Structure & civil'];
 const GUESS_CATS = [...GUESS_FIRST.map(n => BUY_CATS.find(c => c[0] === n)), ...BUY_CATS.filter(c => !GUESS_FIRST.includes(c[0]))].filter(c => c[2]).map(c => [c[0], new RegExp(`\\b(?:${c[2].source})`, 'i')]);
 const guessCat = t => (GUESS_CATS.find(([, re]) => re.test(t)) || ['Other'])[0];
 

@@ -120,6 +120,7 @@ const ACTIONS = {
   addLine: () => { $('.ilines').insertAdjacentHTML('beforeend', lineRow()); $('.iline:last-child input').focus(); },
   advances: () => advancesSheet(),
   buying: () => buyingSheet(),
+  pasteList: () => pasteListSheet(),
   addNeed: () => needForm(),
   openNeed: b => needDetail(b.dataset.id),
   editNeed: b => needForm(needOf(b.dataset.id)),
@@ -166,7 +167,7 @@ const ACTIONS = {
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
   signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
-  idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying };
+  idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -209,6 +210,7 @@ document.addEventListener('input', e => {
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
   if (t.form && t.form.dataset.form === 'buyFilter' && t.name === 'q') filterBuying(t.form);
   if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form);
+  if (t.name === 'list' && t.form && t.form.dataset.form === 'pasteList') countPasted(t.form);
 });
 document.addEventListener('change', e => {
   const t = e.target;
@@ -242,6 +244,8 @@ document.addEventListener('change', e => {
 // pasting an invite replaces the box (it may already hold the link) instead of adding to it
 document.addEventListener('paste', e => {
   const t = e.target;
+  // several lines pasted into the idea box: they become a list, one idea per line
+  if (t.name === 't' && t.form && t.form.dataset.form === 'idea' && e.clipboardData && /\n\s*\S/.test(e.clipboardData.getData('text').trim())) { e.preventDefault(); return pasteListSheet(e.clipboardData.getData('text')); }
   if (t.name !== 'invite' || !e.clipboardData) return;
   e.preventDefault();
   t.value = e.clipboardData.getData('text').trim();
