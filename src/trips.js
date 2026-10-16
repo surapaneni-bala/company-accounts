@@ -34,15 +34,18 @@ function tripForm(old) {
       <label class="fld"><span>Who travels <em>(names, with commas)</em></span><input name="who" value="${esc(d.who.join(', '))}" list="dl-who" maxlength="200" autocomplete="off" required></label>${listFrom('dl-who', names)}
       <div class="two"><label class="fld"><span>Leaves on</span><input type="date" name="out" value="${esc(d.out)}" required></label><label class="fld"><span>Back on <em>(optional)</em></span><input type="date" name="back" value="${esc(d.back || '')}"></label></div>
       ${textField('purpose', 'Why', 'e.g. Furniture and lights for the villa; Canton Fair', d.purpose, false)}
+      <label class="fld"><span>Budget for buying on it, in US dollars <em>(optional)</em></span><input name="budget" inputmode="decimal" value="${esc(d.budget ?? '')}" autocomplete="off"></label>
       <label class="fld"><span>Notes <em>(optional — flights, hotel, agent, meetings)</em></span><textarea class="plain" name="note" rows="3" maxlength="1000">${esc(d.note)}</textarea></label>
       <p class="err"></p>
       <button class="btn out">${old ? 'Save changes' : 'Save the trip'}</button>
     </form>`);
 }
-const TRIP_LABELS = { to: 'Where to', country: 'Country', who: 'Who', out: 'Leaves on', back: 'Back on', purpose: 'Why', note: 'Notes' };
+const TRIP_LABELS = { to: 'Where to', country: 'Country', who: 'Who', out: 'Leaves on', back: 'Back on', purpose: 'Why', note: 'Notes', budget: 'Budget' };
 function saveTrip(f) {
   const v = Object.fromEntries(new FormData(f)), old = tripOf(f.dataset.id);
-  const rec = { to: clean(v.to), country: clean(v.country), who: tagsFrom(v.who), out: v.out, back: v.back || '', purpose: clean(v.purpose), note: String(v.note || '').trim().slice(0, 1000) };
+  const budget = v.budget.trim() ? parseAmount(v.budget) : undefined;
+  if (budget === null) return formErr(f, 'budget', 'Type the budget in dollars, like 50000 — or leave it empty');
+  const rec = { to: clean(v.to), country: clean(v.country), who: tagsFrom(v.who), out: v.out, back: v.back || '', purpose: clean(v.purpose), note: String(v.note || '').trim().slice(0, 1000), budget };
   if (!rec.to) return formErr(f, 'to', 'Where to?');
   if (!rec.who.length) return formErr(f, 'who', 'Who travels?');
   if (!DATE_RE.test(rec.out)) return formErr(f, 'out', 'Choose the day they leave');
@@ -60,6 +63,22 @@ function saveTrip(f) {
   toast('Changes saved ✓');
   tripDetail(old.id);
 }
+// what a trip spends: the goods ordered on it (in dollars, at each order's rate) and its other payments (flights, visas…),
+// split by project with the extra apart, against its budget
+function tripSpend(j) {
+  const goods = tripItems(j.id).filter(n => n.order && n.status !== 'dropped'), by = spendByProject(goods);
+  const other = tripCosts(j.id).filter(e => !e.need), otherUsd = Math.round(other.filter(e => e.cur === 'USD').reduce((t, e) => t + e.amount, 0) * 100) / 100;
+  const goodsUsd = Math.round(Object.values(by).reduce((t, x) => t + x.usd, 0) * 100) / 100, unrated = Object.values(by).some(x => Object.keys(x.unrated).length);
+  return { by, goodsUsd, otherUsd, otherSsp: other.filter(e => e.cur === 'SSP'), total: Math.round((goodsUsd + otherUsd) * 100) / 100, unrated };
+}
+function tripMoneyNote(j) {
+  const sp = tripSpend(j), left = j.budget ? Math.round((j.budget - sp.total) * 100) / 100 : null;
+  if (!sp.total && !j.budget) return '';
+  const rows = Object.entries(sp.by).sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1)).map(([p, t]) => `${esc(p ? projName(p) : 'Extra')}: <b>${esc(usdText(t))}</b>`);
+  return `<div class="note">💰 ${j.budget ? `Budget <b>${esc(money(j.budget, 'USD'))}</b> · ` : ''}spent <b>${esc(money(sp.total, 'USD'))}</b>${left === null ? '' : ` · <b class="${left < 0 ? 'out-c' : ''}">${left < 0 ? `${esc(money(-left, 'USD'))} over` : `${esc(money(left, 'USD'))} left`}</b>`}
+    ${rows.length ? `<br>${rows.join('<br>')}` : ''}${sp.otherUsd ? `<br>Travel and other trip payments: <b>${esc(money(sp.otherUsd, 'USD'))}</b>` : ''}${sp.otherSsp.length ? ` + ${esc(sumText(sp.otherSsp))}` : ''}
+    ${sp.unrated ? '<br><span class="muted">Some orders have no dollar rate: they are not in the total.</span>' : ''}</div>`;
+}
 function tripDetail(id) {
   const j = tripOf(id);
   if (!j) return false;
@@ -67,6 +86,7 @@ function tripDetail(id) {
   const sups = [...new Set(items.filter(n => n.order).map(n => n.order.sup))].map(supOf).filter(Boolean);
   openSheet(`${head(j.to, 'out', tripDays(j))}
     ${facts([['Who', j.who.join(', ')], ['Country', j.country], ['Why', j.purpose]])}
+    ${tripMoneyNote(j)}
     ${j.note ? `<p class="pre">${esc(j.note)}</p>` : ''}
     <div class="two"><button class="btn ghost" data-act="tripPdf" data-id="${esc(id)}">📄 Buying list PDF</button><button class="btn ghost" data-act="tripText" data-id="${esc(id)}">💬 List on WhatsApp</button></div>
     <h3 class="subh">To buy on this trip (${open.length})</h3>

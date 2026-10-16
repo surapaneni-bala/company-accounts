@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ TextEncoder });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat };', ctx);
-const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat } = ctx.api;
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject };', ctx);
+const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject } = ctx.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 
 /* ---------- days on a 30-day month: joining and leaving days both count, day 31 counts as day 30 ---------- */
@@ -176,5 +176,17 @@ const guessed = [['Sofa, L-shape', 'Furniture & décor'], ['Wardrobe with slidin
   ['Sintered stone', 'Finishes'], ['Overall clothing for workers', 'Tools & hardware'], ['Gloves and safety equipment', 'Tools & hardware'], ['Concrete pump', 'Machinery & vehicles'],
   ['Generator', 'Electrical & solar'], ['Tiles', 'Finishes'], ['Second hand clothes', 'Goods for trading']];
 assert.deepStrictEqual(guessed.map(([t]) => [t, guessCat(t)]), guessed, 'a block is not a lock; smart switches are home automation; table fans are not tables; roofing tiles are roofing; second-hand clothes are for trading');
+
+/* ---------- buying: an order shared between projects and extra; what each project costs in dollars ---------- */
+const toilets = { sup: 'U-1', price: 40, cur: 'USD', qty: 15, date: '2026-10-20', alloc: [{ p: 'P-1', q: 10 }] };
+assert.deepStrictEqual(plain(orderShares(toilets, 'P-1')), [{ p: 'P-1', q: 10, cost: 400 }, { p: '', q: 5, cost: 200 }], '15 toilets, 10 for the project: 5 extra, each at $40');
+assert.deepStrictEqual(plain(orderShares({ ...toilets, alloc: undefined }, 'P-1')), [{ p: 'P-1', q: 15, cost: 600 }], 'no split typed: all for the item’s project');
+assert.deepStrictEqual(plain(orderShares({ ...toilets, alloc: undefined }, '')), [{ p: '', q: 15, cost: 600 }], 'no project at all: all extra');
+const sofas = { sup: 'U-2', price: 7100, cur: 'CNY', rate: 7.1, qty: 3, date: '2026-10-21', alloc: [{ p: 'P-1', q: 2 }, { p: 'P-2', q: 1 }] };
+const lamps = { sup: 'U-2', price: 100, cur: 'CNY', qty: 4, date: '2026-10-21' };
+assert.deepStrictEqual(plain(spendByProject([{ order: toilets, project: 'P-1', status: 'ordered' }, { order: sofas, project: 'P-1', status: 'ordered' }, { order: lamps, project: 'P-2', status: 'ordered' },
+  { order: toilets, project: 'P-1', status: 'dropped' }])),
+  { 'P-1': { usd: 2400, unrated: {}, items: 2 }, '': { usd: 200, unrated: {}, items: 1 }, 'P-2': { usd: 1000, unrated: { CNY: 400 }, items: 2 } },
+  'the villa: 10 toilets $400 + 2 sofas ¥14,200 at 7.1 = $2,000; extra: 5 toilets $200; the other project: a sofa $1,000 and lamps with no rate kept in yuan; a dropped item counts nothing');
 
 console.log('Pay maths, words and PDF: all checks passed');

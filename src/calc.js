@@ -172,6 +172,31 @@ const GUESS_FIRST = ['Home automation & security', 'Goods for trading', 'Machine
 const GUESS_CATS = [...GUESS_FIRST.map(n => BUY_CATS.find(c => c[0] === n)), ...BUY_CATS.filter(c => !GUESS_FIRST.includes(c[0]))].filter(c => c[2]).map(c => [c[0], new RegExp(`\\b(?:${c[2].source})`, 'i')]);
 const guessCat = t => (GUESS_CATS.find(([, re]) => re.test(t)) || ['Other'])[0];
 
+/* ---------- buying: who an order is for, and what each project costs ---------- */
+// An order (qty × price) is shared out: alloc lists each project's number; what is left over is extra (stock, for no
+// project yet). With no alloc, all of it is the item's project (or extra when it has none). 15 toilets for a project that
+// needs 10 = 10 for it and 5 extra, each at the same price per piece.
+const round3 = n => Math.round(n * 1000) / 1000;
+function orderShares(order, project) {
+  if (!order) return [];
+  const al = order.alloc && order.alloc.length ? order.alloc : project ? [{ p: project, q: order.qty }] : [];
+  const used = al.reduce((t, a) => t + a.q, 0), rest = round3(order.qty - used);
+  return [...al.map(a => ({ p: a.p, q: a.q, cost: Math.round(a.q * order.price * 100) / 100 })), ...(rest > 0 ? [{ p: '', q: rest, cost: Math.round(rest * order.price * 100) / 100 }] : [])];
+}
+// an amount in the order's currency, in dollars at the rate typed on it (1 USD = rate); null when there is no rate
+const inUsd = (amount, order) => (order.cur === 'USD' ? amount : order.rate > 0 ? Math.round(amount / order.rate * 100) / 100 : null);
+// per project ('' = extra): dollars, and what could not be turned into dollars (no rate), per currency
+function spendByProject(items) {
+  const out = {};
+  items.filter(n => n.order && !n.deleted && n.status !== 'dropped').forEach(n => orderShares(n.order, n.project).forEach(sh => {
+    const t = out[sh.p] || (out[sh.p] = { usd: 0, unrated: {}, items: 0 }), usd = inUsd(sh.cost, n.order);
+    t.items += 1;
+    if (usd === null) t.unrated[n.order.cur] = Math.round(((t.unrated[n.order.cur] || 0) + sh.cost) * 100) / 100;
+    else t.usd = Math.round((t.usd + usd) * 100) / 100;
+  }));
+  return out;
+}
+
 /* ---------- invoices and quotations ---------- */
 // The money on an invoice: each line is quantity × unit price to the cent; tax (a percentage, 0 = none) on their sum.
 function invoiceTotals(inv) {

@@ -354,6 +354,16 @@ const listRow = rows('Buying list').find(r => r[0] === 'N-OW1-0001');
 assert.deepStrictEqual([listRow[1], listRow[2], listRow[9], listRow[13]], ['Sofa, L-shape', 'Furniture & décor', 'Colour: Beige; Size: 3.2 m × 1.8 m; Seating: L-shape 3+2', 'Ordered'], 'the Buying list tab: every detail in one cell');
 assert.ok(rows('Trips').some(r => r[0] === 'J-OW1-0001' && r[3] === 'Owner, Partner'), 'the Trips tab');
 assert.ok(rows('Suppliers').some(r => r[0] === 'U-OW1-0001' && r[10] === 1), 'the Suppliers tab counts what was ordered there');
+// 15 bought, 10 for the project, 5 extra; a share above what was ordered is refused; budgets are the owner's
+const wide = name => { const sh = gas.ss.getSheetByName(name); return sh.getRange(1, 1, sh.getLastRow(), 40).getValues(); };
+post({ token: owner, since: 0, push: [{ id: 'P-OW1-0009', k: 'P', u: 147, d: { id: 'P-OW1-0009', name: 'Villa', buyBudget: 50000 } }] });
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [item('N-OW1-0009', 147, { t: 'Toilet', trip: undefined, project: 'P-OW1-0009', order: { sup: 'U-OW1-0001', price: 40, cur: 'USD', qty: 15, date: '2026-10-20', alloc: [{ p: 'P-OW1-0009', q: 10 }] } }),
+  item('N-OW1-0010', 147, { t: 'Basin', trip: undefined, order: { sup: 'U-OW1-0001', price: 40, cur: 'USD', qty: 15, date: '2026-10-20', alloc: [{ p: 'P-OW1-0009', q: 16 }] } }),
+  item('N-OW1-0011', 147, { t: 'Lamp', trip: undefined, order: { sup: 'U-OW1-0001', price: 71, cur: 'CNY', rate: 7.1, qty: 10, date: '2026-10-20' } }), item('N-OW1-0012', 147, { trip: undefined, under: '<x>' })] }).refused.sort(),
+  ['N-OW1-0010', 'N-OW1-0012'], 'shares up to what was ordered');
+const toiletRow = wide('Buying list').find(r => r[0] === 'N-OW1-0009'), lampRow = wide('Buying list').find(r => r[0] === 'N-OW1-0011');
+assert.deepStrictEqual([toiletRow[30], toiletRow[32], lampRow[31], lampRow[32]], ['Villa 10; Extra 5', 600, 7.1, 100], 'the tab: who it is for, and the order in dollars');
+assert.ok(post({ token: m.token, since: 0, push: [] }).pull.some(p => p.id === 'P-OW1-0009' && p.d.buyBudget === undefined), 'the office manager sees the project, not its budget');
 post({ op: 'alerts', token: owner, email: 'office@example.com' });
 post({ token: owner, since: 0, push: [item('N-OW1-0006', 143, { status: 'tobuy', order: undefined })] });
 gas.mails.length = 0;

@@ -403,6 +403,11 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .okbad .no input:checked + span { background: var(--out); border-color: var(--out); }
 .okbad input:focus-visible + span { outline: 3px solid #3B5BDB; outline-offset: 2px; }
 .fld.check small { display: block; font-weight: 500; }
+.allocs { display: grid; gap: 8px; margin-bottom: 8px; }
+.alloc-row { display: grid; grid-template-columns: 1.6fr 1fr 44px; gap: 8px; }
+.alloc-row select, .alloc-row input { width: 100%; min-width: 0; font: inherit; font-size: 16px; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); }
+.alloc-row .x { border: 0; background: var(--paper); border-radius: 10px; font-size: 22px; cursor: pointer; color: var(--muted); }
+.row.sub { padding-left: 34px; background: rgba(0,0,0,.015); }
 .app-tile.emp { background: var(--in); background-image: radial-gradient(circle at 110% -10%, rgba(255,255,255,.22), transparent 55%); }
 .app-tile .ai { width: 58px; height: 58px; border-radius: 18px; background: rgba(255,255,255,.16); display: grid; place-items: center; }
 .app-tile .ai svg { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

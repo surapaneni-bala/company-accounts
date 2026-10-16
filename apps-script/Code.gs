@@ -59,7 +59,7 @@ const SHAPES = {
   E: d => money_(d) && str_(d.paidTo) && str_(d.reason) && extras_(d),
   R: d => money_(d) && extras_(d),
   T: d => money_(d) && ACCOUNTS.indexOf(d.from) >= 0 && ACCOUNTS.indexOf(d.to) >= 0 && d.from !== d.to,
-  P: d => str_(d.name),
+  P: d => str_(d.name) && (d.buyBudget === undefined || (num_(d.buyBudget) && d.buyBudget >= 0)), // buyBudget: what may be spent buying for it, in dollars
   L: d => str_(d.text) && str_(d.at),
   S: d => str_(d.company) && isObj_(d.pass) && str_(d.pass.salt) && str_(d.pass.hash),
   // a change request: an edit (only editable fields), a delete, or an advance above the monthly limit
@@ -86,14 +86,18 @@ const SHAPES = {
   // an item to buy: what, its category, every detail as spec lines (label, value), suppliers' quotes, the order, the inspection
   N: d => str_(d.t) && d.t.length > 0 && BUY_STATES.indexOf(d.status) >= 0 && strs_(d, ['cat', 'sub', 'area', 'unit', 'notes', 'link', 'where', 'ship', 'project'])
     && (d.cur === undefined || CUR_CODE.test(d.cur)) && ['qty', 'target'].every(k => d[k] === undefined || (num_(d[k]) && d[k] >= 0)) && (d.pri === undefined || [1, 2, 3].indexOf(d.pri) >= 0)
-    && ['trip', 'from'].every(k => !d[k] || SAFE_ID.test(d[k])) && (d.tags === undefined || (Array.isArray(d.tags) && d.tags.length <= 20 && d.tags.every(str_)))
+    && ['trip', 'from', 'under'].every(k => !d[k] || SAFE_ID.test(d[k])) && (d.tags === undefined || (Array.isArray(d.tags) && d.tags.length <= 20 && d.tags.every(str_)))
     && (d.specs === undefined || (Array.isArray(d.specs) && d.specs.length <= 40 && d.specs.every(x => Array.isArray(x) && x.length === 2 && str_(x[0]) && str_(x[1]))))
     && (d.quotes === undefined || (Array.isArray(d.quotes) && d.quotes.length <= 30 && d.quotes.every(q => isObj_(q) && SAFE_ID.test(q.id) && SAFE_ID.test(q.sup) && num_(q.price) && q.price >= 0 && CUR_CODE.test(q.cur))))
-    && (d.order === undefined || (isObj_(d.order) && SAFE_ID.test(d.order.sup) && num_(d.order.price) && d.order.price >= 0 && CUR_CODE.test(d.order.cur) && num_(d.order.qty) && d.order.qty > 0 && DATE_RE.test(d.order.date)))
+    && (d.order === undefined || (isObj_(d.order) && SAFE_ID.test(d.order.sup) && num_(d.order.price) && d.order.price >= 0 && CUR_CODE.test(d.order.cur) && num_(d.order.qty) && d.order.qty > 0 && DATE_RE.test(d.order.date)
+      && (d.order.rate === undefined || (num_(d.order.rate) && d.order.rate > 0)) // 1 USD = rate in the order's currency
+      && (d.order.alloc === undefined || (Array.isArray(d.order.alloc) && d.order.alloc.length <= 20 && d.order.alloc.every(a => isObj_(a) && SAFE_ID.test(a.p) && num_(a.q) && a.q > 0)
+        && d.order.alloc.reduce((t, a) => t + a.q, 0) <= d.order.qty + 1e-9)))) // each project's share; the rest is extra
     && (d.insp === undefined || (isObj_(d.insp) && DATE_RE.test(d.insp.date) && ['pass', 'fail', 'open'].indexOf(d.insp.result) >= 0))
     && (d.steps === undefined || (isObj_(d.steps) && Object.keys(d.steps).every(k => BUY_STATES.indexOf(k) >= 0 && DATE_RE.test(d.steps[k])))),
   U: d => str_(d.name) && d.name.length > 0 && strs_(d, ['kind', 'city', 'country', 'market', 'person', 'phone', 'wechat', 'email', 'note']),
-  J: d => str_(d.to) && d.to.length > 0 && DATE_RE.test(d.out) && (!d.back || DATE_RE.test(d.back)) && Array.isArray(d.who) && d.who.length <= 20 && d.who.every(str_) && strs_(d, ['country', 'purpose', 'note']),
+  J: d => str_(d.to) && d.to.length > 0 && DATE_RE.test(d.out) && (!d.back || DATE_RE.test(d.back)) && Array.isArray(d.who) && d.who.length <= 20 && d.who.every(str_) && strs_(d, ['country', 'purpose', 'note'])
+    && (d.budget === undefined || (num_(d.budget) && d.budget >= 0)),
 };
 const strs_ = (d, ks) => ks.every(k => d[k] === undefined || str_(d[k]));
 const EVERY_MONTHS = [1, 3, 6, 12];
@@ -264,7 +268,7 @@ function hiddenFor_(rows, user) {
 function managerView_(user, rec) {
   if (MONEY_KINDS.indexOf(rec.k) >= 0 || SALES_KINDS.indexOf(rec.k) >= 0 || BUY_KINDS.indexOf(rec.k) >= 0) return null;
   if (rec.k === 'F' && /^[IKNUJ]-/.test(String(rec.d.for))) return null; // invoice and quotation PDFs, the buying list's photos and reports
-  if (rec.k === 'P') { const d = Object.assign({}, rec.d); delete d.value; delete d.valueCur; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
+  if (rec.k === 'P') { const d = Object.assign({}, rec.d); delete d.value; delete d.valueCur; delete d.buyBudget; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
   if (rec.k === 'C' && MONEY_KINDS.indexOf(rec.d.kind) >= 0) return null;
   if (rec.k === 'F' && /^[RT]-/.test(String(rec.d.for))) return null;
   if (rec.k === 'L' && rec.d.uid !== user.id) return null;
@@ -1112,32 +1116,41 @@ function invoices_(ss, c, invs, clients) {
 /* ---------- buying: the list, suppliers and trips (the app's buying.js) ---------- */
 const BUY_TEXT = { idea: 'Idea', tobuy: 'To buy', ordered: 'Ordered', inspected: 'Inspected', shipped: 'Shipped', received: 'Received', dropped: 'Dropped' };
 const PRI_TEXT = { 1: 'Urgent', 2: 'Normal', 3: 'Some day' };
+// who an order is for (the app's calc.js orderShares): each project's share, the rest extra; and in dollars at its rate
+function shares_(o, project) {
+  const al = o.alloc && o.alloc.length ? o.alloc : project ? [{ p: project, q: o.qty }] : [], used = al.reduce((t, a) => t + a.q, 0), rest = Math.round((o.qty - used) * 1000) / 1000;
+  return al.concat(rest > 0 ? [{ p: '', q: rest }] : []);
+}
+const usd_ = (amount, o) => (o.cur === 'USD' ? amount : o.rate > 0 ? Math.round(amount / o.rate * 100) / 100 : '');
 function buying_(ss, c, items, sups, trips) {
   const sup = Object.create(null), trip = Object.create(null), cost = Object.create(null);
   sups.forEach(u => { sup[u.id] = u; });
   trips.forEach(j => { trip[j.id] = j; });
   c.E.filter(x => x.trip).forEach(x => { const k = x.trip + '|' + x.cur; cost[k] = (cost[k] || 0) + cents_(x.amount); });
-  const supName = id => (sup[id] ? sup[id].name : ''), tripName = id => (trip[id] ? trip[id].to + ' ' + trip[id].out : '');
+  const supName = id => (sup[id] ? sup[id].name : ''), tripName = id => (trip[id] ? trip[id].to + ' ' + trip[id].out : ''), byId = Object.create(null);
+  items.forEach(n => { byId[n.id] = n; });
+  const goodsUsd = id => Math.round(items.filter(n => n.order && n.status !== 'dropped' && (n.order.trip === id || n.trip === id)).reduce((t, n) => t + (Number(usd_(n.order.qty * n.order.price, n.order)) || 0), 0) * 100) / 100;
   const best = n => (n.quotes || []).filter(q => !n.cur || q.cur === n.cur).sort((a, b) => a.price - b.price)[0];
   dataTab_(ss, c.company, 'Buying list', '#7c3aed',
-    ['No.', 'Item', 'Category', 'Sub-category', 'Project', 'Area / room', 'Tags', 'Qty', 'Unit', 'Details', 'Notes', 'Where to buy', 'Priority', 'Status', 'Target price', 'Currency', 'Quotes', 'Lowest quote', 'Ordered from', 'Unit price', 'Qty ordered', 'Order total', 'Order currency', 'Ordered on', 'Trip', 'Inspection', 'Shipment', 'Received on', 'Added by', 'Added on'],
+    ['No.', 'Item', 'Category', 'Sub-category', 'Project', 'Area / room', 'Tags', 'Qty', 'Unit', 'Details', 'Notes', 'Where to buy', 'Priority', 'Status', 'Target price', 'Currency', 'Quotes', 'Lowest quote', 'Ordered from', 'Unit price', 'Qty ordered', 'Order total', 'Order currency', 'Ordered on', 'Trip', 'Inspection', 'Shipment', 'Received on', 'Added by', 'Added on', 'For (projects / extra)', '1 USD =', 'Order total USD', 'Part of'],
     items.slice().sort((a, b) => String(a.cat || '').localeCompare(String(b.cat || '')) || String(a.t).localeCompare(String(b.t))).map(n => {
       const q = best(n), o = n.order || {}, st = n.steps || {};
       return [n.id, n.t, n.cat || '', n.sub || '', n.project ? c.pname(n.project) : '', n.area || '', (n.tags || []).join(', '), n.qty || '', n.unit || '', (n.specs || []).map(x => x[0] + ': ' + x[1]).join('; '), n.notes || '',
         n.where || '', PRI_TEXT[n.pri] || '', BUY_TEXT[n.status], n.target || '', n.cur || '', (n.quotes || []).length || '', q ? q.cur + ' ' + q.price + ' (' + supName(q.sup) + ')' : '',
         supName(o.sup), o.price === undefined ? '' : o.price, o.qty || '', o.qty ? Math.round(o.qty * o.price * 100) / 100 : '', o.cur || '', o.date || '', tripName(n.trip || o.trip),
-        n.insp ? ({ pass: 'Passed ', fail: 'FAILED ', open: 'Checked in part ' })[n.insp.result] + n.insp.date : '', n.ship || '', st.received || '', n.by || '', when_(n.createdAt)];
-    }), ['', '', '', '', '', '', '', 'num', '', '', '', '', '', '', 'num', '', '', '', '', 'num', 'num', 'num', '', 'date', '', '', '', 'date'],
-    [110, 220, 150, 150, 160, 120, 120, 70, 70, 320, 220, 100, 80, 90, 100, 70, 70, 170, 170, 100, 90, 110, 80, 105, 170, 130, 130, 105, 110, 150], null);
+        n.insp ? ({ pass: 'Passed ', fail: 'FAILED ', open: 'Checked in part ' })[n.insp.result] + n.insp.date : '', n.ship || '', st.received || '', n.by || '', when_(n.createdAt),
+        n.order ? shares_(o, n.project).map(sh => (sh.p ? c.pname(sh.p) : 'Extra') + ' ' + sh.q).join('; ') : '', o.rate || '', n.order ? usd_(Math.round(o.qty * o.price * 100) / 100, o) : '', n.under && byId[n.under] ? byId[n.under].t : ''];
+    }), ['', '', '', '', '', '', '', 'num', '', '', '', '', '', '', 'num', '', '', '', '', 'num', 'num', 'num', '', 'date', '', '', '', 'date', '', '', '', 'num', 'USD'],
+    [110, 220, 150, 150, 160, 120, 120, 70, 70, 320, 220, 100, 80, 90, 100, 70, 70, 170, 170, 100, 90, 110, 80, 105, 170, 130, 130, 105, 110, 150, 220, 80, 120, 180], null);
   const live = sups.filter(u => !u.deleted);
   dataTab_(ss, c.company, 'Suppliers', '#0f766e', ['No.', 'Name', 'Kind', 'City / market', 'Country', 'Contact person', 'Phone / WhatsApp', 'WeChat', 'Email', 'Quotes given', 'Items ordered', 'Note'],
     live.map(u => [u.id, u.name, u.kind || '', [u.city, u.market].filter(Boolean).join(' · '), u.country || '', u.person || '', u.phone || '', u.wechat || '', u.email || '',
       items.filter(n => (n.quotes || []).some(q => q.sup === u.id)).length, items.filter(n => n.order && n.order.sup === u.id).length, u.note || '']),
     [], [110, 200, 90, 200, 100, 150, 150, 130, 180, 90, 90, 260], null);
-  dataTab_(ss, c.company, 'Trips', '#1d4ed8', ['No.', 'Destination', 'Country', 'Who travelled', 'Left on', 'Back on', 'Days', 'Purpose', 'Items on the list', 'Items ordered', 'Trip costs USD', 'Trip costs SSP', 'Note'],
+  dataTab_(ss, c.company, 'Trips', '#1d4ed8', ['No.', 'Destination', 'Country', 'Who travelled', 'Left on', 'Back on', 'Days', 'Purpose', 'Items on the list', 'Items ordered', 'Trip costs USD', 'Trip costs SSP', 'Note', 'Budget USD', 'Goods ordered USD'],
     trips.filter(j => !j.deleted).sort((a, b) => (a.out < b.out ? -1 : 1)).map(j => [j.id, j.to, j.country || '', j.who.join(', '), j.out, j.back || '', j.back ? daysBetween_(j.out, j.back) + 1 : '', j.purpose || '',
-      items.filter(n => n.trip === j.id).length, items.filter(n => n.order && (n.order.trip === j.id || n.trip === j.id)).length, (cost[j.id + '|USD'] || 0) / 100, (cost[j.id + '|SSP'] || 0) / 100, j.note || '']),
-    ['', '', '', '', 'date', 'date', 'num', '', 'num', 'num', 'USD', 'SSP'], [110, 200, 100, 200, 105, 105, 60, 200, 90, 90, 120, 130, 260], null);
+      items.filter(n => n.trip === j.id).length, items.filter(n => n.order && (n.order.trip === j.id || n.trip === j.id)).length, (cost[j.id + '|USD'] || 0) / 100, (cost[j.id + '|SSP'] || 0) / 100, j.note || '', j.budget || '', goodsUsd(j.id)]),
+    ['', '', '', '', 'date', 'date', 'num', '', 'num', 'num', 'USD', 'SSP', '', 'USD', 'USD'], [110, 200, 100, 200, 105, 105, 60, 200, 90, 90, 120, 130, 260, 120, 140], null);
 }
 
 /* ---------- the morning email: what needs doing today ---------- */
