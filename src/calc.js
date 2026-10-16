@@ -58,8 +58,9 @@ const EVERY_OF_GAP = g => (g < 0.5 ? 0 : g < 2 ? 1 : g < 4.5 ? 3 : g < 9 ? 6 : g
 const median = a => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 function findRegulars(expenses) {
   const groups = new Map();
-  expenses.filter(e => !e.deleted && !e.regular && !e.worker && !e.pay && !e.advance && !e.from && String(e.paidTo || '').trim())
-    .forEach(e => { const key = `${String(e.paidTo).trim().toLowerCase().replace(/\s+/g, ' ')}|${e.cur}`; (groups.get(key) || groups.set(key, []).get(key)).push(e); });
+  const free = expenses.filter(e => !e.deleted && !e.regular && !e.worker && !e.pay && !e.advance && !e.from);
+  // the same payee, or for "Not recorded" (old entries) the same reason: unrelated payments are never lumped together
+  free.forEach(e => { const who = squash(e.paidTo), key = `${GENERIC_PAYEE.test(who) ? `?${squash(e.reason)}` : who}|${e.cur}`; if (key[0] !== '|') (groups.get(key) || groups.set(key, []).get(key)).push(e); });
   const out = [];
   for (const [key, list] of groups) {
     if (list.length < 2) continue;
@@ -82,8 +83,52 @@ function findRegulars(expenses) {
     const most = f => { const c = new Map(); items.forEach(({ e }) => c.set(e[f] || '', (c.get(e[f] || '') || 0) + 1)); return [...c].sort((a, b) => b[1] - a[1])[0][0]; };
     out.push({ key, paidTo: items[items.length - 1].e.paidTo, cur: items[0].e.cur, amount: Math.round(unit * 100) / 100, every, first: g.first, reason: most('reason'), mode: most('mode'), project: most('project'), pays });
   }
+  // one payment that says it pays several months ("Internet till Dec 2026") is a regular payment on its own
+  const linked = new Set(out.flatMap(s => s.pays.map(p => p.id))), isFree = new Set(free.map(e => e.id));
+  const covered = expenses.filter(e => !e.deleted).map(e => ({ e, c: prepaidOf(e) })).filter(x => x.c), ahead = covered.filter(x => isFree.has(x.e.id) && !linked.has(x.e.id));
+  ahead.forEach(({ e, c }) => {
+    const first = dueOn(e.at.slice(0, 10), 1, c.from - monthNo(e.at)), last = c.from + c.n - 1;
+    // the same money for the same months entered again within a week (even if that one is linked already): maybe one payment typed twice
+    const twins = covered.filter(x => x.e !== e && x.e.cur === e.cur && inCents(x.e.amount) === inCents(e.amount) && x.c.from + x.c.n === last + 1 && Math.abs(dayNo(x.e.at) - dayNo(e.at)) <= 7).map(x => x.e.id);
+    out.push({ key: `ahead|${e.id}`, paidTo: e.paidTo, cur: e.cur, amount: Math.round(e.amount / c.n * 100) / 100, every: 1, first, reason: whatOf(e.reason), mode: e.mode, project: e.project || '',
+      pays: [{ id: e.id, period: first, periods: c.n }], ahead: { paid: e.amount, at: e.at.slice(0, 10), to: dueOn(first, 1, c.n - 1) }, ...(twins.length ? { twins } : {}) });
+  });
   return out.sort((a, b) => b.pays.length - a.pays.length);
 }
+const squash = t => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
+const GENERIC_PAYEE = /^(not recorded|n\/?a|none|-|)$/;
+const inCents = n => Math.round(n * 100);
+const dayNo = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
+
+// A payment for several months at once says so in its reason: "till Dec 2026", "up to jan2027", "until March", "for 6
+// months", "1 year". coverOf: the last month it pays (a month number), or how many months; null when it says neither.
+const MONTH_ABC = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const UNTIL_RE = /\b(?:till|until|untill|upto|up ?to|through|thru)\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?[\s,]*('?\d{4}|'?\d{2}(?!\d))?/i;
+const SPAN_RE = /\b(\d{1,2}|two|three|four|five|six|twelve)\s*(months?|years?)\b/i, NUMBER = { two: 2, three: 3, four: 4, five: 5, six: 6, twelve: 12 };
+function coverOf(text, at) {
+  const t = String(text || ''), u = t.match(UNTIL_RE), paid = monthNo(at);
+  if (u) {
+    let y = u[2] ? +u[2].replace("'", '') : 0;
+    if (y && y < 100) y += 2000;
+    const m = MONTH_ABC.indexOf(u[1].toLowerCase()), last = y ? y * 12 + m : Math.floor(paid / 12) * 12 + m + (Math.floor(paid / 12) * 12 + m < paid ? 12 : 0); // "till March" paid in November: next March
+    return last >= paid && last - paid < 36 ? { last } : null;
+  }
+  const n = t.match(SPAN_RE), k = n ? (NUMBER[n[1].toLowerCase()] || +n[1]) * (/^y/i.test(n[2]) ? 12 : 1) : 0;
+  return k >= 2 && k <= 36 ? { months: k } : null;
+}
+// The months it pays: from the month paid (the owner's way: 400 in September "till Dec" is Sep–Dec, 100 a month) — or from the
+// next month when that gives the rounder monthly amount (4,200 in October "till Jan" is Nov–Jan at 1,400, not 1,050). The
+// owner checks it before it is linked. null when it pays one month or less.
+const roundness = x => [10000, 5000, 1000, 100].findIndex(c => inCents(x) % c === 0) + 1 || 9;
+function prepaidOf(e) {
+  const c = coverOf(e.reason, e.at), paid = monthNo(e.at);
+  if (!c) return null;
+  if (c.months) return { from: paid, n: c.months };
+  const all = c.last - paid + 1, n = all > 2 && roundness(e.amount / (all - 1)) < roundness(e.amount / all) ? all - 1 : all;
+  return n >= 2 ? { from: c.last - n + 1, n } : null;
+}
+// what it is, without the dates and "advance payment": "Internet advance till dec 2026" → "Internet"
+const whatOf = t => String(t || '').replace(UNTIL_RE, '').replace(SPAN_RE, '').replace(/\b(advance|payments?|paid|for|of|the)\b|[()]/gi, ' ').replace(/\s+/g, ' ').trim().replace(/^./, c => c.toUpperCase()) || String(t || '');
 
 /* ---------- invoices and quotations ---------- */
 // The money on an invoice: each line is quantity × unit price to the cent; tax (a percentage, 0 = none) on their sum.

@@ -43,9 +43,14 @@ function regularBanners() {
 // Repeating payments found among the entries (calc.js findRegulars), for an admin to confirm; "not regular" is kept on
 // this phone. Confirming makes the regular payment and links those payments to it, so their months count as paid.
 const regularHints = () => (can('settings') ? findRegulars(live(S.expenses)).filter(s => !(S.notRegular || []).includes(s.key)) : []);
+// one payment for several months ("till Dec"): what it paid and for which months
+const aheadText = s => `${money(s.ahead.paid, s.cur)} paid on ${fmtDate(s.ahead.at)} for ${periodText({ first: s.first, every: 1 }, s.first, s.pays[0].periods)} (${s.pays[0].periods} months × ${money(s.amount, s.cur)})`;
+// the same money for the same months entered twice within a week: one of them is probably a double entry
+const twinNote = s => (s.twins ? `<p class="note">⚠️ Entered twice? ${s.twins.map(esc).join(', ')} has the same ${money(s.ahead.paid, s.cur)} for the same months. If it was one payment, open one and delete it.</p>
+    <div class="two" style="margin-bottom:8px">${[s.pays[0].id, ...s.twins].map(id => `<button class="btn small ghost" data-act="open" data-kind="E" data-id="${esc(id)}">Open ${esc(id)}</button>`).join('')}</div>` : '');
 const suggestionCard = list => (list.length ? `<h3 class="subh">🔎 Found in your past entries</h3><div class="card list inset">${list.map(s => `<div class="sugg">
-    <div><b>${esc(s.reason || s.paidTo)}</b> · ${esc(s.paidTo)}<br><span class="muted">About ${money(s.amount, s.cur)} ${esc(EVERY[s.every].toLowerCase())} · ${s.pays.length} payments since ${fmtDate(s.first)}</span></div>
-    <div class="two"><button class="btn small primary" data-act="useSuggestion" data-key="${esc(s.key)}">Make it a regular payment</button><button class="btn small ghost" data-act="notRegular" data-key="${esc(s.key)}">Not regular</button></div></div>`).join('')}</div>` : '');
+    <div><b>${esc(s.reason || s.paidTo)}</b> · ${esc(s.paidTo)}<br><span class="muted">${s.ahead ? aheadText(s) : `About ${money(s.amount, s.cur)} ${esc(EVERY[s.every].toLowerCase())} · ${s.pays.length} payments since ${fmtDate(s.first)}`}</span></div>
+    ${twinNote(s)}<div class="two"><button class="btn small primary" data-act="useSuggestion" data-key="${esc(s.key)}">Make it a regular payment</button><button class="btn small ghost" data-act="notRegular" data-key="${esc(s.key)}">Not regular</button></div></div>`).join('')}</div>` : '');
 function useSuggestion(key) {
   const s = regularHints().find(x => x.key === key);
   if (s) regularForm(null, s);
@@ -95,7 +100,7 @@ function payRegular(id) {
 function regularForm(old, sugg) {
   const d = old || (sugg ? { name: sugg.reason, paidTo: sugg.paidTo, cur: sugg.cur, amount: sugg.amount, every: sugg.every, first: sugg.first, mode: accountOf(sugg.mode), project: sugg.project } : { cur: defCur(), amount: '', every: 1, first: today(), mode: 'Bank', project: '' });
   openSheet(`${head(old ? 'Edit regular payment' : 'New regular payment', 'out', old?.id)}
-    ${sugg ? `<p class="note">Found ${sugg.pays.length} past payments to ${esc(sugg.paidTo)}. Check the details: once saved, those payments are linked to it and their months count as paid.</p>` : ''}
+    ${sugg ? `<p class="note">${sugg.ahead ? `Found ${aheadText(sugg)}. Check the amount for one ${sugg.every === 1 ? 'month' : 'period'} and the first due date it pays: the months it covers follow from them.` : `Found ${sugg.pays.length} past payments to ${esc(sugg.paidTo)}. Check the details: once saved, those payments are linked to it and their months count as paid.`}</p>${twinNote(sugg)}` : ''}
     <form data-form="regular" data-id="${esc(old?.id || '')}" data-sugg="${esc(sugg ? sugg.key : '')}">
       ${textField('name', 'What is it?', 'e.g. Land rent, Internet, Trading licence', d.name)}
       ${textField('paidTo', 'Paid to', 'Who is paid?', d.paidTo)}
@@ -129,7 +134,9 @@ function saveRegular(f) {
   const [[id], seq] = nextIds('G', 1, S.seq), sugg = f.dataset.sugg && regularHints().find(s => s.key === f.dataset.sugg);
   // a suggestion's payments are linked, each to the due date (and how many periods) it paid, counted from this first date
   const links = new Map(sugg ? sugg.pays.map(p => [p.id, p]) : []);
-  const linked = links.size ? S.expenses.map(e => { const p = links.get(e.id); return p ? { ...e, regular: id, period: dueOn(rec.first, every, Math.max(0, stretchOf({ first: rec.first, every }, p.period))), ...(p.periods ? { periods: p.periods } : {}) } : e; }) : null;
+  // one payment for several months pays from the first due date, as many periods as its money covers at the amount set
+  const ahead = e => ({ period: rec.first, periods: Math.min(36, Math.max(1, Math.round(e.amount / amount))) });
+  const linked = links.size ? S.expenses.map(e => { const p = links.get(e.id); return p ? { ...e, regular: id, ...(sugg.ahead ? ahead(e) : { period: dueOn(rec.first, every, Math.max(0, stretchOf({ first: rec.first, every }, p.period))), ...(p.periods ? { periods: p.periods } : {}) }) } : e; }) : null;
   update({ regulars: [...S.regulars, { id, ...rec, by, createdAt: stampSec() }], seq, ...(linked ? { expenses: linked } : {}),
     log: logWith([['Added', id, `Regular payment: ${rec.name} — ${money(amount, rec.cur)} to ${rec.paidTo}, ${EVERY[every].toLowerCase()} from ${fmtDate(rec.first)}${links.size ? ` (${links.size} past payments linked)` : ''}`]], by) });
   toast(links.size ? `Regular payment added ✓ — ${links.size} past payments linked` : 'Regular payment added ✓');

@@ -8,7 +8,8 @@ const openAdvances = () => live(S.expenses).filter(e => e.advance);
 const takenFrom = id => live(S.expenses).filter(e => e.from === id).sort(byAt);
 const advanceTag = x => (x.advance ? `<i class="tag warn">Advance · ${esc(money(x.amount, x.cur))} left</i>` : x.from ? '<i class="tag">From advance</i>' : '');
 // entries typed as plain expenses that look like an advance — to a supplier or company, or a salary advance to an employee
-const looksLikeAdvance = e => !e.advance && !e.advanceTotal && !e.from && !e.worker && !e.regular && !(S.notAdvance || []).includes(e.id) && /advance/i.test(`${e.reason} ${e.paidTo}`);
+// (not rent or internet paid for several months ahead — "Internet advance till Dec" is a regular payment, see calc.js)
+const looksLikeAdvance = e => !e.advance && !e.advanceTotal && !e.from && !e.worker && !e.regular && !(S.notAdvance || []).includes(e.id) && !prepaidOf(e) && /advance/i.test(`${e.reason} ${e.paidTo}`);
 // the employee a payment's "paid to" names (full name, or the same first name): only a guess, an admin confirms
 const employeeLike = e => { const n = clean(e.paidTo).toLowerCase(); return n ? live(S.workers).find(w => { const m = w.name.toLowerCase(); return m === n || m.split(' ')[0] === n.split(' ')[0]; }) : null; };
 // the two kinds, as buttons: which one it was is the admin's call (owner, 15 Oct 2026: tell employee advances apart)

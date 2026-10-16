@@ -143,4 +143,22 @@ assert.deepStrictEqual(found[0].pays, [{ id: 'E1', period: '2026-03-03' }, { id:
 assert.deepStrictEqual(plain(regularDue(found[0], found[0].pays, '2026-10-11')), { next: '2026-12-03', late: 0 }, 'so rent is paid up to November');
 assert.deepStrictEqual(found[0].reason, 'Land rent', 'the usual reason');
 
+/* ---------- one payment for several months at once ("Internet till Dec"), as typed in the old entries ---------- */
+const exA = (id, at, amount, reason, extra = {}) => ({ id, at: at + 'T10:00', amount, cur: 'USD', paidTo: 'Not recorded', reason, mode: 'Cash', project: '', ...extra });
+const ahead = plain(findRegulars([
+  exA('A1', '2026-09-24', 400, 'Internet advance till dec 2026'),
+  exA('A2', '2026-10-15', 4200, 'House rent payment till Jan 2027', { paidTo: 'Landlord' }), exA('A3', '2026-10-15', 4200, 'Rent payment up to jan2027', { paidTo: 'Land rent' }),
+  exA('A4', '2026-11-03', 600, 'Water tank rent for 6 months'), exA('A8', '2026-11-20', 300, 'Generator service till February'),
+  exA('A5', '2026-08-17', 1000, 'Exchange USD to SSP'), exA('A6', '2026-09-17', 1000, 'Diesel'), exA('A7', '2026-10-17', 1000, 'Visa'),
+  exA('A9', '2026-10-02', 100, 'Phone till Oct 2026')]));
+assert.deepStrictEqual(ahead.map(s => [s.pays[0].id, s.reason, s.amount, s.first, s.pays[0].periods, s.ahead.to]), [
+  ['A1', 'Internet', 100, '2026-09-24', 4, '2026-12-24'],
+  ['A2', 'House rent', 1400, '2026-11-15', 3, '2027-01-15'], ['A3', 'Rent', 1400, '2026-11-15', 3, '2027-01-15'],
+  ['A4', 'Water tank rent', 100, '2026-11-03', 6, '2027-04-03'], ['A8', 'Generator service', 100, '2026-12-20', 3, '2027-02-20']],
+  'from the month paid (400 till Dec = Sep–Dec at 100), or the next month when rounder (4,200 till Jan = Nov–Jan at 1,400); "for 6 months"; "till February" with no year is the next one; one month is not several; "Not recorded" entries are not lumped into one monthly payment');
+assert.deepStrictEqual(plain(findRegulars([exA('A5', '2026-08-17', 1000, 'Exchange USD to SSP'), exA('A6', '2026-09-17', 1000, 'Diesel'), exA('A7', '2026-10-17', 1000, 'Visa')])), [], 'three unrelated "Not recorded" payments of 1,000 a month apart are not a regular payment');
+assert.deepStrictEqual(ahead.filter(s => s.twins).map(s => [s.pays[0].id, s.twins]), [['A2', ['A3']], ['A3', ['A2']]], 'the same 4,200 up to the same month on the same day: maybe typed twice');
+assert.deepStrictEqual(plain(findRegulars([exA('A2', '2026-10-15', 4200, 'House rent payment till Jan 2027', { regular: 'G-1' }), exA('A3', '2026-10-15', 4200, 'Rent payment up to jan2027')])).map(s => s.twins), [['A2']], 'confirming one keeps the warning on the other');
+assert.deepStrictEqual(plain(regularDue(ahead[0], ahead[0].pays, '2026-10-16')), { next: '2027-01-24', late: 0 }, 'the internet is paid up to December');
+
 console.log('Pay maths, words and PDF: all checks passed');
