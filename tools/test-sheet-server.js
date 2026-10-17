@@ -37,7 +37,7 @@ assert.strictEqual(res.seq, 6);
 assert.strictEqual(res.pull.length, 6);
 assert.match(res.sheet, /^https:\/\/docs\.google\.com\//);
 assert.ok(res.kinds.includes('T'), 'this script stores cash/bank moves');
-assert.strictEqual(JSON.parse(gas.doGet().getContent()).version, 20, 'opening the link shows the script version');
+assert.strictEqual(JSON.parse(gas.doGet().getContent()).version, 21, 'opening the link shows the script version');
 
 // an older copy is not stored: the phone that sent it gets the newer copy back (never lost in silence); a newer edit wins
 res = post({ key, since: 6, push: [{ ...e1, u: 2, d: { ...e1.d, amount: 1 } }] });

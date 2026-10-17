@@ -40,7 +40,7 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 20; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 21; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';
@@ -167,7 +167,7 @@ function nextBatch() {
 function pendingRecords() {
   const want = new Set(S.dirty), out = [];
   for (const [k, key] of Object.entries(KIND_KEY)) {
-    for (const r of S[key]) { const id = recId(key, r); if (want.has(id)) out.push({ id, k, u: r.u || 0, d: r }); }
+    for (const r of S[key]) { const id = recId(key, r); if (want.has(id)) out.push({ id, k, u: r.u || 0, d: r, ...(S.base && Number.isFinite(S.base[id]) ? { b: S.base[id] } : {}) }); }
   }
   if (want.has('settings')) out.push({ id: 'settings', k: 'S', u: S.settingsU || 0, d: { company: S.company, pass: S.pass } });
   return out;
@@ -178,8 +178,11 @@ function stampsNow() {
   return m;
 }
 // Merge records from the Google Sheet into this device. Returns true if anything changed.
-// force: ids the sheet says this phone's change lost to a newer copy: the sheet's copy is taken whatever the stamps say
-function applyPull(pull, force = new Set()) {
+// The sheet's copy of an entry this phone has not changed is always taken (it is newer by the sheet's order, whatever the
+// clocks say: a copy once stamped in the future must not hide later ones). An entry changed here is replaced only by a
+// later copy, or (force: id → the stamp sent) when the sheet says this phone's change lost and nothing was typed since.
+function applyPull(pull, force = new Map()) {
+  const mine = new Set(S.dirty || []);
   const next = {};
   let changed = false;
   for (const [k, key] of Object.entries(KIND_KEY)) {
@@ -189,7 +192,7 @@ function applyPull(pull, force = new Set()) {
     for (const p of recs) {
       const i = at.get(p.id);
       if (i === undefined) { at.set(p.id, list.length); list.push({ ...p.d, u: p.u }); changed = true; }
-      else if (p.u > (list[i].u || 0) || force.has(p.id)) { list[i] = { ...p.d, u: p.u }; changed = true; }
+      else if (!mine.has(p.id) || p.u > (list[i].u || 0) || (force.has(p.id) && (list[i].u || 0) === force.get(p.id))) { list[i] = { ...p.d, u: p.u }; changed = true; }
     }
     next[key] = list;
   }
@@ -222,15 +225,20 @@ async function syncNow() {
   try {
     const res = await callServer(S.link, { since: S.link.since || 0, push });
     if (!S.link) return; // disconnected while this was running
-    const changed = applyPull(res.pull || [], new Set(res.older || []));
+    // changes the sheet did not take (the entry changed on another phone first): named as this phone had them, then replaced
+    // by the sheet's copy — unless they were edited again while this request ran (they go again, and are refused again)
+    const before = stampsNow(), lostIds = new Set((res.older || []).filter(id => push.some(p => p.id === id && p.u === before.get(id))));
+    const lostNow = [...lostIds].map(id => ({ id, what: recordLabel(id), at: stampSec() }));
+    const changed = applyPull(res.pull || [], new Map([...lostIds].map(id => [id, before.get(id)])));
     if (changed) repairImportedMoves(); // a device on an old version may have sent mistaken expenses
     // a record edited while the request was running stays queued
     // records the sheet's script cannot store yet stay queued until it is updated
     // records this login may not change stay queued too, until an admin signs in on this phone
     const accepted = new Set(res.kinds || OLD_SERVER_KINDS), notAllowed = new Set(res.refused || []);
     const refused = new Set([...push.filter(p => !accepted.has(p.k)).map(p => p.id), ...notAllowed]);
-    const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link, lostIds = new Set((res.older || []).filter(id => sent.has(id)));
+    const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link;
     S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
+    S = { ...S, base: Object.fromEntries(Object.entries(S.base || {}).filter(([id]) => S.dirty.includes(id))) }; // sent: the next edit starts from the new copy
     if (dropMoney()) return; // this login may not hold the company's money: fetch again what it may see
     save();
     if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
@@ -242,7 +250,7 @@ async function syncNow() {
     if (stamps.length) { const next = {}; stamps.forEach(([id, su]) => { const key = kindOf.get(id); next[key] = (next[key] || S[key]).map(r => (recId(key, r) === id && r.u === sent.get(id) ? { ...r, u: su } : r)); }); S = { ...S, ...next }; save(); }
     // changes the sheet already had a newer copy of (changed on another phone): this phone now shows that copy, and says so
     // until it is read
-    if (lostIds.size) { S = { ...S, lost: [...(S.lost || []), ...[...lostIds].map(id => ({ id, what: recordLabel(id), at: stampSec() }))].slice(-20) }; save(); }
+    if (lostNow.length) { S = { ...S, lost: [...(S.lost || []), ...lostNow].slice(-20) }; save(); }
     if (S.dirty.some(id => !sent.has(id))) syncAgain = true; // more waiting than one batch: send the rest straight after
     sync = notAllowed.size ? { state: 'error', at: stampSec(), err: notAllowedMsg([...notAllowed]) }
       : refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };

@@ -203,7 +203,7 @@ function spendByProject(items) {
 // double tap). Salaries, the pieces of an advance and the lines of one bulk entry are never doubles; pairs said to be two
 // payments (seen: their keys) are skipped. Only entries with the same currency and amount are compared, so it stays quick.
 const STOP_WORDS = new Set(['the', 'and', 'for', 'payment', 'paid', 'pay', 'from', 'with', 'not', 'recorded', 'usd', 'ssp', 'till', 'until', 'upto']);
-const keyWords = t => new Set(squash(t).split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !STOP_WORDS.has(w)));
+const keyWords = t => new Set(squash(t).split(/[^\p{L}\p{N}]+/u).filter(w => [...w].length >= 3 && !STOP_WORDS.has(w)));
 function findDoubles(expenses, seen = []) {
   const ok = new Set(seen), groups = new Map(), out = [];
   expenses.filter(e => !e.deleted && !e.worker && !e.from).forEach(e => { const k = `${e.cur}|${inCents(e.amount)}`; (groups.get(k) || groups.set(k, []).get(k)).push(e); });

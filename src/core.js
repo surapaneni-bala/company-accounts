@@ -39,7 +39,7 @@ const recId = (key, r) => key === 'log' ? r.lid : r.id;
 const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
 // A new record made by a signed-in person also carries their login (uid); edits keep the original one.
 function update(patch) {
-  const now = Date.now(), dirty = new Set(S.dirty || []), stamped = {};
+  const now = Date.now(), dirty = new Set(S.dirty || []), stamped = {}, base = { ...(S.base || {}) };
   const uid = signedIn() ? { uid: session.user.id } : {};
   for (const key of Object.keys(SYNC_KEYS)) {
     if (!patch[key]) continue;
@@ -47,6 +47,8 @@ function update(patch) {
     stamped[key] = patch[key].map(r => {
       if (before.has(r)) return r;
       const id = recId(key, r);
+      // the copy this edit started from (the first edit since the last sync): the sheet refuses it if the entry changed since
+      if (was.has(id) && !dirty.has(id) && !(id in base)) base[id] = was.get(id);
       dirty.add(id);
       // newer than the copy it was made from, even when this phone's clock is behind: an edit or a delete is never
       // taken for an older copy and skipped by the sheet (a deleted rent entry stayed in the sheet, 17 Oct 2026)
@@ -55,7 +57,7 @@ function update(patch) {
   }
   if ('company' in patch || 'pass' in patch) { dirty.add('settings'); stamped.settingsU = now; }
   const was = S;
-  S = { ...S, ...patch, ...stamped, dirty: S.link ? [...dirty] : [] };
+  S = { ...S, ...patch, ...stamped, dirty: S.link ? [...dirty] : [], base: S.link ? base : {} };
   save(); scheduleSync();
   if (patch.expenses || patch.credits) cancelSigned(was); // an entry changed after its voucher was signed (files.js)
 }
@@ -324,7 +326,7 @@ function viewMenu() {
   const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const who = signedIn() ? session.user.name.split(' ')[0] : '';
   const staffWaiting = waiting().filter(c => c.kind === 'W').length;
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${lostBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
     <section class="launch">
       <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
       <div class="apps">

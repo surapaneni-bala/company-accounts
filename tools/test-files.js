@@ -402,4 +402,12 @@ assert.deepStrictEqual([fixed.older, fixed.stamps.find(x => x[0] === 'E-OW1-0310
 const peek = post({ token: m.token, since: 1e9, push: [exp('E-OW1-0300', 1, m.me.id, { reason: 'Rent' })] });
 assert.deepStrictEqual([peek.older, peek.pull.length], [[], 0], 'the office manager is not told about an entry she cannot see');
 
+// an edit made from an older copy than the sheet's would undo someone else's change: not stored, the sheet's copy goes back
+post({ token: owner, since: 0, push: [exp('E-OW1-0320', 1000, 'x', { amount: 100, reason: 'Rent' })] });
+post({ token: owner, since: 0, push: [exp('E-OW1-0320', 2000, 'x', { amount: 150, reason: 'Rent' })] }); // phone B: 100 → 150
+const stale = post({ token: owner, since: 1e9, push: [{ ...exp('E-OW1-0320', 3000, 'x', { amount: 100, reason: 'Rent Oct' }), b: 1000 }] }); // phone A, from the 100 copy
+assert.deepStrictEqual([stale.older, stale.pull.map(p => [p.d.amount, p.d.reason])], [['E-OW1-0320'], [[150, 'Rent']]], 'B’s 150 is kept; A is told and gets it back');
+const fromLatest = post({ token: owner, since: 1e9, push: [{ ...exp('E-OW1-0320', 4000, 'x', { amount: 150, reason: 'Rent Oct' }), b: 2000 }] }); // A again, now from 150
+assert.deepStrictEqual([fromLatest.older, post({ token: owner, since: 0, push: [] }).pull.find(p => p.id === 'E-OW1-0320').d.reason], [[], 'Rent Oct'], 'made from the latest copy: stored');
+
 console.log('Employees and files: all checks passed');
