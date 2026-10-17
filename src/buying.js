@@ -33,9 +33,9 @@ const firstPic = id => filesFor(id).find(f => isPic(f) && !f.removed && !f.repla
 // A row of the checklist, as in a shopping-list app (owner, 17 Oct 2026: "like a checklist, simple"): a circle to tick when
 // it is bought, the name, one grey line, its price once ordered, its photo. The circle ticks and unticks; the rest opens it.
 function needRow(n, depth = 0, struck = false) {
-  const done = !isOpen(n), pic = firstPic(n.id), line = [done && n.status !== 'received' && n.status !== 'ordered' ? BUY_STATE[n.status][1] : '', needLine(n)].filter(Boolean).join(' · ');
-  return `<div class="ck-row${done ? ' done' : ''}${struck ? ' struck' : ''}"${depth ? ` style="--depth:${depth}"` : ''}>
-    <button class="ck" data-act="tickNeed" data-id="${esc(n.id)}" aria-pressed="${done}" aria-label="${done ? `${esc(n.t)} is bought: tap to undo` : `Tick ${esc(n.t)} when it is bought`}">${done ? '✓' : ''}</button>
+  const dropped = n.status === 'dropped', done = !isOpen(n) && !dropped, pic = firstPic(n.id), line = [done && n.status !== 'received' && n.status !== 'ordered' ? BUY_STATE[n.status][1] : dropped ? 'Not buying it' : '', needLine(n)].filter(Boolean).join(' · ');
+  return `<div class="ck-row${done ? ' done' : ''}${dropped ? ' dropped' : ''}${struck ? ' struck' : ''}"${depth ? ` style="--depth:${depth}"` : ''}>
+    <button class="ck" data-act="tickNeed" data-id="${esc(n.id)}" aria-pressed="${done}" aria-label="${dropped ? `${esc(n.t)} is dropped: open it` : done ? `${esc(n.t)} is bought: tap to undo` : `Tick ${esc(n.t)} when it is bought`}">${done ? '✓' : dropped ? '✕' : ''}</button>
     <button class="ck-main" data-act="openNeed" data-id="${esc(n.id)}"><span class="ck-t">${n.pri === 1 ? '<i class="ck-pri" aria-label="Urgent">!</i>' : ''}${esc(n.t)}${n.status === 'idea' ? ' <i class="ck-idea">idea</i>' : ''}</span>${line ? `<span class="ck-s">${esc(line)}</span>` : ''}</button>
     ${n.order ? `<span class="ck-amt">${esc(cost(needTotal(n), n.order.cur))}</span>` : ''}${pic ? `<img class="ck-img" alt="" data-thumb="${esc(pic.id)}">` : ''}
   </div>`;
@@ -71,7 +71,7 @@ function buyingSheet() {
   openSheet(`${head('Buying', 'out')}
     ${buyNav('buying')}
     <form data-form="idea" class="qadd"><input name="t" placeholder="Add an item or an idea…" maxlength="160" autocomplete="off" aria-label="Add an item or an idea"><button class="btn small primary">Add</button></form>
-    <p class="qadd-hint">It finds its category by itself. <button type="button" class="link" data-act="pasteList">Paste a whole list</button></p>
+    <p class="qadd-hint">It finds its category by itself. <button type="button" class="link" data-act="addNeed">With all details</button> · <button type="button" class="link" data-act="pasteList">Paste a whole list</button></p>
     <form class="buy-filter" data-form="buyFilter">
       <div class="segs" role="radiogroup" aria-label="Which items">${['open', 'bought', 'received'].map(k => `<label><input type="radio" name="view" value="${k}" ${k === buyView.view ? 'checked' : ''}><span>${BUY_TABS[k][0]} <b>${count(k)}</b></span></label>`).join('')}</div>
       ${ps.length || search ? `<div class="filter-row">${ps.length ? `<select name="project" aria-label="Project"><option value="">All projects</option>${ps.map(p => `<option value="${esc(p.id)}" ${p.id === buyView.project ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>` : ''}${search ? `<input name="q" type="search" placeholder="Search" value="${esc(buyView.q)}" autocomplete="off" aria-label="Search">` : ''}</div>` : ''}
@@ -97,7 +97,8 @@ function tickNeed(id) {
   if (!isOpen(n) && (n.order || n.status !== 'ordered')) return needDetail(id);
   const by = myName() || S.lastBy || '', back = !isOpen(n);
   const steps = back ? Object.fromEntries(Object.entries(n.steps || {}).filter(([k]) => k !== 'ordered')) : { ...(n.steps || {}), ordered: today() };
-  update({ needs: S.needs.map(x => (x.id === id ? { ...x, status: back ? 'tobuy' : 'ordered', steps, editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', id, `${n.t}: ${back ? 'back on the list' : 'bought'}`]], by) });
+  const was = back && steps.idea && !steps.tobuy ? 'idea' : 'tobuy'; // unticked: back to what it was before
+  update({ needs: S.needs.map(x => (x.id === id ? { ...x, status: back ? was : 'ordered', steps, editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', id, `${n.t}: ${back ? 'back on the list' : 'bought'}`]], by) });
   toast(back ? 'Back on the list' : '✓ Bought — open it to add the price');
   reopenHere();
 }
@@ -218,6 +219,7 @@ const tagsFrom = v => [...new Set(String(v || '').split(',').map(t => clean(t).r
 const NEED_LABELS = { t: 'Item', cat: 'Category', sub: 'Sub-category', project: 'Project', area: 'Area', qty: 'Quantity', unit: 'Unit', specs: 'Details', notes: 'Notes', link: 'Link', target: 'Target price', cur: 'Currency', where: 'Where', pri: 'Priority', tags: 'Tags' };
 const changedOf = (a, b, labels) => Object.keys(labels).filter(k => k in b && JSON.stringify(a[k] ?? '') !== JSON.stringify(b[k] ?? '')).map(k => labels[k]);
 async function saveNeed(f) {
+  if (f.dataset.saving) return; // a second tap while the photos are being kept
   const v = Object.fromEntries(new FormData(f)), old = needOf(f.dataset.id), rows = specsFrom(f);
   const cat = v.cat === '__new' ? clean(v.newCat) : v.cat, qty = v.qty.trim() ? parseAmount(v.qty) : undefined, target = v.target.trim() ? parseAmount(v.target) : undefined;
   if (!clean(v.t)) return formErr(f, 't', 'What is it?');
@@ -238,9 +240,15 @@ async function saveNeed(f) {
   }
   // the photos picked on the form: kept with the item, each line then holds its file
   if (pending.length) {
-    for (const x of pending) { const p = specPics[x.key]; x.fid = await keepFile({ for: id, type: 'attachment', name: p.name, mime: p.mime, note: `${x.k}${x.v ? `: ${x.v}` : ''}` }, p.data); }
+    f.dataset.saving = '1';
+    const failed = [];
+    for (const x of pending) {
+      const p = specPics[x.key];
+      try { x.fid = await keepFile({ for: id, type: 'attachment', name: p.name, mime: p.mime, note: `${x.k}${x.v ? `: ${x.v}` : ''}` }, p.data); } catch (e) { failed.push(`${x.k}: ${e.message}`); }
+    }
     specPics = {};
     update({ needs: S.needs.map(n => (n.id === id ? { ...n, specs: specList(rows), editedAt: stampSec(), editedBy: by } : n)) });
+    if (failed.length) alert(`The item is saved, but ${failed.length === 1 ? 'a photo' : 'some photos'} could not be kept on this phone:\n${failed.join('\n')}\n\nOpen the item and add ${failed.length === 1 ? 'it' : 'them'} again.`);
   }
   needDetail(id);
 }
@@ -248,8 +256,14 @@ async function saveNeed(f) {
 // the item's photos as pictures (product photos, the sample, the factory's own); a PDF stays a row
 const isPic = f => f.mime && f.mime.startsWith('image/');
 const photoStrip = id => { const ps = filesFor(id).filter(f => isPic(f) && !f.removed && !f.replaced); return ps.length ? `<div class="thumbs">${ps.map(f => `<button type="button" data-act="showFile" data-id="${esc(f.id)}" aria-label="Open the photo"><img alt="" data-thumb="${esc(f.id)}"></button>`).join('')}</div>` : ''; };
+// each photo read once per opening of the app (ponytail: kept until the app closes; a size limit if lists grow very long)
+const thumbUrls = new Map();
 function paintThumbs() {
-  $$('#sheet img[data-thumb]').forEach(img => { const id = img.dataset.thumb; img.removeAttribute('data-thumb'); fileBlob(id).then(b => { img.src = URL.createObjectURL(b); }).catch(() => { img.alt = 'Not on this phone yet'; }); });
+  $$('#sheet img[data-thumb]').forEach(img => {
+    const id = img.dataset.thumb; img.removeAttribute('data-thumb');
+    if (!thumbUrls.has(id)) thumbUrls.set(id, fileBlob(id).then(b => URL.createObjectURL(b)));
+    thumbUrls.get(id).then(u => { img.src = u; }).catch(() => { thumbUrls.delete(id); img.alt = 'Not on this phone yet'; });
+  });
 }
 const facts = rows => `<dl class="facts">${rows.filter(r => r[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>`;
 // where an item stands: to buy → bought → checked → on the way → received
@@ -311,7 +325,7 @@ function needDetail(id) {
 }
 const EXTRA = 'Extra / no project'; // bought beyond what the projects need, or for no project
 const quoteRow = (n, q) => { const u = supOf(q.sup); return `<div class="sugg"><div><b>${esc(cost(q.price, q.cur))}</b> · ${esc(u ? u.name : 'A deleted supplier')}<br><span class="muted">${esc([q.moq && `minimum ${q.moq}`, q.lead && `ready in ${q.lead}`, q.at && fmtDate(q.at), q.note].filter(Boolean).join(' · '))}</span></div>
-  <div class="two">${['idea', 'tobuy'].includes(n.status) && u ? `<button class="btn small out" data-act="orderNeed" data-id="${esc(n.id)}" data-q="${esc(q.id)}">🧾 Order from them</button>` : ''}<button class="btn small ghost" data-act="delQuote" data-id="${esc(n.id)}" data-q="${esc(q.id)}">Remove</button></div></div>`; };
+  <div class="two">${!n.order && ['idea', 'tobuy', 'ordered'].includes(n.status) && u ? `<button class="btn small out" data-act="orderNeed" data-id="${esc(n.id)}" data-q="${esc(q.id)}">🧾 ${n.status === 'ordered' ? 'Bought from them' : 'Order from them'}</button>` : ''}<button class="btn small ghost" data-act="delQuote" data-id="${esc(n.id)}" data-q="${esc(q.id)}">Remove</button></div></div>`; };
 function needStep(id, to) {
   const n = needOf(id);
   if (!n || !BUY_STATES.includes(to)) return;

@@ -12,4 +12,6 @@ function doublesSheet() {
       <button class="btn small ghost" data-act="notDouble" data-key="${esc(key)}" style="margin-top:10px">They are two payments</button></section>`).join('') : empty('Nothing to check', 'No payment looks entered twice.')}`);
   comeBack(doublesSheet);
 }
+// changes the sheet did not take because someone changed the same entry on another phone first
+const lostBanner = () => ((S.lost || []).length ? `<div class="banner"><span>⚠️ ${S.lost.length === 1 ? 'A change was' : `${S.lost.length} changes were`} not saved: someone changed ${S.lost.length === 1 ? 'it' : 'them'} on another phone first, so this phone now shows theirs — ${esc(S.lost.slice(-3).map(l => l.what).join('; '))}. Check ${S.lost.length === 1 ? 'it' : 'them'} and make your change again if it is still needed.</span><button class="btn small" data-act="lostSeen">OK</button></div>` : '');
 function notDouble(key) { update({ notDouble: [...(S.notDouble || []), key] }); toast('Kept both ✓'); doublesSheet(); }

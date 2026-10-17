@@ -198,18 +198,27 @@ function spendByProject(items) {
 }
 
 /* ---------- the same payment entered twice ---------- */
-// Two people paying or recording one payment (owner, 17 Oct 2026: the rent typed by two people): the same money within two
-// days, entered by different people; or by one person twice with the same payee and reason (a double tap). Salaries, the
-// pieces of an advance and the lines of one bulk entry are never doubles. Pairs said not to be one are skipped (seen: ids).
+// One payment recorded twice (owner, 17 Oct 2026: the rent typed by two people): the same money within two days, about the
+// same thing (a word of the payee or the reason in common), and either entered by two people or paid to the same payee (a
+// double tap). Salaries, the pieces of an advance and the lines of one bulk entry are never doubles; pairs said to be two
+// payments (seen: their keys) are skipped. Only entries with the same currency and amount are compared, so it stays quick.
+const STOP_WORDS = new Set(['the', 'and', 'for', 'payment', 'paid', 'pay', 'from', 'with', 'not', 'recorded', 'usd', 'ssp', 'till', 'until', 'upto']);
+const keyWords = t => new Set(squash(t).split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !STOP_WORDS.has(w)));
 function findDoubles(expenses, seen = []) {
-  const ok = new Set(seen), list = expenses.filter(e => !e.deleted && !e.worker && !e.from), out = [];
-  const same = (a, b) => squash(a) === squash(b);
-  list.forEach((a, i) => list.slice(i + 1).forEach(b => {
-    if (a.cur !== b.cur || inCents(a.amount) !== inCents(b.amount) || Math.abs(dayNo(a.at) - dayNo(b.at)) > 2 || (a.batch && a.batch === b.batch)) return;
-    const key = [a.id, b.id].sort().join('|');
-    if (ok.has(key)) return;
-    if ((a.by || '') !== (b.by || '') || (same(a.paidTo, b.paidTo) && same(a.reason, b.reason))) out.push({ key, a, b });
-  }));
+  const ok = new Set(seen), groups = new Map(), out = [];
+  expenses.filter(e => !e.deleted && !e.worker && !e.from).forEach(e => { const k = `${e.cur}|${inCents(e.amount)}`; (groups.get(k) || groups.set(k, []).get(k)).push(e); });
+  groups.forEach(list => {
+    if (list.length < 2) return;
+    list.sort((a, b) => dayNo(a.at) - dayNo(b.at));
+    list.forEach((a, i) => {
+      for (let j = i + 1; j < list.length && dayNo(list[j].at) - dayNo(a.at) <= 2; j++) {
+        const b = list[j], key = [a.id, b.id].sort().join('|');
+        if ((a.batch && a.batch === b.batch) || ok.has(key)) continue;
+        const wa = keyWords(`${a.paidTo} ${a.reason}`), common = [...keyWords(`${b.paidTo} ${b.reason}`)].some(w => wa.has(w));
+        if (common && (squash(a.by) !== squash(b.by) || squash(a.paidTo) === squash(b.paidTo))) out.push({ key, a, b });
+      }
+    });
+  });
   return out;
 }
 

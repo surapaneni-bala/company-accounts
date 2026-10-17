@@ -125,12 +125,17 @@ const ACTIONS = {
   ssp: () => sspSheet(),
   doubles: () => doublesSheet(),
   notDouble: b => notDouble(b.dataset.key),
+  lostSeen: () => { S = { ...S, lost: [] }; save(); render(); },
   revealSsp: async () => { if (await pinPrompt({ why: 'Enter your code to see the balances' })) { showMoney = true; sspSheet(); } },
   addExchange: () => exchangeForm(),
   openExchange: b => exchangeDetail(b.dataset.id),
   editExchange: async b => { if (await unlock('Enter the password to change this.')) exchangeForm(xOf(b.dataset.id)); },
   delExchange: b => deleteExchange(b.dataset.id),
-  convertExchange: async b => { const e = S.expenses.find(x => x.id === b.dataset.id && !x.deleted); if (e && await unlock('Enter the password to turn this payment into a change.')) exchangeForm(null, e); },
+  convertExchange: async b => {
+    // with an older sheet script the payment would leave the sheet while the change waits on this phone: balances would be wrong
+    if (S.link && (S.link.v || 0) < 20) return alert('First update the Google Sheet script to version 20 (Settings → Show me how). Then turn this payment into a change.');
+    const e = S.expenses.find(x => x.id === b.dataset.id && !x.deleted); if (e && await unlock('Enter the password to turn this payment into a change.')) exchangeForm(null, e);
+  },
   paySsp: () => expenseForm(null, { cur: 'SSP' }),
   tickNeed: b => tickNeed(b.dataset.id),
   buyTab: b => { buyView = { ...buyView, view: b.dataset.tab }; buyingSheet(); },
@@ -265,9 +270,9 @@ document.addEventListener('change', e => {
 // pasting an invite replaces the box (it may already hold the link) instead of adding to it
 document.addEventListener('paste', e => {
   const t = e.target;
-  // a picture pasted on a detail line: that line's photo
+  // a picture pasted on a detail line (only a picture: text copied from Excel or Word comes with a picture too, and stays text)
   const pic = e.clipboardData && [...e.clipboardData.items].find(i => i.kind === 'file' && i.type.startsWith('image/'));
-  if (pic && t.closest && t.closest('.spec-row')) { e.preventDefault(); return specPicked(t.closest('.spec-row'), pic.getAsFile()); }
+  if (pic && t.closest && t.closest('.spec-row') && !e.clipboardData.getData('text/plain').trim()) { e.preventDefault(); return specPicked(t.closest('.spec-row'), pic.getAsFile()); }
   // several lines pasted into the idea box: they become a list, one idea per line
   if (t.name === 't' && t.form && t.form.dataset.form === 'idea' && e.clipboardData && /\n\s*\S/.test(e.clipboardData.getData('text').trim())) { e.preventDefault(); return pasteListSheet(e.clipboardData.getData('text')); }
   if (t.name !== 'invite' || !e.clipboardData) return;

@@ -33,7 +33,9 @@ const acctPick = (name, cur, label) => `<div class="fld"><span>${label}</span><d
 // old: a change being edited; from: an old dollar payment that was really a change; preset: a payment being typed that is one
 function exchangeForm(old, from, preset) {
   const d = old || (from ? { usd: from.amount, from: accountOf(from.mode), to: 'Cash', with: from.paidTo === 'Not recorded' ? '' : from.paidTo, at: from.at, note: from.reason } : { usd: '', from: 'Cash', to: 'Cash', with: '', at: stamp(), ...preset });
-  const rate = old ? xRate(old) : S.lastRate || '', withs = [...new Set(live(S.exchanges).map(x => x.with).filter(Boolean))];
+  // the rate starts from the last one only for a new change typed from nothing: an old payment or a payment being typed has
+  // its own day's rate, so the SSP is typed as it was received, never worked out from today's rate
+  const rate = old ? xRate(old) : from || preset ? '' : S.lastRate || '', withs = [...new Set(live(S.exchanges).map(x => x.with).filter(Boolean))];
   openSheet(`${head(old ? 'Edit the change' : 'Change dollars to SSP', 'in', old?.id || (from ? `was ${from.id}` : ''))}
     ${from ? `<p class="note">${esc(from.id)}: ${esc(money(from.amount, 'USD'))} “${esc(from.reason)}” on ${esc(fmtDate(from.at.slice(0, 10)))}. Saving makes it a change and takes it out of the payments (a line stays in the Change Log).</p>` : ''}
     <form data-form="exchange" data-id="${esc(old?.id || '')}" data-from="${esc(from?.id || '')}">
@@ -70,17 +72,19 @@ function saveExchange(f) {
   if (old) {
     const changed = ['at', 'usd', 'ssp', 'from', 'to', 'with', 'note'].filter(k => String(old[k] ?? '') !== String(rec[k] ?? ''));
     if (!changed.length) { closeSheet(); return toast('Nothing changed'); }
-    update({ exchanges: S.exchanges.map(x => (x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', old.id, `Change to SSP: now ${text}`]], by), lastRate: rate });
+    update({ exchanges: S.exchanges.map(x => (x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', old.id, `Change to SSP: now ${text}`]], by), ...newestRate(rec, old, rate) });
     toast('Changes saved ✓');
     return sspSheet();
   }
   const [[id], seq] = nextIds('X', 1, S.seq);
-  update({ exchanges: [...S.exchanges, { id, ...rec, ...(from ? { was: from.id } : {}), by, createdAt: stampSec() }], seq, lastRate: rate,
+  update({ exchanges: [...S.exchanges, { id, ...rec, ...(from ? { was: from.id } : {}), by, createdAt: stampSec() }], seq, ...newestRate(rec, null, rate),
     ...(from ? { expenses: S.expenses.map(e => (e.id === from.id ? { ...e, deleted: stampSec(), deletedBy: by } : e)) } : {}),
     log: logWith([['Added', id, `Change to SSP: ${text}${rec.with ? ` with ${rec.with}` : ''}`], ...(from ? [['Deleted', from.id, `${describe('E', from)} — it was a change to SSP, now ${id}`]] : [])], by) });
   toast(from ? 'Now a change to SSP ✓' : 'Change saved ✓');
   sspSheet();
 }
+// the rate SSP payments start from: only the newest change's (an old one turned into a change keeps it as it is)
+const newestRate = (rec, old, rate) => (live(S.exchanges).some(x => x.id !== (old && old.id) && x.at > rec.at) ? {} : { lastRate: rate });
 function exchangeDetail(id) {
   const x = xOf(id);
   if (!x) return false;

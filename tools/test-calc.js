@@ -197,8 +197,13 @@ const doubles = plain(findDoubles([dpay('D1', '2026-10-15', 4200, 'Bala'), dpay(
   dpay('D5', '2026-09-01', 300, 'Bala', { paidTo: 'Shop', reason: 'Nails' }), dpay('D6', '2026-09-01', 300, 'Bala', { paidTo: 'shop', reason: 'nails ' }),
   dpay('D7', '2026-09-01', 100, 'Agnes', { worker: 'W-1' }), dpay('D8', '2026-09-01', 100, 'Bala', { worker: 'W-2' }),
   dpay('D9', '2026-09-05', 50, 'Bala', { batch: 'B-1' }), dpay('D10', '2026-09-05', 50, 'Agnes', { batch: 'B-1' }),
-  dpay('D11', '2026-10-15', 4200, 'Babu', { cur: 'SSP' }), dpay('D12', '2026-10-25', 4200, 'Babu'), dpay('D13', '2026-10-16', 4200, 'Agnes', { deleted: 'x' })])).map(d => d.key);
-assert.deepStrictEqual(doubles, ['D1|D2', 'D5|D6'], 'the rent typed by two people; one person twice with the same payee and reason; not two different airport fees, salaries, one bulk entry, another currency, ten days apart or a deleted one');
+  dpay('D11', '2026-10-15', 4200, 'Babu', { cur: 'SSP' }), dpay('D12', '2026-10-25', 4200, 'Babu'), dpay('D13', '2026-10-16', 4200, 'Agnes', { deleted: 'x' }),
+  dpay('D14', '2026-09-10', 20, 'Store', { paidTo: 'Hardware', reason: 'Nails' }), dpay('D15', '2026-09-10', 20, 'Agnes', { paidTo: 'Taxi', reason: 'To the site' }),
+  dpay('D16', '2026-09-12', 75, 'bala ', { paidTo: 'Garage', reason: 'Tyre' }), dpay('D17', '2026-09-12', 75, 'Bala', { paidTo: 'garage', reason: 'Tyre repair' })])).map(d => d.key);
+assert.deepStrictEqual(doubles.sort(), ['D16|D17', 'D1|D2', 'D5|D6'], 'the rent typed by two people; one person twice to the same payee ("bala " is Bala); not two airport fees to different payees, nails and a taxi of the same $20, salaries, one bulk entry, another currency, ten days apart or a deleted one');
 assert.deepStrictEqual(plain(findDoubles([dpay('D1', '2026-10-15', 4200, 'Bala'), dpay('D2', '2026-10-15', 4200, 'Babu')], ['D1|D2'])), [], 'said not to be a double: not asked again');
+
+const many = Array.from({ length: 6000 }, (_, i) => dpay(`M${i}`, `2026-${String(1 + (i % 12)).padStart(2, '0')}-${String(1 + (i % 28)).padStart(2, '0')}`, 10 + (i % 997), `P${i % 7}`, { paidTo: `Shop ${i % 50}`, reason: `Item ${i}` }));
+const t0 = Date.now(); findDoubles(many); assert.ok(Date.now() - t0 < 500, `6,000 payments are checked quickly (${Date.now() - t0} ms)`);
 
 console.log('Pay maths, words and PDF: all checks passed');

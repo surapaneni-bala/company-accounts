@@ -218,9 +218,10 @@ function sync_(req) {
     else organize_(result.rows, result.touched, result.trash);
   } catch (err) { console.error('Filing in Drive: ' + err.message); }
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
+  const pull = result.pull.map(r => view_(user, r, hidden)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V')));
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role !== 'admin' ? '' : ss.getUrl(), kinds: KINDS, // the sheet shows every balance
-    pull: result.pull.map(r => view_(user, r, hidden)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V'))), refused: result.refused, older: result.older || [], me: user ? public_(user) : null,
+    pull: pull, refused: result.refused, older: (result.older || []).filter(id => pull.some(r => r.id === id)), stamps: result.stamps || [], me: user ? public_(user) : null,
     logins: !!user || users_().length > 0, warning: warning,
   };
 }
@@ -297,19 +298,20 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
   let seq = out.reduce((m, r) => Math.max(m, Number(r[3]) || 0), 0);
   let changed = false;
   const refused = [], touched = [], trash = [], behind = [];
-  const limited = !!user && user.role !== 'admin', now = Date.now();
+  const limited = !!user && user.role !== 'admin', now = Date.now(), cap = now; // no copy is stamped later than the sheet's own clock
   (Array.isArray(push) ? push : []).forEach((p, n) => {
     if (!p || typeof p.id !== 'string' || !p.id || KINDS.indexOf(p.k) < 0 || typeof p.u !== 'number' || !isObj_(p.d)) return;
     if (!SAFE_ID.test(p.id) || (p.k !== 'S' && (p.k === 'L' ? p.d.lid : p.d.id) !== p.id) || !SHAPES[p.k](p.d)) { refused.push(p.id); return; }
     if (limited && (n >= MAX_PUSH || JSON.stringify(p.d).length > MAX_RECORD)) { refused.push(p.id); return; }
     const i = index[p.id];
     if (i !== undefined && out[i][1] !== p.k) { refused.push(p.id); return; } // a record never changes kind
-    // a phone can't stamp its copy in the future and so block later edits (an admin's clock may be up to 5 minutes ahead)
-    const u = Math.min(p.u, limited ? now : now + 5 * 60000);
-    if (i !== undefined && Number(out[i][2]) >= u) { // already have this copy (sent again after a lost reply) or a newer one:
-      if (Number(out[i][2]) > u) behind.push(i); //   the newer one goes back to that phone, which shows it instead of its own
-      return;
-    }
+    // A phone can't stamp its copy in the future and so block later edits; a copy stored with a future stamp (a phone clock
+    // that was ahead) counts as old, so it can be changed again. The same copy sent again (a lost reply) is skipped; an older
+    // one too, and the newer one goes back to that phone, which shows it instead of its own (never lost in silence).
+    const stored = i === undefined ? 0 : Number(out[i][2]), sane = stored > cap ? 0 : stored, d = limited ? Object.assign({}, p.d, { by: user.name }) : p.d; // signed by the login that sent it
+    let u = Math.min(p.u, cap);
+    if (i !== undefined && sane > u) { behind.push(i); return; }
+    if (i !== undefined && sane === u) { if (out[i][4] === JSON.stringify(d)) return; u = sane + 1; } // a different copy at the same instant is the later one
     const before = i === undefined ? null : JSON.parse(out[i][4]);
     if (!allowed_(user || null, p, before)) { refused.push(p.id); return; }
     if (codeOnly && (p.k === 'W' || p.k === 'F' || p.k === 'V')) { refused.push(p.id); return; }
@@ -327,7 +329,6 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
       const o = f === undefined ? null : JSON.parse(out[f][4]);
       if (!o || (user.role === 'store' && o.uid !== user.id) || (out[f][1] === 'V' && o.kind === 'personal')) { refused.push(p.id); return; }
     }
-    const d = limited ? Object.assign({}, p.d, { by: user.name }) : p.d; // signed by the login that sent it
     seq += 1;
     changed = true;
     const row = [p.id, p.k, u, seq, JSON.stringify(d)];
@@ -337,7 +338,8 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     if (p.k === 'F' && before && before.fileId !== d.fileId && (d.stamped || before.stamped)) trash.push(before.fileId);
   });
   const pull = out.filter((r, i) => Number(r[3]) > since || behind.indexOf(i) >= 0).map(toRec_);
-  return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused, touched: touched, trash: trash, older: behind.map(i => out[i][0]) };
+  // stamps: the time each copy was stored at, which the phone takes (its own clock may be wrong)
+  return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused, touched: touched, trash: trash, older: behind.map(i => out[i][0]), stamps: touched.map(id => [id, Number(out[index[id]][2])]) };
 }
 
 /* ---------- logins ---------- */

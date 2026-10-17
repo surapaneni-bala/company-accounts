@@ -389,6 +389,17 @@ const again = post({ token: owner, since: 1e9, push: [exp('E-OW1-0300', 500, 'x'
 assert.deepStrictEqual([again.older, again.pull.length], [[], 0], 'the same copy sent again (a lost reply): nothing to say');
 const future = Date.now() + 3 * 864e5;
 post({ token: owner, since: 0, push: [exp('E-OW1-0301', future, 'x')] });
-assert.ok(post({ token: owner, since: 0, push: [] }).pull.find(p => p.id === 'E-OW1-0301').u <= Date.now() + 5 * 60000, 'a phone clock days ahead cannot lock a record against later edits');
+assert.ok(post({ token: owner, since: 0, push: [] }).pull.find(p => p.id === 'E-OW1-0301').u <= Date.now(), 'a phone clock days ahead cannot lock a record against later edits');
+
+// a copy stored with a future stamp (a phone clock ahead, before the cap) can be changed again; the sheet tells the phone
+// the time it stored each copy at; and an older copy sent by a login that may not see the entry teaches it nothing
+const syncSh = gas.ss.getSheetByName('_sync'), legacy = Date.now() + 3 * 864e5;
+syncSh.getRange(syncSh.getLastRow() + 1, 1, 1, 5).setValues([['E-OW1-0310', 'E', legacy, 9000, JSON.stringify({ id: 'E-OW1-0310', cur: 'USD', amount: 100, paidTo: 'Shop', reason: 'Nails', at: '2026-10-08T09:00', u: legacy })]]);
+assert.ok(post({ token: owner, since: 0, push: [] }).pull.some(p => p.id === 'E-OW1-0310' && p.u === legacy), 'the old future-stamped copy is in the sheet');
+const fixed = post({ token: owner, since: 0, push: [exp('E-OW1-0310', Date.now() - 1000, 'x', { amount: 150 })] });
+assert.deepStrictEqual([fixed.older, fixed.stamps.find(x => x[0] === 'E-OW1-0310')[1] <= Date.now(), post({ token: owner, since: 0, push: [] }).pull.find(p => p.id === 'E-OW1-0310').d.amount],
+  [[], true, 150], 'a future-stamped copy is replaced, and the phone learns the stored time');
+const peek = post({ token: m.token, since: 1e9, push: [exp('E-OW1-0300', 1, m.me.id, { reason: 'Rent' })] });
+assert.deepStrictEqual([peek.older, peek.pull.length], [[], 0], 'the office manager is not told about an entry she cannot see');
 
 console.log('Employees and files: all checks passed');
