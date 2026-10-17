@@ -74,10 +74,10 @@ function tripSpend(j) {
 function tripMoneyNote(j) {
   const sp = tripSpend(j), left = j.budget ? Math.round((j.budget - sp.total) * 100) / 100 : null;
   if (!sp.total && !j.budget) return '';
-  const rows = Object.entries(sp.by).sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1)).map(([p, t]) => `${esc(p ? projName(p) : 'Extra')}: <b>${esc(usdText(t))}</b>`);
+  const rows = Object.entries(sp.by).sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1)).map(([p, t]) => `${esc(p ? projName(p) : EXTRA)}: <b>${esc(usdText(t))}</b>`);
   return `<div class="note">💰 ${j.budget ? `Budget <b>${esc(money(j.budget, 'USD'))}</b> · ` : ''}spent <b>${esc(money(sp.total, 'USD'))}</b>${left === null ? '' : ` · <b class="${left < 0 ? 'out-c' : ''}">${left < 0 ? `${esc(money(-left, 'USD'))} over` : `${esc(money(left, 'USD'))} left`}</b>`}
     ${rows.length ? `<br>${rows.join('<br>')}` : ''}${sp.otherUsd ? `<br>Travel and other trip payments: <b>${esc(money(sp.otherUsd, 'USD'))}</b>` : ''}${sp.otherSsp.length ? ` + ${esc(sumText(sp.otherSsp))}` : ''}
-    ${sp.unrated ? '<br><span class="muted">Some orders have no dollar rate: they are not in the total.</span>' : ''}</div>`;
+    ${sp.unrated ? '<br><b class="out-c">Some orders have no dollar rate: they are not in the total.</b>' : ''}</div>`;
 }
 function tripDetail(id) {
   const j = tripOf(id);
@@ -137,16 +137,20 @@ function linkTripCosts(id) {
   if (!j) return;
   const from = plusDays(j.out, -21), to = plusDays(j.back || j.out, 14);
   const list = live(S.expenses).filter(e => !e.trip && !e.worker && e.at.slice(0, 10) >= from && e.at.slice(0, 10) <= to).sort((a, b) => byAt(b, a));
+  // a payment for goods names the item it paid for: the goods are counted once, at their order price
+  const goods = tripItems(id).filter(n => n.order), what = e => `<select name="n|${esc(e.id)}" aria-label="What it paid for" class="paid-for"><option value="">Travel or other (tickets, visa, hotel, transport)</option>${goods.map(n => `<option value="${esc(n.id)}" ${e.need === n.id ? 'selected' : ''}>For: ${esc(n.t)}</option>`).join('')}</select>`;
   openSheet(`${head('Link payments to the trip', 'out', j.to)}
     ${list.length ? `<form data-form="tripCosts" data-id="${esc(id)}">
-      <p class="hint">Payments from three weeks before it left to two weeks after it came back. Tick what the trip cost: tickets, visas, hotels, transport, the goods.</p>
-      <div class="card pad">${list.map(e => `<label class="fld check"><input type="checkbox" name="e" value="${esc(e.id)}"> ${esc(money(e.amount, e.cur))} · ${esc(e.reason)}<small class="muted">${esc([fmtDate(e.at.slice(0, 10)), e.paidTo].join(' · '))}</small></label>`).join('')}</div>
+      <p class="hint">Payments from three weeks before it left to two weeks after it came back. Tick what the trip cost, and say what each was for: a payment for goods is counted once, in the goods.</p>
+      <div class="card pad">${list.map(e => `<div class="link-pay"><label class="fld check"><input type="checkbox" name="e" value="${esc(e.id)}"> ${esc(money(e.amount, e.cur))} · ${esc(e.reason)}<small class="muted">${esc([fmtDate(e.at.slice(0, 10)), e.paidTo].join(' · '))}</small></label>${goods.length ? what(e) : ''}</div>`).join('')}</div>
       <p class="err"></p><button class="btn out">Link them</button></form>` : empty('No payments around those days', 'Add them in Accounts and choose this trip.')}`);
 }
 function saveTripCosts(f) {
   const id = f.dataset.id, ids = new Set($$('input[name=e]:checked', f).map(i => i.value)), by = myName() || S.lastBy || '';
   if (!ids.size) return formErr(f, null, 'Tick at least one payment.');
-  update({ expenses: S.expenses.map(e => (ids.has(e.id) ? { ...e, trip: id, editedAt: stampSec(), editedBy: by } : e)), log: logWith([...ids].map(e => ['Edited', e, `Trip: ${tripOf(id).to}`]), by), lastBy: by });
+  const need = e => { const v = f.elements[`n|${e}`] ? f.elements[`n|${e}`].value : ''; return needOf(v) ? v : undefined; };
+  update({ expenses: S.expenses.map(e => (ids.has(e.id) ? { ...e, trip: id, ...(need(e.id) ? { need: need(e.id) } : {}), editedAt: stampSec(), editedBy: by } : e)),
+    log: logWith([...ids].map(e => ['Edited', e, `Trip: ${tripOf(id).to}${need(e) ? `, for ${needOf(need(e)).t}` : ''}`]), by), lastBy: by });
   toast(`${ids.size} linked ✓`);
   tripDetail(id);
 }

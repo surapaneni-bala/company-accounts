@@ -152,13 +152,13 @@ const BUY_CATS = [
   ['Plumbing & sanitary', ['Pipes & fittings', 'Toilets', 'Basins & sinks', 'Taps & mixers', 'Showers & bathtubs', 'Water heaters', 'Tanks & pumps', 'Bathroom accessories'],
     /pipe|fitting|toilet|\bwc\b|basin|sink|\btaps?\b|mixer|shower|bath|heater|tank|pump|valve|drain/i, ['Size', 'Material', 'Colour / finish', 'Brand / model', 'Fixing (wall / floor)', 'Pressure']],
   ['Kitchen', ['Modular kitchens & cabinets', 'Countertops', 'Cooking ranges & ovens', 'Hoods & hobs', 'Sinks', 'Utensils & cookware'],
-    /kitchen|counter ?tops?|cooker|cooking|oven|hob\b|hood|utensil|cookware/i, ['Size / layout', 'Colour / finish', 'Material', 'Brand / model', 'Gas or electric', 'Voltage']],
+    /kitchen|counter ?tops?|cooker|cooking|oven|hob\b|hoods?\b|utensil|cookware/i, ['Size / layout', 'Colour / finish', 'Material', 'Brand / model', 'Gas or electric', 'Voltage']],
   ['Electronics & appliances', ['TVs & screens', 'Air conditioners', 'Fans', 'Fridges & freezers', 'Washing machines', 'Small appliances', 'Sound systems'],
     /tv\b|t\.v|television|air ?con|ac\b|fans?\b|fridge|refrigerat|freezer|washing machine|dryer|microwave|appliance|dishwasher|speaker|sound system|water dispenser/i, ['Brand / model', 'Size', 'Capacity / power', 'Voltage / plug', 'Colour', 'Warranty']],
   ['Structure & civil', ['Cement', 'Steel & rebar', 'Blocks & bricks', 'Sand & aggregate', 'Roofing', 'Waterproofing', 'Formwork & scaffolding'],
     /cement|steel|rebar|block|brick|sand|aggregate|gravel|murrum|roof|ridge|gutter|iron sheet|waterproof|scaffold|formwork|mou?lds?\b|concrete/i, ['Grade / type', 'Size', 'Colour', 'Standard', 'Brand']],
   ['Machinery & vehicles', ['Construction machines', 'Mixers & vibrators', 'Compressors & pumps', 'Production machines', 'Vehicles', 'Spare parts'],
-    /machine|excavator|vibrator|compressor|concrete pump|jcb\b|loader|truck|vehicle|tyre|tire|spare|engine|crusher|plant|car wash|pressure washer/i, ['Brand / model', 'Capacity', 'Power (kW / HP)', 'Voltage / phase', 'Fuel', 'Year', 'Spare parts included', 'Manuals in English', 'Warranty']],
+    /machine|excavator|vibrator|compressor|concrete pump|concrete mixer|cement mixer|jcb\b|loader|truck|vehicle|tyre|tire|spare|engine|crusher|plant|car wash|pressure washer/i, ['Brand / model', 'Capacity', 'Power (kW / HP)', 'Voltage / phase', 'Fuel', 'Year', 'Spare parts included', 'Manuals in English', 'Warranty']],
   ['Tools & hardware', ['Power tools', 'Hand tools', 'Fasteners & fixings', 'Safety gear', 'Measuring tools', 'Welding'],
     /drill|grinder|saw\b|tool|hammer|spanner|screw|bolt|nail|anchor|helmet|glove|boots|ppe\b|safety|saftey|overall|coverall|uniform|workwear|reflective|weld/i, ['Brand / model', 'Size', 'Power', 'Voltage / battery', 'Accessories']],
   ['Office & IT', ['Computers & phones', 'Monitors & mounts', 'Printers', 'Stationery', 'Software'], /computer|laptop|phone|printer|stationery|software|tablet|monitor/i, ['Brand / model', 'Specs', 'Size', 'Warranty']],
@@ -167,8 +167,8 @@ const BUY_CATS = [
 ];
 // Each word must start a word ("block" is not a "lock"); the narrower categories are tried first, so "smart switches"
 // are home automation (not electrical), a "concrete block machine" is a machine (not blocks), table fans are appliances
-// (not tables) and roofing tiles are roofing (not floor tiles).
-const GUESS_FIRST = ['Home automation & security', 'Goods for trading', 'Machinery & vehicles', 'Electronics & appliances', 'Kitchen', 'Furniture & décor', 'Doors & windows', 'Structure & civil'];
+// (not tables), roofing tiles are roofing (not floor tiles), solar panels are solar (not wall panels) and a smart TV is a TV.
+const GUESS_FIRST = ['Electronics & appliances', 'Home automation & security', 'Goods for trading', 'Machinery & vehicles', 'Kitchen', 'Furniture & décor', 'Doors & windows', 'Structure & civil', 'Electrical & solar'];
 const GUESS_CATS = [...GUESS_FIRST.map(n => BUY_CATS.find(c => c[0] === n)), ...BUY_CATS.filter(c => !GUESS_FIRST.includes(c[0]))].filter(c => c[2]).map(c => [c[0], new RegExp(`\\b(?:${c[2].source})`, 'i')]);
 const guessCat = t => (GUESS_CATS.find(([, re]) => re.test(t)) || ['Other'])[0];
 

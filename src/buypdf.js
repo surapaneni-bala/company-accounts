@@ -24,7 +24,7 @@ const costSum = rows => Object.entries(rows.reduce((t, [cur, n]) => ({ ...t, [cu
 async function tripReport(id) {
   const j = tripOf(id);
   if (!j) return;
-  const items = tripItems(id), ordered = items.filter(n => n.order), open = items.filter(n => ['idea', 'tobuy'].includes(n.status)), costs = tripCosts(id);
+  const items = tripItems(id), ordered = items.filter(n => n.order && n.status !== 'dropped'), open = items.filter(n => ['idea', 'tobuy'].includes(n.status)), costs = tripCosts(id);
   const seen = new Set(), quotes = items.flatMap(n => (n.quotes || []).filter(q => (q.trip === id || !q.trip) && !seen.has(q.id) && seen.add(q.id)).map(q => [n, q])); // the rest of a part-ordered item carries the same quotes
   const goods = costSum(ordered.map(n => [n.order.cur, needTotal(n)])), sp = tripSpend(j);
   await shareStatement({ title: 'TRIP REPORT', no: statementNo(), date: fmtDate(today()), ref: id, info: tripInfo(j),
@@ -35,11 +35,13 @@ async function tripReport(id) {
         rows: quotes.map(([n, q]) => [n.t, (supOf(q.sup) || {}).name || '', cost(q.price, q.cur), q.moq || '', q.lead || '']) }] : []),
       ...(open.length ? [{ title: `Still to buy (${open.length})`, cols: [{ h: 'Item', w: 420, wrap: true }, { h: 'Qty', w: 140, right: true }, { h: 'Details', w: 500, wrap: true }], rows: open.map(n => [n.t, qtyText(n), (n.specs || []).map(([k, v]) => `${k}: ${v}`).join('; ')]) }] : []),
       { title: 'By project', cols: [{ h: 'For', w: 360, wrap: true }, { h: 'Order lines', w: 200, right: true }, { h: 'Cost in dollars', w: 500, right: true }],
-        rows: Object.entries(sp.by).sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1)).map(([p, t]) => [p ? projName(p) : 'Extra (beyond what projects need)', String(t.items), usdText(t)]) },
+        rows: Object.entries(sp.by).sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1)).map(([p, t]) => [p ? projName(p) : EXTRA, String(t.items), usdText(t)]) },
       { title: `What the trip cost (${costs.length})`, cols: [{ h: 'Date', w: 160 }, { h: 'Paid to', w: 260, wrap: true }, { h: 'For', w: 400, wrap: true }, { h: 'Amount', w: 240, right: true }],
         rows: costs.map(e => [fmtDate(e.at.slice(0, 10)), e.paidTo, e.reason, slipMoney(e.amount, e.cur)]) }],
-    summary: [...goods.map(g => ['Goods ordered', g]), ['Goods in dollars', money(sp.goodsUsd, 'USD')], ['Travel and other payments', money(sp.otherUsd, 'USD')], ['Spent on the trip', money(sp.total, 'USD'), true], ...(j.budget ? [['Budget', money(j.budget, 'USD')], [sp.total > j.budget ? 'Over budget' : 'Left', money(Math.abs(Math.round((j.budget - sp.total) * 100) / 100), 'USD'), true]] : [])],
-    verdict: j.budget ? { text: sp.total > j.budget ? 'OVER BUDGET' : 'WITHIN BUDGET', good: sp.total <= j.budget } : null,
+    summary: [...goods.map(g => ['Goods ordered', g]), ['Goods in dollars', money(sp.goodsUsd, 'USD')], ['Travel and other payments', money(sp.otherUsd, 'USD')], ...(sp.otherSsp.length ? [['Travel and other, in SSP', sumText(sp.otherSsp)]] : []),
+      ['Spent on the trip', money(sp.total, 'USD'), true], ...(j.budget ? [['Budget', money(j.budget, 'USD')], [sp.total > j.budget ? 'Over budget' : 'Left', money(Math.abs(Math.round((j.budget - sp.total) * 100) / 100), 'USD'), true]] : [])],
+    // a verdict only when every order is in dollars: one with no rate would make "within budget" a guess
+    verdict: j.budget ? (sp.unrated ? { text: 'SOME ORDERS HAVE NO DOLLAR RATE', good: false } : { text: sp.total > j.budget ? 'OVER BUDGET' : 'WITHIN BUDGET', good: sp.total <= j.budget }) : null,
     notes: j.note ? [['Notes', j.note.split('\n')]] : null }, pdfName('Trip report', j.to));
 }
 // A factory's inspection: blank (to print and tick) or with the results ticked on the phone (saved, or still on the screen)

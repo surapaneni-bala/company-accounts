@@ -32,7 +32,8 @@ const kidsOf = id => live(S.needs).filter(n => n.under === id && n.status !== 'd
 // rows of a list with each item's add-ons right under it (indented); an add-on whose item is not in the list shows on its own
 function needRows(list) {
   const here = new Set(list.map(n => n.id)), top = list.filter(n => !n.under || !here.has(n.under));
-  return top.map(n => needRow(n) + list.filter(k => k.under === n.id).map(k => needRow(k).replace('class="row"', 'class="row sub"')).join('')).join('');
+  const under = (id, depth) => (depth > 4 ? '' : list.filter(k => k.under === id).map(k => needRow(k).replace('class="row"', `class="row sub" style="padding-left:${18 + depth * 16}px"`) + under(k.id, depth + 1)).join(''));
+  return top.map(n => needRow(n) + under(n.id, 1)).join('');
 }
 const needAmt = n => (n.order ? cost(needTotal(n), n.order.cur) : n.target ? `<small>target</small>${esc(cost(n.target, n.cur || 'USD'))}` : '');
 const stateTag = n => { const [, text, tone] = BUY_STATE[n.status]; return `<i class="tag ${tone}">${text}</i>`; };
@@ -94,7 +95,7 @@ function saveIdea(f) {
 }
 // A list pasted at once (a checklist from WhatsApp or notes): one idea per line, each in its guessed category. Ticks,
 // bullets and numbers at the start of a line are left out; the words stay as typed, to tidy up later.
-const listLines = text => String(text || '').split(/\r?\n/).map(l => l.replace(/^\s*(?:[-*•▪◦–]\s*)?(?:\[[ xX✓]?\]\s*)?(?:\d{1,3}[.)]\s+)?/, '').replace(/\s+/g, ' ').trim()).filter(l => /\w/.test(l)).map(l => l.slice(0, 160));
+const listLines = text => String(text || '').split(/\r?\n/).map(l => l.replace(/^\s*(?:[-*•▪◦–]\s*)?(?:\[[ xX✓]?\]\s*)?(?:\d{1,3}[.)]\s+)?/, '').replace(/\s+/g, ' ').trim()).filter(l => /[\p{L}\p{N}]/u.test(l)).map(l => l.slice(0, 160));
 function pasteListSheet(text = '') {
   openSheet(`${head('Paste a list', 'out')}
     <form data-form="pasteList">
@@ -208,7 +209,7 @@ function needDetail(id) {
     ${n.notes ? `<h3 class="subh">Notes</h3><p class="pre">${esc(n.notes)}</p>` : ''}
     ${n.link ? `<a class="btn ghost" href="${esc(n.link)}" target="_blank" rel="noopener noreferrer" style="margin-bottom:10px">🔗 Open the link</a>` : ''}
     ${o ? `<div class="note">🧾 <b>Ordered from ${esc(sup ? sup.name : 'a supplier')}</b> on ${esc(fmtDate(o.date))}: ${esc(plain(o.qty))} × ${esc(cost(o.price, o.cur))} = <b>${esc(cost(needTotal(n), o.cur))}</b>${o.cur !== 'USD' && o.rate ? ` ≈ ${esc(money(inUsd(needTotal(n), o), 'USD'))}` : ''}
-      <br>${orderShares(o, n.project).map(sh => `${esc(sh.p ? projName(sh.p) : 'Extra')}: ${esc(plain(sh.q))} = ${esc(cost(sh.cost, o.cur))}`).join(' · ')}${o.note ? `<br>${esc(o.note)}` : ''}</div>` : ''}
+      <br>${orderShares(o, n.project).map(sh => `${esc(sh.p ? projName(sh.p) : EXTRA)}: ${esc(plain(sh.q))} = ${esc(cost(sh.cost, o.cur))}`).join(' · ')}${o.note ? `<br>${esc(o.note)}` : ''}</div>` : ''}
     ${n.insp ? `<div class="note">🔍 Inspected on ${esc(fmtDate(n.insp.date))}${n.insp.by ? ` by ${esc(n.insp.by)}` : ''}: <b>${INSP_TEXT[n.insp.result] || ''}</b>${n.insp.note ? ` — ${esc(n.insp.note)}` : ''}</div>` : ''}
     ${n.ship ? `<p class="muted">🚢 Shipment: ${esc(n.ship)}</p>` : ''}
     ${needActions(n)}
@@ -226,6 +227,7 @@ function needDetail(id) {
   paintThumbs();
   comeBack(() => needDetail(id));
 }
+const EXTRA = 'Extra / no project'; // bought beyond what the projects need, or for no project
 const quoteRow = (n, q) => { const u = supOf(q.sup); return `<div class="sugg"><div><b>${esc(cost(q.price, q.cur))}</b> · ${esc(u ? u.name : 'A deleted supplier')}<br><span class="muted">${esc([q.moq && `minimum ${q.moq}`, q.lead && `ready in ${q.lead}`, q.at && fmtDate(q.at), q.note].filter(Boolean).join(' · '))}</span></div>
   <div class="two">${['idea', 'tobuy'].includes(n.status) && u ? `<button class="btn small out" data-act="orderNeed" data-id="${esc(n.id)}" data-q="${esc(q.id)}">🧾 Order from them</button>` : ''}<button class="btn small ghost" data-act="delQuote" data-id="${esc(n.id)}" data-q="${esc(q.id)}">Remove</button></div></div>`; };
 // what can be done next, step by step
@@ -320,67 +322,75 @@ function orderForm(id, qid) {
   if (!n) return;
   const q = (n.quotes || []).find(x => x.id === qid) || bestQuote(n), trip = tripOf(n.trip) || currentTrip();
   openSheet(`${head('Ordered / bought', 'out', n.t)}
-    <form data-form="order" data-id="${esc(id)}">
+    <form data-form="order" data-id="${esc(id)}" data-need="${esc(n.project ? n.qty ?? '' : '')}" data-cur="${esc(q ? q.cur : n.cur || 'USD')}">
       ${supPick(q ? q.sup : '', 'From')}
       <div class="fld"><span>Price per ${esc(n.unit || 'unit')}</span><div class="price-in"><input name="price" inputmode="decimal" value="${esc(q ? q.price : n.target ?? '')}" required autocomplete="off">${curSelect(q ? q.cur : n.cur || 'USD')}</div></div>
-      <label class="fld rate-f" ${(q ? q.cur : n.cur || 'USD') === 'USD' ? 'hidden' : ''}><span>1 US dollar = how many <b class="rate-cur">${esc(q ? q.cur : n.cur || 'USD')}</b>? <em>(for budgets in dollars)</em></span><input name="orate" inputmode="decimal" value="${esc(lastRate(q ? q.cur : n.cur || 'USD'))}" autocomplete="off"></label>
+      <label class="fld rate-f" ${(q ? q.cur : n.cur || 'USD') === 'USD' ? 'hidden' : ''}><span>1 US dollar = how many <b class="rate-cur">${esc(q ? q.cur : n.cur || 'USD')}</b>? <em>(budgets are kept in dollars)</em></span><input name="orate" inputmode="decimal" value="${esc(lastRate(q ? q.cur : n.cur || 'USD'))}" autocomplete="off"></label>
       <label class="fld"><span>How many bought</span><input name="qty" inputmode="decimal" value="${esc(n.qty ?? '')}" required autocomplete="off"></label>
       ${n.qty ? `<p class="muted">Fewer than ${esc(qtyText(n))}? The rest stays on the list to buy later. More? The extra is counted apart below.</p>` : ''}
       ${live(S.projects).length ? `<div class="fld"><span>Who is it for? <em>(what is left over is extra: stock, or another use later)</em></span>
-        <div class="allocs">${allocRow(n.project, n.project ? n.qty ?? '' : '')}</div><button type="button" class="btn small ghost" data-act="addAlloc">＋ Another project</button></div>` : ''}
+        <div class="allocs">${allocRow(n.project, n.project ? n.qty ?? '' : '', true)}</div><button type="button" class="btn small ghost" data-act="addAlloc">＋ Another project</button></div>` : ''}
       <p class="note order-sum"></p>
       <label class="fld"><span>Ordered on</span><input type="date" name="date" value="${today()}" max="${today()}" required></label>
       ${tripPick(trip ? trip.id : '')}
       ${textField('note', 'Note', 'e.g. 30% deposit paid, balance before loading', '', false)}
       <label class="fld check"><input type="checkbox" name="pay" checked> 💵 Also add what was paid now as a payment (Accounts)</label>
-      <div class="payf">${amountField('', 'USD', 'paid', 'Paid now, in US dollars', false)}${accountChips('Cash', 'Paid from')}<p class="muted">Leave it empty if nothing was paid yet. Paid in another currency or later? Add it in Accounts and choose this trip.</p></div>
+      <div class="payf"><input type="hidden" name="cur" value="USD">${amountField('', 'USD', 'paid', 'Paid now, in US dollars', false)}${accountChips('Cash', 'Paid from')}<p class="muted">Leave it empty if nothing was paid yet. Paid later or in another currency? Add it in Accounts, then on the trip tap 🔗 Link payments and choose this item, so it is not counted twice.</p></div>
       <p class="err"></p>
       <button class="btn out">Save the order</button>
     </form>`);
   refreshOrder($('#sheet form'));
 }
 // one project's share of an order
-const allocRow = (p = '', q = '') => `<div class="alloc-row"><select name="ap" aria-label="Project"><option value="">— a project —</option>${live(S.projects).map(x => `<option value="${esc(x.id)}" ${x.id === p ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
+const allocRow = (p = '', q = '', auto = false) => `<div class="alloc-row"${auto ? ' data-auto="1"' : ''}><select name="ap" aria-label="Project"><option value="">— a project —</option>${live(S.projects).map(x => `<option value="${esc(x.id)}" ${x.id === p ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
   <input name="aq" inputmode="decimal" value="${esc(q)}" placeholder="How many" autocomplete="off" aria-label="How many for it"><button type="button" class="x" data-act="delAlloc" aria-label="Remove">×</button></div>`;
 // the last rate typed for a currency, to start from
 const lastRate = cur => (cur === 'USD' ? '' : (live(S.needs).filter(n => n.order && n.order.cur === cur && n.order.rate).sort((a, b) => b.order.date.localeCompare(a.order.date))[0] || { order: {} }).order.rate || '');
-// each project's share as typed (same project twice: added up; a project with no number takes what is left); bad: not a number
+// each project's share as typed (same project twice: added up; a project with no number takes what is left); bad: a number
+// that is not one, or a number with no project chosen (those pieces would quietly become extra)
 function allocsFrom(f) {
-  const out = new Map(), qty = parseAmount(f.elements.qty.value) || 0, rows = $$('.alloc-row', f).map(r => ({ r, p: $('[name=ap]', r).value, raw: $('[name=aq]', r).value.trim() })).filter(x => live(S.projects).some(p => p.id === x.p));
-  let bad = null;
-  rows.filter(x => x.raw).forEach(x => { const q = parseAmount(x.raw); if (q === null) bad = x.r; else out.set(x.p, round3((out.get(x.p) || 0) + q)); });
+  const out = new Map(), qty = parseAmount(f.elements.qty.value) || 0, all = $$('.alloc-row', f).map(r => ({ r, p: $('[name=ap]', r).value, raw: $('[name=aq]', r).value.trim() }));
+  const rows = all.filter(x => live(S.projects).some(p => p.id === x.p));
+  let bad = all.find(x => x.raw && !rows.includes(x)) ? all.find(x => x.raw && !rows.includes(x)).r : null;
+  rows.filter(x => x.raw).forEach(x => { const q = parseAmount(x.raw); if (q === null) bad = x.r; else if (q > 0) out.set(x.p, round3((out.get(x.p) || 0) + q)); });
   const rest = round3(qty - [...out.values()].reduce((t, q) => t + q, 0)), open = rows.find(x => !x.raw);
   if (open && rest > 0) out.set(open.p, round3((out.get(open.p) || 0) + rest));
   return { alloc: [...out].map(([p, q]) => ({ p, q })), bad };
 }
-// as it is typed: who gets how many, the extra, and what each costs
-function refreshOrder(f) {
-  const cur = f.elements.pcur.value, price = parseAmount(f.elements.price.value), qty = parseAmount(f.elements.qty.value), rate = parseAmount(f.elements.orate.value);
+// as it is typed: who gets how many, the extra, and what each costs. The share filled in at the start follows "how many
+// bought" (up to what the project needs) until it is typed in; another currency starts from its own last rate.
+function refreshOrder(f, field) {
+  const cur = f.elements.pcur.value, price = parseAmount(f.elements.price.value), qty = parseAmount(f.elements.qty.value);
+  if (field && field.name === 'aq') field.closest('.alloc-row').removeAttribute('data-auto');
+  const auto = $('.alloc-row[data-auto] [name=aq]', f), need = parseAmount(f.dataset.need);
+  if (field && field.name === 'qty' && auto && need && qty) auto.value = plain(Math.min(need, qty)).replace(/,/g, '');
+  if (f.dataset.cur !== cur) { f.dataset.cur = cur; f.elements.orate.value = lastRate(cur); }
+  const rate = parseAmount(f.elements.orate.value);
   $('.rate-f', f).hidden = cur === 'USD'; $('.rate-cur', f).textContent = cur;
   const el = $('.order-sum', f);
   if (!price || !qty) { el.textContent = 'Type the price and how many to see what it costs.'; return; }
   const { alloc } = allocsFrom(f), o = { price, qty, cur, rate, alloc }, used = alloc.reduce((t, a) => t + a.q, 0), usd = x => (cur !== 'USD' && rate ? ` ≈ ${money(Math.round(x / rate * 100) / 100, 'USD')}` : '');
-  if (used > qty) { el.innerHTML = `<b>More shared out (${esc(plain(used))}) than bought (${esc(plain(qty))}).</b>`; return; }
-  el.innerHTML = `${orderShares(o, '').map(sh => `${esc(sh.p ? projName(sh.p) : 'Extra')}: ${esc(plain(sh.q))} × ${esc(cost(price, cur))} = <b>${esc(cost(sh.cost, cur))}</b>${esc(usd(sh.cost))}`).join('<br>')}<br>Total: <b>${esc(cost(Math.round(qty * price * 100) / 100, cur))}</b>${esc(usd(qty * price))}`;
+  if (used > qty + 1e-9) { el.innerHTML = `<b>More shared out (${esc(plain(used))}) than bought (${esc(plain(qty))}).</b>`; return; }
+  el.innerHTML = `${orderShares(o, '').map(sh => `${esc(sh.p ? projName(sh.p) : EXTRA)}: ${esc(plain(sh.q))} × ${esc(cost(price, cur))} = <b>${esc(cost(sh.cost, cur))}</b>${esc(usd(sh.cost))}`).join('<br>')}<br>Total: <b>${esc(cost(Math.round(qty * price * 100) / 100, cur))}</b>${esc(usd(qty * price))}`;
 }
 function saveOrder(f) {
   const n = needOf(f.dataset.id), v = Object.fromEntries(new FormData(f)), price = parseAmount(v.price), qty = parseAmount(v.qty);
   if (!n) return closeSheet();
   if (price === null) return formErr(f, 'price', 'Type the price per unit, like 880');
-  if (qty === null) return formErr(f, 'qty', 'Type how many, like 2');
+  if (!qty) return formErr(f, 'qty', 'Type how many, like 2');
   if (!DATE_RE.test(v.date)) return formErr(f, 'date', 'Choose the date');
   const paid = v.pay && v.paid.trim() ? parseAmount(v.paid) : 0, cur0 = BUY_CURS.includes(v.pcur) ? v.pcur : 'USD', rate = cur0 !== 'USD' && v.orate.trim() ? parseAmount(v.orate) : undefined;
   if (paid === null) return formErr(f, 'paid', 'Type what was paid in dollars, like 500 — or leave it empty');
-  if (rate === null) return formErr(f, 'orate', `Type how many ${cur0} make one dollar, like 7.1 — or leave it empty`);
+  if (cur0 !== 'USD' && !rate) return formErr(f, 'orate', `Type how many ${cur0} make one dollar, like 7.1: budgets are kept in dollars`);
   const { alloc, bad: badShare } = allocsFrom(f);
-  if (badShare) { $('[name=aq]', badShare).focus(); return formErr(f, null, 'Type how many are for each project, like 10'); }
-  if (alloc.reduce((t, a) => t + a.q, 0) > qty) return formErr(f, null, `More shared out than the ${plain(qty)} bought.`);
+  if (badShare) { $('[name=aq]', badShare).focus(); return formErr(f, null, 'For each project: choose it and type how many, like 10'); }
+  if (alloc.reduce((t, a) => t + a.q, 0) > qty + 1e-9) return formErr(f, null, `More shared out than the ${plain(qty)} bought.`);
   const sup = supFrom(f);
   if (!sup) return formErr(f, f.elements.sup.value === '__new' ? 'supName' : 'sup', 'Who was it ordered from?');
   const by = myName() || S.lastBy || '', trip = tripOf(v.trip) ? v.trip : '', at = stampSec(), cur = BUY_CURS.includes(v.pcur) ? v.pcur : 'USD';
   const order = { sup, price, cur, qty, date: v.date, note: clean(v.note), ...(trip ? { trip } : {}), ...(rate ? { rate } : {}), ...(alloc.length ? { alloc } : {}) };
   let ids = S.seq, rest = null, pay = null;
-  if (n.qty && qty < n.qty && !alloc.some(a => a.p !== n.project)) { // part of it: the rest stays to buy, with every detail
+  if (n.qty && qty < n.qty) { // part of it: the rest stays to buy, with every detail
     const [[rid], s1] = nextIds('N', 1, ids); ids = s1;
     rest = { ...n, id: rid, qty: Math.round((n.qty - qty) * 1000) / 1000, status: 'tobuy', steps: { tobuy: today() }, from: n.id, by, createdAt: at };
     ['order', 'insp', 'ship', 'editedAt', 'editedBy', 'u', 'uid'].forEach(k => delete rest[k]);
@@ -435,10 +445,10 @@ function budgetsSheet() {
     <form data-form="budgets">
       ${ps.length ? ps.map(p => { const t = by[p.id] || { usd: 0, unrated: {}, items: 0 }, left = p.buyBudget ? Math.round((p.buyBudget - t.usd) * 100) / 100 : null;
         return `<section class="card pad" style="margin-bottom:12px"><b>${esc(p.name)}</b>
-          <p class="muted">${t.items} order line${t.items === 1 ? '' : 's'} · spent <b>${esc(usdText(t))}</b>${left === null ? '' : ` · <b class="${left < 0 ? 'out-c' : ''}">${left < 0 ? `${esc(money(-left, 'USD'))} over` : `${esc(money(left, 'USD'))} left`}</b>`}</p>
+          <p class="muted">${t.items} order line${t.items === 1 ? '' : 's'} · spent <b>${esc(usdText(t))}</b>${left === null ? '' : ` · <b class="${left < 0 ? 'out-c' : ''}">${left < 0 ? `${esc(money(-left, 'USD'))} over` : `${esc(money(left, 'USD'))} left`}</b>${Object.keys(t.unrated).length ? ' (not counting the orders with no dollar rate)' : ''}`}</p>
           <label class="fld"><span>Buying budget, in US dollars <em>(optional)</em></span><input name="b|${esc(p.id)}" inputmode="decimal" value="${esc(p.buyBudget ?? '')}" autocomplete="off"></label></section>`; }).join('')
         : empty('No projects yet', 'Add a project in Accounts first.')}
-      <div class="note">Extra (bought beyond what projects need): <b>${esc(extra ? usdText(extra) : money(0, 'USD'))}</b></div>
+      <div class="note">${EXTRA} (bought beyond what projects need): <b>${esc(extra ? usdText(extra) : money(0, 'USD'))}</b></div>
       <p class="err"></p>
       ${ps.length ? '<button class="btn out" style="margin-top:12px">Save the budgets 🔒</button>' : ''}
     </form>`);

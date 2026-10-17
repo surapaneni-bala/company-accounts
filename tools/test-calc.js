@@ -174,7 +174,8 @@ const guessed = [['Sofa, L-shape', 'Furniture & décor'], ['Wardrobe with slidin
   ['Roofing tiles, top ridge and gutters', 'Structure & civil'], ['Computers', 'Office & IT'], ['Big tool box, multiple drawers', 'Tools & hardware'], ['Car wash equipment', 'Machinery & vehicles'],
   ['Modern cabinets', 'Furniture & décor'], ['Kitchen utensils', 'Kitchen'], ['Monitor mounts', 'Office & IT'], ['Moulds for pillars', 'Structure & civil'], ['Paintings', 'Furniture & décor'],
   ['Sintered stone', 'Finishes'], ['Overall clothing for workers', 'Tools & hardware'], ['Gloves and safety equipment', 'Tools & hardware'], ['Concrete pump', 'Machinery & vehicles'],
-  ['Generator', 'Electrical & solar'], ['Tiles', 'Finishes'], ['Second hand clothes', 'Goods for trading']];
+  ['Generator', 'Electrical & solar'], ['Tiles', 'Finishes'], ['Second hand clothes', 'Goods for trading'],
+  ['Solar panels 550W', 'Electrical & solar'], ['Hoodies for staff', 'Other'], ['Cement mixer', 'Machinery & vehicles'], ['Smart TV 65 inch', 'Electronics & appliances'], ['Kitchen hood', 'Kitchen'], ['Smart door lock', 'Home automation & security']];
 assert.deepStrictEqual(guessed.map(([t]) => [t, guessCat(t)]), guessed, 'a block is not a lock; smart switches are home automation; table fans are not tables; roofing tiles are roofing; second-hand clothes are for trading');
 
 /* ---------- buying: an order shared between projects and extra; what each project costs in dollars ---------- */

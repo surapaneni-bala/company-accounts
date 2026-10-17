@@ -214,7 +214,7 @@ document.addEventListener('input', e => {
   if (t.form && t.form.dataset.form === 'buyFilter' && t.name === 'q') filterBuying(t.form);
   if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form, t);
   if (t.name === 'list' && t.form && t.form.dataset.form === 'pasteList') countPasted(t.form);
-  if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form);
+  if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form, t);
 });
 document.addEventListener('change', e => {
   const t = e.target;
@@ -240,7 +240,7 @@ document.addEventListener('change', e => {
   if (t.name === 'cat' && t.form && t.form.dataset.form === 'need') { $('.newcat', t.form).hidden = t.value !== '__new'; $('.spec-sugg', t.form).outerHTML = specChips(t.value); }
   if (t.name === 'sup' && t.form) { const ns = $('.newsup', t.form); if (ns) ns.hidden = t.value !== '__new'; }
   if (t.name === 'pay' && t.form && t.form.dataset.form === 'order') $('.payf', t.form).hidden = !t.checked;
-  if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form);
+  if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form, t);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }
   if (t.id === 'month') { histMonth = t.value; $('#histRes').innerHTML = histResults(); }
