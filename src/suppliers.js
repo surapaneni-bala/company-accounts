@@ -87,7 +87,7 @@ async function deleteSupplier(id) {
 // What is ticked is kept on this phone while the screen is open (a photo taken in between redraws it); Save writes only the
 // items changed on it, so an item inspected on an earlier day keeps its date and inspector.
 let inspDraft = {};
-const okRow = (name, label, val, na) => `<div class="okrow"><span>${esc(label)}</span><div class="okbad">
+const okRow = (name, label, val, na, fid) => `<div class="okrow"><span>${esc(label)}${fid ? `<button type="button" class="spec-thumb" data-act="showFile" data-id="${esc(fid)}" aria-label="Open the photo"><img alt="" data-thumb="${esc(fid)}"></button>` : ''}</span><div class="okbad">
   <label><input type="radio" name="${name}" value="ok" ${val === 'ok' ? 'checked' : ''}><span aria-label="OK">✓</span></label><label class="no"><input type="radio" name="${name}" value="bad" ${val === 'bad' ? 'checked' : ''}><span aria-label="Not OK">✗</span></label>
   ${na ? `<label><input type="radio" name="${name}" value="na" ${val === 'na' ? 'checked' : ''}><span>n/a</span></label>` : ''}</div></div>`;
 // the results so far for one item: the draft, else its last inspection, else nothing ticked
@@ -98,7 +98,7 @@ function inspCard(n) {
     <label class="fld check"><input type="checkbox" name="i|${esc(id)}" ${r.inc ? 'checked' : ''}> <b>${esc(n.t)}</b></label>
     <p class="muted">${esc([`${plain(n.order.qty)} ${n.unit || ''} ordered ${fmtDate(n.order.date)}`, n.project && projName(n.project), n.area].filter(Boolean).join(' · '))}${n.insp ? ` · last check ${esc(fmtDate(n.insp.date))}: ${n.insp.result === 'fail' ? '<b>NOT OK</b>' : INSP_TEXT[n.insp.result]}` : ''}</p>
     ${photoStrip(id)}
-    <div class="checks">${(n.specs || []).map(([k, v], i) => okRow(`c|${id}|s|${i}`, `${k}: ${v}`, r.specs[i])).join('')}
+    <div class="checks">${(n.specs || []).map(([k, v, fid], i) => okRow(`c|${id}|s|${i}`, `${k}: ${v}`, r.specs[i], false, fid)).join('')}
       ${STD_CHECKS.map(([k, label]) => okRow(`c|${id}|d|${k}`, label, r.std[k], true)).join('')}</div>
     <div class="two"><label class="fld"><span>Counted</span><input name="n|${esc(id)}" inputmode="decimal" value="${esc(r.counted)}" placeholder="${esc(plain(n.order.qty))}" autocomplete="off"></label><div></div></div>
     <label class="fld"><span>Note <em>(what is wrong, what was agreed)</em></span><textarea class="plain" name="t|${esc(id)}" rows="2" maxlength="600">${esc(r.note)}</textarea></label>

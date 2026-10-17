@@ -369,6 +369,11 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .app-tile.acc { background: var(--ink); background-image: repeating-linear-gradient(0deg, transparent 0 31px, rgba(255,255,255,.05) 31px 32px); }
 .app-tile.doc { background: #3730a3; background-image: radial-gradient(circle at -10% 110%, rgba(255,255,255,.18), transparent 55%); }
 .app-tile.inv { background: #9d174d; background-image: repeating-linear-gradient(135deg, transparent 0 22px, rgba(255,255,255,.05) 22px 23px); }
+.app-tile.ssp { background: #0f766e; background-image: radial-gradient(circle at 0% 0%, rgba(255,255,255,.18), transparent 50%); }
+.ssp-big { background: var(--card); border-radius: var(--r-md); box-shadow: var(--shadow); padding: 18px; margin-bottom: 14px; display: grid; gap: 4px; }
+.ssp-big small { color: var(--muted); font-weight: 800; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
+.ssp-big b { font-size: 32px; color: var(--in); font-variant-numeric: tabular-nums; }
+.ssp-big span { color: var(--muted); font-size: 14px; font-weight: 700; }
 .app-tile.buy { background: #6d28d9; background-image: radial-gradient(circle at 110% -10%, rgba(255,255,255,.2), transparent 50%); }
 /* buying: the idea box, the filters, an item's detail lines, inspection ticks, photo strips */
 .idea-box { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 6px; }
@@ -380,7 +385,11 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .buy-cat > summary small { background: var(--paper); border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
 .row .amt small { display: block; font-size: 11px; color: var(--muted); font-weight: 700; }
 .specs { display: grid; gap: 8px; margin-bottom: 8px; }
-.spec-row { display: grid; grid-template-columns: 1fr 1.6fr 44px; gap: 8px; }
+.spec-row { display: grid; grid-template-columns: 1fr 1.6fr 46px 40px; gap: 6px; }
+.spec-pic { display: grid; place-items: center; border-radius: 12px; background: var(--paper); border: 2px dashed var(--line); cursor: pointer; font-size: 20px; overflow: hidden; min-height: 46px; }
+.spec-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.spec-thumb { border: 0; padding: 0; margin-left: 8px; width: 34px; height: 34px; border-radius: 8px; overflow: hidden; vertical-align: middle; background: var(--paper); cursor: pointer; }
+.spec-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .spec-row input, .price-in input, .price-in select { width: 100%; min-width: 0; font: inherit; font-size: 16px; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); }
 .spec-row .x { border: 0; background: var(--paper); border-radius: 10px; font-size: 22px; cursor: pointer; color: var(--muted); }
 .spec-sugg { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }

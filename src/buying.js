@@ -62,7 +62,7 @@ const BUY_TABS = { open: ['To buy', ['idea', 'tobuy']], bought: ['Bought', ['ord
 let buyView = { view: 'open', project: '', q: '' };
 const inProject = n => !buyView.project || n.project === buyView.project;
 const buyMatches = n => (BUY_TABS[buyView.view] || BUY_TABS.open)[1].includes(n.status) && inProject(n)
-  && (!buyView.q || [n.t, n.cat, n.sub, n.area, n.where, n.notes, ...(n.tags || []), ...(n.specs || []).flat()].join(' ').toLowerCase().includes(buyView.q.toLowerCase()));
+  && (!buyView.q || [n.t, n.cat, n.sub, n.area, n.where, n.notes, ...(n.tags || []), ...(n.specs || []).flatMap(x => x.slice(0, 2))].join(' ').toLowerCase().includes(buyView.q.toLowerCase()));
 function buyingSheet() {
   const all = live(S.needs), list = all.filter(buyMatches), ps = live(S.projects), count = v => all.filter(n => BUY_TABS[v][1].includes(n.status) && inProject(n)).length;
   // ticked in the last two days: they stay at the foot of the list, crossed out, to undo a slip
@@ -156,10 +156,27 @@ function newNeed(rec) {
 }
 
 /* ---------- one item: every detail ---------- */
-const specRow = ([k, v] = ['', '']) => `<div class="spec-row"><input name="sk" placeholder="e.g. Colour" value="${esc(k)}" maxlength="60" autocomplete="off" aria-label="Detail"><input name="sv" placeholder="e.g. Beige, velvet" value="${esc(v)}" maxlength="200" autocomplete="off" aria-label="Value"><button type="button" class="x" data-act="delSpec" aria-label="Remove this detail">×</button></div>`;
+// A detail line: what (colour), its value (beige velvet) and, if wanted, a photo of it (the swatch) — picked, taken or
+// pasted (owner, 17 Oct 2026). The photo is kept with the item; the line holds its file id. A photo picked on the form waits
+// in specPics (by the row's key) until the item is saved.
+let specPics = {};
+const specKey = () => `k${Math.random().toString(36).slice(2, 9)}`;
+const specPicBox = (fid, key) => `<label class="spec-pic" title="A photo of this detail">${fid ? `<img alt="" data-thumb="${esc(fid)}">` : specPics[key] ? `<img alt="" src="${specPics[key].url}">` : '📷'}<input type="file" accept="image/*" hidden data-specpic aria-label="Add a photo of this detail"></label>`;
+const specRow = ([k, v, fid] = ['', '', ''], key = specKey()) => `<div class="spec-row" data-key="${key}"><input name="sk" placeholder="e.g. Colour" value="${esc(k)}" maxlength="60" autocomplete="off" aria-label="Detail"><input name="sv" placeholder="e.g. Beige, velvet" value="${esc(v)}" maxlength="200" autocomplete="off" aria-label="Value">${specPicBox(fid || '', key)}<input type="hidden" name="sf" value="${esc(fid || '')}"><button type="button" class="x" data-act="delSpec" aria-label="Remove this detail">×</button></div>`;
+// a photo for a detail line: from the picker or pasted; shown at once, saved with the item
+async function specPicked(row, file) {
+  if (!row || !file) return;
+  try {
+    const p = await prepareFile(file);
+    specPics = { ...specPics, [row.dataset.key]: { ...p, url: URL.createObjectURL(file) } };
+    row.querySelector('[name=sf]').value = '';
+    row.querySelector('.spec-pic').outerHTML = specPicBox('', row.dataset.key);
+  } catch (e) { alert(e.message); }
+}
 const specChips = cat => `<div class="spec-sugg">${((catOf(cat) || BUY_CATS[BUY_CATS.length - 1])[3]).map(k => `<button type="button" class="chip-btn" data-act="addSpec" data-k="${esc(k)}">＋ ${esc(k)}</button>`).join('')}</div>`;
 const listFrom = (id, values) => `<datalist id="${id}">${[...new Set(values.filter(Boolean))].map(v => `<option value="${esc(v)}">`).join('')}</datalist>`;
 function needForm(old, preset = {}) {
+  specPics = {}; // photos picked on a form left without saving are forgotten
   const d = old || { t: '', cat: 'Other', status: 'tobuy', pri: 2, where: 'Anywhere', unit: 'pcs', cur: 'USD', specs: [], ...preset }, cats = catNames(), all = live(S.needs);
   const subs = [...((catOf(d.cat) || [])[1] || []), ...all.filter(n => n.cat === d.cat).map(n => n.sub)];
   const more = !!(d.notes || d.area || d.sub || d.link || d.target || (d.tags || []).length || d.pri !== 2 || (d.where && d.where !== 'Anywhere'));
@@ -172,7 +189,7 @@ function needForm(old, preset = {}) {
       <label class="fld"><span>Category</span><select name="cat">${cats.map(c => `<option ${c === d.cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__new">＋ New category…</option></select></label>
       <label class="fld newcat" hidden><span>New category</span><input name="newCat" placeholder="e.g. Hotel equipment, Water bottling" maxlength="60" autocomplete="off"></label>
       <div class="fld"><span>Details <em>(colour, sizes, seating… each one is a line to check when it arrives)</em></span>
-        <div class="specs">${(d.specs && d.specs.length ? d.specs : [['', '']]).map(specRow).join('')}</div>${specChips(d.cat)}
+        <div class="specs">${(d.specs && d.specs.length ? d.specs : [['', '']]).map(x => specRow(x)).join('')}</div>${specChips(d.cat)}
         <button type="button" class="btn small ghost" data-act="addSpec">＋ Another detail</button></div>
       <details class="more" ${more ? 'open' : ''}><summary>More: notes, room, where to buy, price, link, tags</summary>
         <label class="fld"><span>Notes <em>(anything to remember)</em></span><textarea class="plain" name="notes" rows="3" maxlength="2000" placeholder="e.g. Same fabric as the sample in the office; must fit through a 90 cm door.">${esc(d.notes)}</textarea></label>
@@ -192,27 +209,40 @@ function needForm(old, preset = {}) {
     </form>`);
 }
 const tripPick = cur => { const js = live(S.trips).filter(j => !j.back || j.back >= today() || j.id === cur); return js.length ? `<label class="fld"><span>On a trip’s list <em>(optional)</em></span><select name="trip"><option value="">— not yet —</option>${js.map(j => `<option value="${esc(j.id)}" ${j.id === cur ? 'selected' : ''}>${esc(tripName(j))}</option>`).join('')}</select></label>` : ''; };
-const specsFrom = f => $$('.spec-row', f).map(r => [clean($('[name=sk]', r).value), clean($('[name=sv]', r).value)]).filter(([k, v]) => k || v).map(([k, v]) => [k || 'Detail', v]);
+// the lines as typed: each with its photo's file id, or waiting for its photo to be kept (key)
+const specsFrom = f => $$('.spec-row', f).map(r => ({ k: clean($('[name=sk]', r).value), v: clean($('[name=sv]', r).value), fid: $('[name=sf]', r).value, key: r.dataset.key }))
+  .filter(x => x.k || x.v || x.fid || specPics[x.key]).map(x => ({ ...x, k: x.k || (x.v ? 'Detail' : 'Photo') }));
+const specList = rows => rows.map(x => (x.fid ? [x.k, x.v, x.fid] : [x.k, x.v]));
 const tagsFrom = v => [...new Set(String(v || '').split(',').map(t => clean(t).replace(/^#/, '')).filter(Boolean))].slice(0, 20);
 // the fields that changed, by name (the Change Log)
 const NEED_LABELS = { t: 'Item', cat: 'Category', sub: 'Sub-category', project: 'Project', area: 'Area', qty: 'Quantity', unit: 'Unit', specs: 'Details', notes: 'Notes', link: 'Link', target: 'Target price', cur: 'Currency', where: 'Where', pri: 'Priority', tags: 'Tags' };
 const changedOf = (a, b, labels) => Object.keys(labels).filter(k => k in b && JSON.stringify(a[k] ?? '') !== JSON.stringify(b[k] ?? '')).map(k => labels[k]);
-function saveNeed(f) {
-  const v = Object.fromEntries(new FormData(f)), old = needOf(f.dataset.id);
+async function saveNeed(f) {
+  const v = Object.fromEntries(new FormData(f)), old = needOf(f.dataset.id), rows = specsFrom(f);
   const cat = v.cat === '__new' ? clean(v.newCat) : v.cat, qty = v.qty.trim() ? parseAmount(v.qty) : undefined, target = v.target.trim() ? parseAmount(v.target) : undefined;
   if (!clean(v.t)) return formErr(f, 't', 'What is it?');
   if (!cat) return formErr(f, 'newCat', 'Type the new category');
   if (qty === null) return formErr(f, 'qty', 'Type a quantity, like 4 — or leave it empty');
   if (target === null) return formErr(f, 'target', 'Type a price, like 250 — or leave it empty');
   if (v.link && !/^https?:\/\//i.test(v.link.trim())) return formErr(f, 'link', 'A link starts with https://');
-  const rec = { t: clean(v.t), cat, sub: clean(v.sub), project: v.project || '', area: clean(v.area), qty, unit: clean(v.unit), specs: specsFrom(f), notes: String(v.notes || '').trim().slice(0, 2000),
+  const rec = { t: clean(v.t), cat, sub: clean(v.sub), project: v.project || '', area: clean(v.area), qty, unit: clean(v.unit), specs: specList(rows), notes: String(v.notes || '').trim().slice(0, 2000),
     link: String(v.link || '').trim(), target, cur: BUY_CURS.includes(v.tcur) ? v.tcur : 'USD', where: clean(v.where) || 'Anywhere', pri: +v.pri || 2, tags: tagsFrom(v.tags) };
-  if (!old) { const n = newNeed({ ...rec, status: v.status === 'idea' ? 'idea' : 'tobuy', ...(tripOf(v.trip) ? { trip: v.trip } : {}) }); toast('Added to the list ✓'); return needDetail(n.id); }
-  const changes = changedOf(old, rec, NEED_LABELS), by = myName() || S.lastBy || '';
-  if (!changes.length) { closeSheet(); return toast('Nothing changed'); }
-  update({ needs: S.needs.map(n => (n.id === old.id ? { ...n, ...rec, editedAt: stampSec(), editedBy: by } : n)), log: logWith([['Edited', old.id, `${rec.t}: ${changes.join(', ')} changed`]], by) });
-  toast('Changes saved ✓');
-  needDetail(old.id);
+  const pending = rows.filter(x => specPics[x.key]), by = myName() || S.lastBy || '';
+  let id = old && old.id;
+  if (!old) { id = newNeed({ ...rec, status: v.status === 'idea' ? 'idea' : 'tobuy', ...(tripOf(v.trip) ? { trip: v.trip } : {}) }).id; toast('Added to the list ✓'); }
+  else {
+    const changes = changedOf(old, rec, NEED_LABELS);
+    if (!changes.length && !pending.length) { closeSheet(); return toast('Nothing changed'); }
+    if (changes.length) update({ needs: S.needs.map(n => (n.id === old.id ? { ...n, ...rec, editedAt: stampSec(), editedBy: by } : n)), log: logWith([['Edited', old.id, `${rec.t}: ${changes.join(', ')} changed`]], by) });
+    toast('Changes saved ✓');
+  }
+  // the photos picked on the form: kept with the item, each line then holds its file
+  if (pending.length) {
+    for (const x of pending) { const p = specPics[x.key]; x.fid = await keepFile({ for: id, type: 'attachment', name: p.name, mime: p.mime, note: `${x.k}${x.v ? `: ${x.v}` : ''}` }, p.data); }
+    specPics = {};
+    update({ needs: S.needs.map(n => (n.id === id ? { ...n, specs: specList(rows), editedAt: stampSec(), editedBy: by } : n)) });
+  }
+  needDetail(id);
 }
 
 // the item's photos as pictures (product photos, the sample, the factory's own); a PDF stays a row
@@ -260,7 +290,7 @@ function needDetail(id) {
     <div class="next">${nextStep(n)}</div>
     ${info.length ? `<section class="dcard">${facts(info)}</section>` : ''}
     <section class="dcard"><h3>Details <button class="link" data-act="editNeed" data-id="${esc(id)}">Edit</button></h3>
-      ${n.specs && n.specs.length ? `<dl class="facts">${n.specs.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : '<p class="muted">Colour, sizes, material… tap Edit to add them. Each becomes a line to check when it arrives.</p>'}
+      ${n.specs && n.specs.length ? `<dl class="facts">${n.specs.map(([k, v, fid]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}${fid ? `<button type="button" class="spec-thumb" data-act="showFile" data-id="${esc(fid)}" aria-label="Open the photo of ${esc(k)}"><img alt="" data-thumb="${esc(fid)}"></button>` : ''}</dd></div>`).join('')}</dl>` : '<p class="muted">Colour, sizes, material… tap Edit to add them, with a photo of each if you like. Each becomes a line to check when it arrives.</p>'}
       ${n.notes ? `<p class="pre">${esc(n.notes)}</p>` : ''}
       ${n.link ? `<a class="link" href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">🔗 Open the link</a>` : ''}</section>
     ${o ? `<section class="dcard"><h3>Bought from ${esc(sup ? sup.name : 'a supplier')}</h3><p><b>${esc(plain(o.qty))} × ${esc(cost(o.price, o.cur))} = ${esc(cost(needTotal(n), o.cur))}</b>${o.cur !== 'USD' && o.rate ? ` ≈ ${esc(money(inUsd(needTotal(n), o), 'USD'))}` : ''} · ${esc(fmtDate(o.date))}</p>

@@ -33,7 +33,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I', needs: 'N', suppliers: 'U', trips: 'J' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I', needs: 'N', suppliers: 'U', trips: 'J', exchanges: 'X' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // an empty list of every kind of record (a new company, a new phone, a sign-in that starts again)
 const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
@@ -329,6 +329,7 @@ function viewMenu() {
         <button class="app-tile emp" data-act="tab" data-tab="staff">${staffWaiting ? `<span class="badge">${staffWaiting} waiting</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg></span><span><b>Employees</b><small>Salaries, advances and slips</small></span></button>
         <button class="app-tile doc" data-act="docs">${live(S.docs).some(v => docState(v).soon) ? `<span class="badge">${live(S.docs).filter(v => docState(v).soon).length} to renew</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><span><b>Documents</b><small>Licences, vehicles, IDs</small></span></button>
         ${can('settings') ? `<button class="app-tile inv" data-act="sales">${live(S.invoices).some(x => x.type === 'invoice' && invState(x).state === 'overdue') ? `<span class="badge">${live(S.invoices).filter(x => x.type === 'invoice' && invState(x).state === 'overdue').length} overdue</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span><span><b>Invoices</b><small>Quotations, clients, what is owed</small></span></button>` : ''}
+        ${can('money') ? `<button class="app-tile ssp" data-act="ssp"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg></span><span><b>SSP</b><small>Dollars changed, SSP spent and left</small></span></button>` : ''}
         ${can('settings') ? `<button class="app-tile buy" data-act="buying">${live(S.needs).some(n => n.pri === 1 && ['idea', 'tobuy'].includes(n.status)) ? `<span class="badge">${live(S.needs).filter(n => n.pri === 1 && ['idea', 'tobuy'].includes(n.status)).length} urgent</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg></span><span><b>Buying</b><small>Ideas, factories, trips, inspection</small></span></button>` : ''}
       </div>
     </section>`;
@@ -340,6 +341,7 @@ function balances() {
   live(S.credits).forEach(x => { b[x.cur][accountOf(x.mode)] += cents(x.amount); });
   live(S.expenses).forEach(x => { b[x.cur][accountOf(x.mode)] -= cents(x.amount); });
   live(S.transfers).forEach(x => { b[x.cur][x.from] -= cents(x.amount); b[x.cur][x.to] += cents(x.amount); });
+  live(S.exchanges).forEach(x => { b.USD[x.from] -= cents(x.usd); b.SSP[x.to] += cents(x.ssp); }); // dollars changed into SSP (ssp.js)
   return Object.fromEntries(CURS.map(c => [c, { Cash: b[c].Cash / 100, Bank: b[c].Bank / 100, Total: (b[c].Cash + b[c].Bank) / 100 }]));
 }
 const plain = n => (n < 0 ? '−' : '') + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
@@ -369,6 +371,7 @@ function viewHome() {
     <button class="tile in" data-act="addCredit" ${seeMoney ? '' : 'hidden'}><span class="ic">+</span><span><b>Money received</b><small>From a project</small></span></button>
     <button class="tile bulk" data-act="addBulk"><span class="ic">☰</span><span><b>Add many at once</b><small>Several payments together, with a total</small></span></button>
     <button class="tile bulk move" data-act="addMove" ${seeMoney ? '' : 'hidden'}><span class="ic">⇄</span><span><b>Move money</b><small>Cash into the bank, or bank to cash — not spending</small></span></button>
+    <button class="tile bulk move" data-act="addExchange" ${seeMoney ? '' : 'hidden'}><span class="ic">💱</span><span><b>Change USD to SSP</b><small>The dollars go out, the SSP goes into your SSP balance — not spending</small></span></button>
   </div>
   <div class="minis">
     <div class="mini"><small>Spent today</small>${lines(byCur(E.filter(e => e.at.startsWith(today))))}</div>
@@ -661,6 +664,9 @@ function saveExpense(f) {
     toast('Changes saved ✓');
     if (needsNewPaper(old.id)) { render(); return slipSheet('E', old.id); } // its signed paper was cancelled: make the new one now
   } else {
+    // changing dollars into SSP is not spending: offered as a change, which puts the SSP into the SSP balance (ssp.js)
+    if (rec.cur === 'USD' && can('money') && CHANGE_RE.test(`${rec.reason} ${rec.paidTo}`) && confirm('Is this changing dollars into SSP?\n\nOK: record it as a change — the dollars go out and the SSP goes into your SSP balance.\nCancel: save it as a payment.'))
+      return exchangeForm(null, null, { usd: rec.amount, from: accountOf(rec.mode), with: rec.paidTo === 'Not recorded' ? '' : rec.paidTo, at: rec.at, note: rec.reason });
     const [[id], seq] = nextIds('E', 1, S.seq);
     update({
       expenses: [...S.expenses, { id, ...rec, ...regularFields(v), ...(v.advance && !v.regular ? { advance: true, advanceTotal: rec.amount } : {}), by, createdAt: stampSec(), batch: null }], seq,

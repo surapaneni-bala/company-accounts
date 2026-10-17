@@ -370,4 +370,15 @@ gas.mails.length = 0;
 gas.morningEmail();
 assert.ok(/Trip in 7 days: Guangzhou & Foshan \(Owner, Partner\) — 1 item on its buying list/.test(gas.mails[0].body), 'a week before a trip: what is still to buy on it');
 
+/* ---------- dollars changed into SSP: their own record, in the balances and the ledger, never seen by the office manager ---------- */
+const chg = (id, u, extra = {}) => ({ id, k: 'X', u, d: { id, at: '2026-10-16T10:00', usd: 1000, ssp: 4500000, from: 'Cash', to: 'Cash', with: 'Forex bureau', ...extra } });
+assert.deepStrictEqual(post({ token: owner, since: 0, push: [chg('X-OW1-0001', 150), chg('X-OW1-0002', 150, { usd: 0 }), chg('X-OW1-0003', 150, { to: 'Pocket' }), chg('X-OW1-0004', 150, { was: '<b>' })] }).refused.sort(),
+  ['X-OW1-0002', 'X-OW1-0003', 'X-OW1-0004'], 'dollars and SSP both above 0, cash or bank');
+assert.ok(!post({ token: m.token, since: 0, push: [] }).pull.some(p => p.k === 'X'), 'the office manager never sees them (they show what money there is)');
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [chg('X-AG1-0001', 151, { uid: m.me.id })] }).refused, ['X-AG1-0001'], 'nor adds them');
+const xRow = rows('USD to SSP').find(r => r[0] === 'X-OW1-0001');
+assert.deepStrictEqual([xRow[3], xRow[5], xRow[6], xRow[8]], [1000, 4500, 4500000, 'Forex bureau'], 'the USD to SSP tab: out, rate, in');
+const led = rows('Ledger').filter(r => r[2] === 'X-OW1-0001');
+assert.deepStrictEqual(led.map(r => [r[6], r[7], r[8]]), [['USD', '', 1000], ['SSP', 4500000, '']], 'the ledger: the dollars out and the SSP in');
+
 console.log('Employees and files: all checks passed');

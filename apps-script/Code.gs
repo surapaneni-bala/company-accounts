@@ -18,7 +18,7 @@ const FILE_COLS = ['fileId', 'uid', 'key']; // key = the phone's id for the file
 // the first bytes of each kind of file allowed: a file must be what it says it is
 const MAGIC = { 'image/jpeg': [0xFF, 0xD8, 0xFF], 'image/png': [0x89, 0x50, 0x4E, 0x47], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pdf' };
-const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Documents', 'Invoices', 'Buying list', 'Suppliers', 'Trips', 'Files'];
+const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'USD to SSP', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Documents', 'Invoices', 'Buying list', 'Suppliers', 'Trips', 'Files'];
 // record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
 // File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …),
@@ -26,7 +26,7 @@ const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves',
 // reGular payment (rent, internet, licence fees: due every 1, 3, 6 or 12 months), Bank account (the company's, to be paid into),
 // Vault document (a licence, a vehicle's papers, a passport…: its file is an F record of type 'document'),
 // Klient (who invoices and quotations go to) and Invoice (an invoice or a quotation: its PDF is an F record) — admins only
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 'K', 'I', 'N', 'U', 'J'];
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 'K', 'I', 'N', 'U', 'J', 'X'];
 const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement', 'document', 'invoice', 'quote'];
 const SALES_KINDS = ['K', 'I']; // what clients are charged and owe: admins only (owner, 11 Oct 2026)
 // buying: the list of what to buy (N), suppliers and factories (U) and buying trips (J): admins only (owner, 16 Oct 2026)
@@ -87,7 +87,7 @@ const SHAPES = {
   N: d => str_(d.t) && d.t.length > 0 && BUY_STATES.indexOf(d.status) >= 0 && strs_(d, ['cat', 'sub', 'area', 'unit', 'notes', 'link', 'where', 'ship', 'project'])
     && (d.cur === undefined || CUR_CODE.test(d.cur)) && ['qty', 'target'].every(k => d[k] === undefined || (num_(d[k]) && d[k] >= 0)) && (d.pri === undefined || [1, 2, 3].indexOf(d.pri) >= 0)
     && ['trip', 'from', 'under'].every(k => !d[k] || SAFE_ID.test(d[k])) && (d.tags === undefined || (Array.isArray(d.tags) && d.tags.length <= 20 && d.tags.every(str_)))
-    && (d.specs === undefined || (Array.isArray(d.specs) && d.specs.length <= 40 && d.specs.every(x => Array.isArray(x) && x.length === 2 && str_(x[0]) && str_(x[1]))))
+    && (d.specs === undefined || (Array.isArray(d.specs) && d.specs.length <= 40 && d.specs.every(x => Array.isArray(x) && str_(x[0]) && str_(x[1]) && (x.length === 2 || (x.length === 3 && SAFE_ID.test(x[2])))))) // a line may hold its photo's file
     && (d.quotes === undefined || (Array.isArray(d.quotes) && d.quotes.length <= 30 && d.quotes.every(q => isObj_(q) && SAFE_ID.test(q.id) && SAFE_ID.test(q.sup) && num_(q.price) && q.price >= 0 && CUR_CODE.test(q.cur))))
     && (d.order === undefined || (isObj_(d.order) && SAFE_ID.test(d.order.sup) && num_(d.order.price) && d.order.price >= 0 && CUR_CODE.test(d.order.cur) && num_(d.order.qty) && d.order.qty > 0 && DATE_RE.test(d.order.date)
       && (d.order.rate === undefined || (num_(d.order.rate) && d.order.rate > 0)) // 1 USD = rate in the order's currency
@@ -96,6 +96,8 @@ const SHAPES = {
     && (d.insp === undefined || (isObj_(d.insp) && DATE_RE.test(d.insp.date) && ['pass', 'fail', 'open'].indexOf(d.insp.result) >= 0))
     && (d.steps === undefined || (isObj_(d.steps) && Object.keys(d.steps).every(k => BUY_STATES.indexOf(k) >= 0 && DATE_RE.test(d.steps[k])))),
   U: d => str_(d.name) && d.name.length > 0 && strs_(d, ['kind', 'city', 'country', 'market', 'person', 'phone', 'wechat', 'email', 'note']),
+  // dollars changed into SSP (owner, 17 Oct 2026): usd out of Cash or Bank, ssp into Cash or Bank; was = the old expense it replaced
+  X: d => AT_RE.test(d.at) && num_(d.usd) && d.usd > 0 && num_(d.ssp) && d.ssp > 0 && ACCOUNTS.indexOf(d.from) >= 0 && ACCOUNTS.indexOf(d.to) >= 0 && strs_(d, ['with', 'note']) && (!d.was || SAFE_ID.test(d.was)),
   J: d => str_(d.to) && d.to.length > 0 && DATE_RE.test(d.out) && (!d.back || DATE_RE.test(d.back)) && Array.isArray(d.who) && d.who.length <= 20 && d.who.every(str_) && strs_(d, ['country', 'purpose', 'note'])
     && (d.budget === undefined || (num_(d.budget) && d.budget >= 0)),
 };
@@ -119,7 +121,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 19; // shown when the web app link is opened in a browser
+const VERSION = 20; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -250,7 +252,7 @@ function view_(user, rec, hidden) {
 // The office manager runs staff and salaries but never sees the company's money (owner, 10 Oct 2026): no money received,
 // no cash ↔ bank moves, no project values, no files or change requests about those, and only her own Change Log lines
 // (the log names amounts received). Without money in and moves, no balance can be worked out from what she holds.
-const MONEY_KINDS = ['R', 'T'];
+const MONEY_KINDS = ['R', 'T', 'X'];
 // Her expenses are her own (owner, 12 Oct 2026): she gets the ones she entered, and an admin's only when it pays an employee
 // or a regular payment (rent…), for the Employees and Regular payments screens. Personal documents in the vault (IDs,
 // passports) are admins' only, with their scans. Ids map to true; null for other logins.
@@ -809,11 +811,12 @@ function rebuild_(ss, all) {
   const wname = id => (workers[id] ? workers[id].name : 'Unknown employee');
   const live = k => of(k).filter(x => !x.deleted && (k !== 'T' || (ACCOUNTS.indexOf(x.from) >= 0 && ACCOUNTS.indexOf(x.to) >= 0))).sort(byAt_);
   const settings = of('S')[0] || {};
-  const ctx = { E: live('E'), R: live('R'), T: live('T'), P: of('P').filter(x => !x.deleted), L: of('L').sort(byAt_), pname: pname, wname: wname, company: settings.company || 'Company' };
+  const ctx = { E: live('E'), R: live('R'), T: live('T'), X: live('X'), P: of('P').filter(x => !x.deleted), L: of('L').sort(byAt_), pname: pname, wname: wname, company: settings.company || 'Company' };
   summary_(ss, ctx);
   expenses_(ss, ctx);
   received_(ss, ctx);
   moves_(ss, ctx);
+  changes_(ss, ctx);
   ledger_(ss, ctx);
   changeLog_(ss, ctx);
   employees_(ss, ctx, of('W').filter(x => !x.deleted));
@@ -837,6 +840,7 @@ function balances_(c) {
   c.R.forEach(x => { if (b[x.cur]) b[x.cur][accountOf_(x.mode)] += cents_(x.amount); });
   c.E.forEach(x => { if (b[x.cur]) b[x.cur][accountOf_(x.mode)] -= cents_(x.amount); });
   c.T.forEach(x => { if (b[x.cur]) { b[x.cur][x.from] -= cents_(x.amount); b[x.cur][x.to] += cents_(x.amount); } });
+  (c.X || []).forEach(x => { b.USD[x.from] -= cents_(x.usd); b.SSP[x.to] += cents_(x.ssp); }); // dollars changed into SSP
   return b;
 }
 
@@ -909,7 +913,8 @@ function summary_(ss, c) {
   sh.getRange(1, 1).setFontSize(22);
   const recv = { USD: sum_(c.R, 'USD'), SSP: sum_(c.R, 'SSP') };
   const spent = { USD: sum_(c.E, 'USD'), SSP: sum_(c.E, 'SSP') };
-  const bal = { USD: sub_(recv.USD, spent.USD), SSP: sub_(recv.SSP, spent.SSP) };
+  const xUsd = c.X.reduce((t, x) => t + cents_(x.usd), 0) / 100, xSsp = c.X.reduce((t, x) => t + cents_(x.ssp), 0) / 100; // changed, not spent
+  const bal = { USD: sub_(sub_(recv.USD, spent.USD), xUsd), SSP: (cents_(sub_(recv.SSP, spent.SSP)) + cents_(xSsp)) / 100 };
   const stats = c.P.map(p => {
     const R = c.R.filter(x => x.project === p.id), E = c.E.filter(x => x.project === p.id);
     const vc = p.valueCur || 'USD', got = sum_(R, vc);
@@ -931,7 +936,7 @@ function summary_(ss, c) {
     sh.getRange(x[0], 1, 1, 3).setBackground(x[1]).setFontColor(x[2]).setFontWeight('bold');
   });
   sh.getRange(7, 1, 1, 3).setFontSize(14);
-  sh.getRange(r + 1, 1).setValue(c.E.length + ' expenses · ' + c.R.length + ' money received entries · ' + c.T.length + ' cash/bank moves · ' + c.P.length + ' projects').setFontStyle('italic').setFontColor(COLOR.muted);
+  sh.getRange(r + 1, 1).setValue(c.E.length + ' expenses · ' + c.R.length + ' money received entries · ' + c.T.length + ' cash/bank moves · ' + c.X.length + ' changes of USD to SSP (' + xUsd + ' USD → ' + xSsp + ' SSP) · ' + c.P.length + ' projects').setFontStyle('italic').setFontColor(COLOR.muted);
 
   r = section_(sh, r + 3, 'Projects');
   const gen = c.E.filter(x => !x.project);
@@ -1010,10 +1015,12 @@ function moves_(ss, c) {
     c.T.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], time_(x.at), x.cur, only_(x, 'USD'), only_(x, 'SSP'), x.from, x.to, x.note || '', x.by || '', when_(x.createdAt), remarks_(x)]),
     ['', 'date', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 75, 120, 140, 80, 80, 260, 120, 150, 220], [5, 6]);
 }
-// Every payment in and out plus every cash ↔ bank move, with that currency's running balances.
+// Every payment in and out, every cash ↔ bank move and every change of dollars into SSP (two lines: the dollars out, the
+// SSP in), with each currency's running balances.
 function ledger_(ss, c) {
   const run = { USD: { Cash: 0, Bank: 0 }, SSP: { Cash: 0, Bank: 0 } };
-  const rows = c.E.map(x => ({ x: x, k: 'E' })).concat(c.R.map(x => ({ x: x, k: 'R' })), c.T.map(x => ({ x: x, k: 'T' })))
+  const xs = (c.X || []).reduce((out, x) => out.concat([{ x: Object.assign({}, x, { cur: 'USD', amount: x.usd, mode: x.from }), k: 'XU', o: x }, { x: Object.assign({}, x, { cur: 'SSP', amount: x.ssp, mode: x.to }), k: 'XS', o: x }]), []);
+  const rows = c.E.map(x => ({ x: x, k: 'E' })).concat(c.R.map(x => ({ x: x, k: 'R' })), c.T.map(x => ({ x: x, k: 'T' })), xs)
     .filter(o => run[o.x.cur])
     .sort((a, b) => byAt_(a.x, b.x))
     .map(o => {
@@ -1026,13 +1033,22 @@ function ledger_(ss, c) {
       } else {
         where = accountOf_(x.mode);
         if (o.k === 'E') { b[where] -= a; cashOut = x.amount; details = 'Paid to ' + x.paidTo + ' — ' + x.reason + (x.location ? ' (' + x.location + ')' : ''); }
+        else if (o.k === 'XU') { b[where] -= a; cashOut = x.amount; details = 'Changed into SSP ' + o.o.ssp + ' at ' + rateOf_(o.o) + (o.o.with ? ' — with ' + o.o.with : ''); }
+        else if (o.k === 'XS') { b[where] += a; cashIn = x.amount; details = 'SSP from changing USD ' + o.o.usd + ' at ' + rateOf_(o.o) + (o.o.with ? ' — with ' + o.o.with : ''); }
         else { b[where] += a; cashIn = x.amount; details = 'Money received' + (x.note ? ' — ' + x.note : ''); }
       }
-      return [ymd_(x.at), time_(x.at), x.id, details, o.k === 'T' ? '' : c.pname(x.project), where, x.cur, cashIn, cashOut, b.Cash / 100, b.Bank / 100, (b.Cash + b.Bank) / 100, x.by || ''];
+      return [ymd_(x.at), time_(x.at), x.id, details, o.k === 'T' || o.k[0] === 'X' ? '' : c.pname(x.project), where, x.cur, cashIn, cashOut, b.Cash / 100, b.Bank / 100, (b.Cash + b.Bank) / 100, x.by || ''];
     });
   dataTab_(ss, c.company, 'Ledger', '#1d6f42',
     ['Date', 'Time', 'Entry no.', 'Details', 'Project', 'Cash / Bank', 'Currency', 'In', 'Out', 'Cash balance', 'Bank balance', 'Total balance', 'Entered by'],
     rows, ['date', '', '', '', '', '', '', 'num', 'num', 'num', 'num', 'num'], [105, 80, 110, 300, 170, 110, 75, 110, 110, 130, 130, 140, 120], null);
+}
+// Dollars changed into SSP: what went out, the rate, what came in (the app's SSP screen)
+const rateOf_ = x => Math.round(x.ssp / x.usd * 100) / 100;
+function changes_(ss, c) {
+  dataTab_(ss, c.company, 'USD to SSP', '#0f766e', ['Entry no.', 'Date', 'Day', 'USD out', 'From', 'Rate (SSP for 1 USD)', 'SSP in', 'Into', 'Changed with', 'Note', 'Entered by', 'Recorded', 'Replaces'],
+    c.X.map(x => [x.id, ymd_(x.at), DAYS[day_(x.at).getDay()], x.usd, x.from, rateOf_(x), x.ssp, x.to, x.with || '', x.note || '', x.by || '', when_(x.createdAt), x.was || '']),
+    ['', 'date', '', 'USD', '', 'num', 'SSP'], [110, 105, 50, 120, 80, 140, 160, 80, 160, 220, 120, 150, 120], [3, 6]);
 }
 // Staff list with what each person has been paid (wages are worked out in the app).
 function employees_(ss, c, workers) {

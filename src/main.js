@@ -122,6 +122,14 @@ const ACTIONS = {
   buying: () => buyingSheet(),
   pasteList: () => pasteListSheet(),
   budgets: () => budgetsSheet(),
+  ssp: () => sspSheet(),
+  revealSsp: async () => { if (await pinPrompt({ why: 'Enter your code to see the balances' })) { showMoney = true; sspSheet(); } },
+  addExchange: () => exchangeForm(),
+  openExchange: b => exchangeDetail(b.dataset.id),
+  editExchange: async b => { if (await unlock('Enter the password to change this.')) exchangeForm(xOf(b.dataset.id)); },
+  delExchange: b => deleteExchange(b.dataset.id),
+  convertExchange: async b => { const e = S.expenses.find(x => x.id === b.dataset.id && !x.deleted); if (e && await unlock('Enter the password to turn this payment into a change.')) exchangeForm(null, e); },
+  paySsp: () => expenseForm(null, { cur: 'SSP' }),
   tickNeed: b => tickNeed(b.dataset.id),
   buyTab: b => { buyView = { ...buyView, view: b.dataset.tab }; buyingSheet(); },
   addAlloc: () => { $('#sheet .allocs').insertAdjacentHTML('beforeend', allocRow()); refreshOrder($('#sheet form')); },
@@ -172,7 +180,7 @@ const ACTIONS = {
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
   signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
-  idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList, subIdea: saveSubIdea, budgets: saveBudgets };
+  idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList, subIdea: saveSubIdea, budgets: saveBudgets, exchange: saveExchange };
 
 function refreshAmount(input) {
   const n = parseAmount(input.value);
@@ -214,6 +222,7 @@ document.addEventListener('input', e => {
   if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
   if (t.form && t.form.dataset.form === 'buyFilter' && t.name === 'q') filterBuying(t.form);
+  if (t.form && t.form.dataset.form === 'exchange') refreshExchange(t.form, t);
   // a new item's category follows its name until one is chosen by hand
   if (t.name === 't' && t.form && t.form.dataset.form === 'need' && !t.form.dataset.catSet) { const c = guessCat(t.value), sel = t.form.elements.cat; if ([...sel.options].some(o => o.value === c) && sel.value !== c) { sel.value = c; $('.spec-sugg', t.form).outerHTML = specChips(c); } }
   if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form, t);
@@ -230,6 +239,7 @@ document.addEventListener('change', e => {
     refreshRate(t.form);
   }
   if (t.dataset.attach !== undefined) attachPicked(t);
+  if (t.dataset.specpic !== undefined) { specPicked(t.closest('.spec-row'), t.files[0]); t.value = ''; }
   if (t.dataset.mysig !== undefined) saveMySig(t);
   if (t.dataset.replace !== undefined) replaceFile(t);
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
@@ -253,6 +263,9 @@ document.addEventListener('change', e => {
 // pasting an invite replaces the box (it may already hold the link) instead of adding to it
 document.addEventListener('paste', e => {
   const t = e.target;
+  // a picture pasted on a detail line: that line's photo
+  const pic = e.clipboardData && [...e.clipboardData.items].find(i => i.kind === 'file' && i.type.startsWith('image/'));
+  if (pic && t.closest && t.closest('.spec-row')) { e.preventDefault(); return specPicked(t.closest('.spec-row'), pic.getAsFile()); }
   // several lines pasted into the idea box: they become a list, one idea per line
   if (t.name === 't' && t.form && t.form.dataset.form === 'idea' && e.clipboardData && /\n\s*\S/.test(e.clipboardData.getData('text').trim())) { e.preventDefault(); return pasteListSheet(e.clipboardData.getData('text')); }
   if (t.name !== 'invite' || !e.clipboardData) return;

@@ -263,7 +263,7 @@ const EDITABLE = {
 const editPart = c => (c.action ? {} : Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f))));
 // (records without a date and amount are named by what they are: a sync error must never fail on them)
 const NAMED = { G: r => `Regular payment: ${r.name}`, B: r => `Bank account: ${r.bank}`, V: r => `Document: ${r.title}`, K: r => `Client: ${r.name}`, I: r => `${r.type === 'quote' ? 'Quotation' : 'Invoice'} ${r.no}`,
-  N: r => `Buying list: ${r.t}`, U: r => `Supplier: ${r.name}`, J: r => `Trip: ${r.to}` };
+  N: r => `Buying list: ${r.t}`, U: r => `Supplier: ${r.name}`, J: r => `Trip: ${r.to}`, X: r => `Change to SSP: ${money(r.usd, 'USD')} → ${money(r.ssp, 'SSP')}` };
 const whatIs = (kind, r) => (kind === 'P' ? `Project "${r.name}"` : kind === 'W' ? `Employee ${r.name}`
   : kind === 'A' ? `Day not worked: ${(workerOf(r.worker) || {}).name || r.worker}, ${fmtDate(r.date)}${r.note ? ` (${r.note})` : ''}` : NAMED[kind] ? NAMED[kind](r) : describe(kind, r));
 // what approving would really change, worked out from the entry itself — never from the text sent with the request
