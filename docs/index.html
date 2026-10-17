@@ -408,6 +408,8 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .alloc-row select, .alloc-row input { width: 100%; min-width: 0; font: inherit; font-size: 16px; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); }
 .alloc-row .x { border: 0; background: var(--paper); border-radius: 10px; font-size: 22px; cursor: pointer; color: var(--muted); }
 .row.sub { padding-left: 34px; background: rgba(0,0,0,.015); }
+.link-pay { padding: 6px 0 10px; border-bottom: 1px solid var(--line); }
+.paid-for { width: 100%; font: inherit; font-size: 15px; padding: 10px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); }
 .app-tile.emp { background: var(--in); background-image: radial-gradient(circle at 110% -10%, rgba(255,255,255,.22), transparent 55%); }
 .app-tile .ai { width: 58px; height: 58px; border-radius: 18px; background: rgba(255,255,255,.16); display: grid; place-items: center; }
 .app-tile .ai svg { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -487,7 +489,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '9ea1958e56'; // filled in by tools/build.js
+const APP_VERSION = 'd24e21bea2'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -1572,13 +1574,13 @@ const BUY_CATS = [
   ['Plumbing & sanitary', ['Pipes & fittings', 'Toilets', 'Basins & sinks', 'Taps & mixers', 'Showers & bathtubs', 'Water heaters', 'Tanks & pumps', 'Bathroom accessories'],
     /pipe|fitting|toilet|\bwc\b|basin|sink|\btaps?\b|mixer|shower|bath|heater|tank|pump|valve|drain/i, ['Size', 'Material', 'Colour / finish', 'Brand / model', 'Fixing (wall / floor)', 'Pressure']],
   ['Kitchen', ['Modular kitchens & cabinets', 'Countertops', 'Cooking ranges & ovens', 'Hoods & hobs', 'Sinks', 'Utensils & cookware'],
-    /kitchen|counter ?tops?|cooker|cooking|oven|hob\b|hood|utensil|cookware/i, ['Size / layout', 'Colour / finish', 'Material', 'Brand / model', 'Gas or electric', 'Voltage']],
+    /kitchen|counter ?tops?|cooker|cooking|oven|hob\b|hoods?\b|utensil|cookware/i, ['Size / layout', 'Colour / finish', 'Material', 'Brand / model', 'Gas or electric', 'Voltage']],
   ['Electronics & appliances', ['TVs & screens', 'Air conditioners', 'Fans', 'Fridges & freezers', 'Washing machines', 'Small appliances', 'Sound systems'],
     /tv\b|t\.v|television|air ?con|ac\b|fans?\b|fridge|refrigerat|freezer|washing machine|dryer|microwave|appliance|dishwasher|speaker|sound system|water dispenser/i, ['Brand / model', 'Size', 'Capacity / power', 'Voltage / plug', 'Colour', 'Warranty']],
   ['Structure & civil', ['Cement', 'Steel & rebar', 'Blocks & bricks', 'Sand & aggregate', 'Roofing', 'Waterproofing', 'Formwork & scaffolding'],
     /cement|steel|rebar|block|brick|sand|aggregate|gravel|murrum|roof|ridge|gutter|iron sheet|waterproof|scaffold|formwork|mou?lds?\b|concrete/i, ['Grade / type', 'Size', 'Colour', 'Standard', 'Brand']],
   ['Machinery & vehicles', ['Construction machines', 'Mixers & vibrators', 'Compressors & pumps', 'Production machines', 'Vehicles', 'Spare parts'],
-    /machine|excavator|vibrator|compressor|concrete pump|jcb\b|loader|truck|vehicle|tyre|tire|spare|engine|crusher|plant|car wash|pressure washer/i, ['Brand / model', 'Capacity', 'Power (kW / HP)', 'Voltage / phase', 'Fuel', 'Year', 'Spare parts included', 'Manuals in English', 'Warranty']],
+    /machine|excavator|vibrator|compressor|concrete pump|concrete mixer|cement mixer|jcb\b|loader|truck|vehicle|tyre|tire|spare|engine|crusher|plant|car wash|pressure washer/i, ['Brand / model', 'Capacity', 'Power (kW / HP)', 'Voltage / phase', 'Fuel', 'Year', 'Spare parts included', 'Manuals in English', 'Warranty']],
   ['Tools & hardware', ['Power tools', 'Hand tools', 'Fasteners & fixings', 'Safety gear', 'Measuring tools', 'Welding'],
     /drill|grinder|saw\b|tool|hammer|spanner|screw|bolt|nail|anchor|helmet|glove|boots|ppe\b|safety|saftey|overall|coverall|uniform|workwear|reflective|weld/i, ['Brand / model', 'Size', 'Power', 'Voltage / battery', 'Accessories']],
   ['Office & IT', ['Computers & phones', 'Monitors & mounts', 'Printers', 'Stationery', 'Software'], /computer|laptop|phone|printer|stationery|software|tablet|monitor/i, ['Brand / model', 'Specs', 'Size', 'Warranty']],
@@ -1587,8 +1589,8 @@ const BUY_CATS = [
 ];
 // Each word must start a word ("block" is not a "lock"); the narrower categories are tried first, so "smart switches"
 // are home automation (not electrical), a "concrete block machine" is a machine (not blocks), table fans are appliances
-// (not tables) and roofing tiles are roofing (not floor tiles).
-const GUESS_FIRST = ['Home automation & security', 'Goods for trading', 'Machinery & vehicles', 'Electronics & appliances', 'Kitchen', 'Furniture & décor', 'Doors & windows', 'Structure & civil'];
+// (not tables), roofing tiles are roofing (not floor tiles), solar panels are solar (not wall panels) and a smart TV is a TV.
+const GUESS_FIRST = ['Electronics & appliances', 'Home automation & security', 'Goods for trading', 'Machinery & vehicles', 'Kitchen', 'Furniture & décor', 'Doors & windows', 'Structure & civil', 'Electrical & solar'];
 const GUESS_CATS = [...GUESS_FIRST.map(n => BUY_CATS.find(c => c[0] === n)), ...BUY_CATS.filter(c => !GUESS_FIRST.includes(c[0]))].filter(c => c[2]).map(c => [c[0], new RegExp(`\\b(?:${c[2].source})`, 'i')]);
 const guessCat = t => (GUESS_CATS.find(([, re]) => re.test(t)) || ['Other'])[0];
 
@@ -5107,7 +5109,8 @@ const kidsOf = id => live(S.needs).filter(n => n.under === id && n.status !== 'd
 // rows of a list with each item's add-ons right under it (indented); an add-on whose item is not in the list shows on its own
 function needRows(list) {
   const here = new Set(list.map(n => n.id)), top = list.filter(n => !n.under || !here.has(n.under));
-  return top.map(n => needRow(n) + list.filter(k => k.under === n.id).map(k => needRow(k).replace('class="row"', 'class="row sub"')).join('')).join('');
+  const under = (id, depth) => (depth > 4 ? '' : list.filter(k => k.under === id).map(k => needRow(k).replace('class="row"', `class="row sub" style="padding-left:${18 + depth * 16}px"`) + under(k.id, depth + 1)).join(''));
+  return top.map(n => needRow(n) + under(n.id, 1)).join('');
 }
 const needAmt = n => (n.order ? cost(needTotal(n), n.order.cur) : n.target ? `<small>target</small>${esc(cost(n.target, n.cur || 'USD'))}` : '');
 const stateTag = n => { const [, text, tone] = BUY_STATE[n.status]; return `<i class="tag ${tone}">${text}</i>`; };
@@ -5169,7 +5172,7 @@ function saveIdea(f) {
 }
 // A list pasted at once (a checklist from WhatsApp or notes): one idea per line, each in its guessed category. Ticks,
 // bullets and numbers at the start of a line are left out; the words stay as typed, to tidy up later.
-const listLines = text => String(text || '').split(/\r?\n/).map(l => l.replace(/^\s*(?:[-*•▪◦–]\s*)?(?:\[[ xX✓]?\]\s*)?(?:\d{1,3}[.)]\s+)?/, '').replace(/\s+/g, ' ').trim()).filter(l => /\w/.test(l)).map(l => l.slice(0, 160));
+const listLines = text => String(text || '').split(/\r?\n/).map(l => l.replace(/^\s*(?:[-*•▪◦–]\s*)?(?:\[[ xX✓]?\]\s*)?(?:\d{1,3}[.)]\s+)?/, '').replace(/\s+/g, ' ').trim()).filter(l => /[\p{L}\p{N}]/u.test(l)).map(l => l.slice(0, 160));
 function pasteListSheet(text = '') {
   openSheet(`${head('Paste a list', 'out')}
     <form data-form="pasteList">
@@ -5283,7 +5286,7 @@ function needDetail(id) {
     ${n.notes ? `<h3 class="subh">Notes</h3><p class="pre">${esc(n.notes)}</p>` : ''}
     ${n.link ? `<a class="btn ghost" href="${esc(n.link)}" target="_blank" rel="noopener noreferrer" style="margin-bottom:10px">🔗 Open the link</a>` : ''}
     ${o ? `<div class="note">🧾 <b>Ordered from ${esc(sup ? sup.name : 'a supplier')}</b> on ${esc(fmtDate(o.date))}: ${esc(plain(o.qty))} × ${esc(cost(o.price, o.cur))} = <b>${esc(cost(needTotal(n), o.cur))}</b>${o.cur !== 'USD' && o.rate ? ` ≈ ${esc(money(inUsd(needTotal(n), o), 'USD'))}` : ''}
-      <br>${orderShares(o, n.project).map(sh => `${esc(sh.p ? projName(sh.p) : 'Extra')}: ${esc(plain(sh.q))} = ${esc(cost(sh.cost, o.cur))}`).join(' · ')}${o.note ? `<br>${esc(o.note)}` : ''}</div>` : ''}
+      <br>${orderShares(o, n.project).map(sh => `${esc(sh.p ? projName(sh.p) : EXTRA)}: ${esc(plain(sh.q))} = ${esc(cost(sh.cost, o.cur))}`).join(' · ')}${o.note ? `<br>${esc(o.note)}` : ''}</div>` : ''}
     ${n.insp ? `<div class="note">🔍 Inspected on ${esc(fmtDate(n.insp.date))}${n.insp.by ? ` by ${esc(n.insp.by)}` : ''}: <b>${INSP_TEXT[n.insp.result] || ''}</b>${n.insp.note ? ` — ${esc(n.insp.note)}` : ''}</div>` : ''}
     ${n.ship ? `<p class="muted">🚢 Shipment: ${esc(n.ship)}</p>` : ''}
     ${needActions(n)}
@@ -5301,6 +5304,7 @@ function needDetail(id) {
   paintThumbs();
   comeBack(() => needDetail(id));
 }
+const EXTRA = 'Extra / no project'; // bought beyond what the projects need, or for no project
 const quoteRow = (n, q) => { const u = supOf(q.sup); return `<div class="sugg"><div><b>${esc(cost(q.price, q.cur))}</b> · ${esc(u ? u.name : 'A deleted supplier')}<br><span class="muted">${esc([q.moq && `minimum ${q.moq}`, q.lead && `ready in ${q.lead}`, q.at && fmtDate(q.at), q.note].filter(Boolean).join(' · '))}</span></div>
   <div class="two">${['idea', 'tobuy'].includes(n.status) && u ? `<button class="btn small out" data-act="orderNeed" data-id="${esc(n.id)}" data-q="${esc(q.id)}">🧾 Order from them</button>` : ''}<button class="btn small ghost" data-act="delQuote" data-id="${esc(n.id)}" data-q="${esc(q.id)}">Remove</button></div></div>`; };
 // what can be done next, step by step
@@ -5395,67 +5399,75 @@ function orderForm(id, qid) {
   if (!n) return;
   const q = (n.quotes || []).find(x => x.id === qid) || bestQuote(n), trip = tripOf(n.trip) || currentTrip();
   openSheet(`${head('Ordered / bought', 'out', n.t)}
-    <form data-form="order" data-id="${esc(id)}">
+    <form data-form="order" data-id="${esc(id)}" data-need="${esc(n.project ? n.qty ?? '' : '')}" data-cur="${esc(q ? q.cur : n.cur || 'USD')}">
       ${supPick(q ? q.sup : '', 'From')}
       <div class="fld"><span>Price per ${esc(n.unit || 'unit')}</span><div class="price-in"><input name="price" inputmode="decimal" value="${esc(q ? q.price : n.target ?? '')}" required autocomplete="off">${curSelect(q ? q.cur : n.cur || 'USD')}</div></div>
-      <label class="fld rate-f" ${(q ? q.cur : n.cur || 'USD') === 'USD' ? 'hidden' : ''}><span>1 US dollar = how many <b class="rate-cur">${esc(q ? q.cur : n.cur || 'USD')}</b>? <em>(for budgets in dollars)</em></span><input name="orate" inputmode="decimal" value="${esc(lastRate(q ? q.cur : n.cur || 'USD'))}" autocomplete="off"></label>
+      <label class="fld rate-f" ${(q ? q.cur : n.cur || 'USD') === 'USD' ? 'hidden' : ''}><span>1 US dollar = how many <b class="rate-cur">${esc(q ? q.cur : n.cur || 'USD')}</b>? <em>(budgets are kept in dollars)</em></span><input name="orate" inputmode="decimal" value="${esc(lastRate(q ? q.cur : n.cur || 'USD'))}" autocomplete="off"></label>
       <label class="fld"><span>How many bought</span><input name="qty" inputmode="decimal" value="${esc(n.qty ?? '')}" required autocomplete="off"></label>
       ${n.qty ? `<p class="muted">Fewer than ${esc(qtyText(n))}? The rest stays on the list to buy later. More? The extra is counted apart below.</p>` : ''}
       ${live(S.projects).length ? `<div class="fld"><span>Who is it for? <em>(what is left over is extra: stock, or another use later)</em></span>
-        <div class="allocs">${allocRow(n.project, n.project ? n.qty ?? '' : '')}</div><button type="button" class="btn small ghost" data-act="addAlloc">＋ Another project</button></div>` : ''}
+        <div class="allocs">${allocRow(n.project, n.project ? n.qty ?? '' : '', true)}</div><button type="button" class="btn small ghost" data-act="addAlloc">＋ Another project</button></div>` : ''}
       <p class="note order-sum"></p>
       <label class="fld"><span>Ordered on</span><input type="date" name="date" value="${today()}" max="${today()}" required></label>
       ${tripPick(trip ? trip.id : '')}
       ${textField('note', 'Note', 'e.g. 30% deposit paid, balance before loading', '', false)}
       <label class="fld check"><input type="checkbox" name="pay" checked> 💵 Also add what was paid now as a payment (Accounts)</label>
-      <div class="payf">${amountField('', 'USD', 'paid', 'Paid now, in US dollars', false)}${accountChips('Cash', 'Paid from')}<p class="muted">Leave it empty if nothing was paid yet. Paid in another currency or later? Add it in Accounts and choose this trip.</p></div>
+      <div class="payf"><input type="hidden" name="cur" value="USD">${amountField('', 'USD', 'paid', 'Paid now, in US dollars', false)}${accountChips('Cash', 'Paid from')}<p class="muted">Leave it empty if nothing was paid yet. Paid later or in another currency? Add it in Accounts, then on the trip tap 🔗 Link payments and choose this item, so it is not counted twice.</p></div>
       <p class="err"></p>
       <button class="btn out">Save the order</button>
     </form>`);
   refreshOrder($('#sheet form'));
 }
 // one project's share of an order
-const allocRow = (p = '', q = '') => `<div class="alloc-row"><select name="ap" aria-label="Project"><option value="">— a project —</option>${live(S.projects).map(x => `<option value="${esc(x.id)}" ${x.id === p ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
+const allocRow = (p = '', q = '', auto = false) => `<div class="alloc-row"${auto ? ' data-auto="1"' : ''}><select name="ap" aria-label="Project"><option value="">— a project —</option>${live(S.projects).map(x => `<option value="${esc(x.id)}" ${x.id === p ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
   <input name="aq" inputmode="decimal" value="${esc(q)}" placeholder="How many" autocomplete="off" aria-label="How many for it"><button type="button" class="x" data-act="delAlloc" aria-label="Remove">×</button></div>`;
 // the last rate typed for a currency, to start from
 const lastRate = cur => (cur === 'USD' ? '' : (live(S.needs).filter(n => n.order && n.order.cur === cur && n.order.rate).sort((a, b) => b.order.date.localeCompare(a.order.date))[0] || { order: {} }).order.rate || '');
-// each project's share as typed (same project twice: added up; a project with no number takes what is left); bad: not a number
+// each project's share as typed (same project twice: added up; a project with no number takes what is left); bad: a number
+// that is not one, or a number with no project chosen (those pieces would quietly become extra)
 function allocsFrom(f) {
-  const out = new Map(), qty = parseAmount(f.elements.qty.value) || 0, rows = $$('.alloc-row', f).map(r => ({ r, p: $('[name=ap]', r).value, raw: $('[name=aq]', r).value.trim() })).filter(x => live(S.projects).some(p => p.id === x.p));
-  let bad = null;
-  rows.filter(x => x.raw).forEach(x => { const q = parseAmount(x.raw); if (q === null) bad = x.r; else out.set(x.p, round3((out.get(x.p) || 0) + q)); });
+  const out = new Map(), qty = parseAmount(f.elements.qty.value) || 0, all = $$('.alloc-row', f).map(r => ({ r, p: $('[name=ap]', r).value, raw: $('[name=aq]', r).value.trim() }));
+  const rows = all.filter(x => live(S.projects).some(p => p.id === x.p));
+  let bad = all.find(x => x.raw && !rows.includes(x)) ? all.find(x => x.raw && !rows.includes(x)).r : null;
+  rows.filter(x => x.raw).forEach(x => { const q = parseAmount(x.raw); if (q === null) bad = x.r; else if (q > 0) out.set(x.p, round3((out.get(x.p) || 0) + q)); });
   const rest = round3(qty - [...out.values()].reduce((t, q) => t + q, 0)), open = rows.find(x => !x.raw);
   if (open && rest > 0) out.set(open.p, round3((out.get(open.p) || 0) + rest));
   return { alloc: [...out].map(([p, q]) => ({ p, q })), bad };
 }
-// as it is typed: who gets how many, the extra, and what each costs
-function refreshOrder(f) {
-  const cur = f.elements.pcur.value, price = parseAmount(f.elements.price.value), qty = parseAmount(f.elements.qty.value), rate = parseAmount(f.elements.orate.value);
+// as it is typed: who gets how many, the extra, and what each costs. The share filled in at the start follows "how many
+// bought" (up to what the project needs) until it is typed in; another currency starts from its own last rate.
+function refreshOrder(f, field) {
+  const cur = f.elements.pcur.value, price = parseAmount(f.elements.price.value), qty = parseAmount(f.elements.qty.value);
+  if (field && field.name === 'aq') field.closest('.alloc-row').removeAttribute('data-auto');
+  const auto = $('.alloc-row[data-auto] [name=aq]', f), need = parseAmount(f.dataset.need);
+  if (field && field.name === 'qty' && auto && need && qty) auto.value = plain(Math.min(need, qty)).replace(/,/g, '');
+  if (f.dataset.cur !== cur) { f.dataset.cur = cur; f.elements.orate.value = lastRate(cur); }
+  const rate = parseAmount(f.elements.orate.value);
   $('.rate-f', f).hidden = cur === 'USD'; $('.rate-cur', f).textContent = cur;
   const el = $('.order-sum', f);
   if (!price || !qty) { el.textContent = 'Type the price and how many to see what it costs.'; return; }
   const { alloc } = allocsFrom(f), o = { price, qty, cur, rate, alloc }, used = alloc.reduce((t, a) => t + a.q, 0), usd = x => (cur !== 'USD' && rate ? ` ≈ ${money(Math.round(x / rate * 100) / 100, 'USD')}` : '');
-  if (used > qty) { el.innerHTML = `<b>More shared out (${esc(plain(used))}) than bought (${esc(plain(qty))}).</b>`; return; }
-  el.innerHTML = `${orderShares(o, '').map(sh => `${esc(sh.p ? projName(sh.p) : 'Extra')}: ${esc(plain(sh.q))} × ${esc(cost(price, cur))} = <b>${esc(cost(sh.cost, cur))}</b>${esc(usd(sh.cost))}`).join('<br>')}<br>Total: <b>${esc(cost(Math.round(qty * price * 100) / 100, cur))}</b>${esc(usd(qty * price))}`;
+  if (used > qty + 1e-9) { el.innerHTML = `<b>More shared out (${esc(plain(used))}) than bought (${esc(plain(qty))}).</b>`; return; }
+  el.innerHTML = `${orderShares(o, '').map(sh => `${esc(sh.p ? projName(sh.p) : EXTRA)}: ${esc(plain(sh.q))} × ${esc(cost(price, cur))} = <b>${esc(cost(sh.cost, cur))}</b>${esc(usd(sh.cost))}`).join('<br>')}<br>Total: <b>${esc(cost(Math.round(qty * price * 100) / 100, cur))}</b>${esc(usd(qty * price))}`;
 }
 function saveOrder(f) {
   const n = needOf(f.dataset.id), v = Object.fromEntries(new FormData(f)), price = parseAmount(v.price), qty = parseAmount(v.qty);
   if (!n) return closeSheet();
   if (price === null) return formErr(f, 'price', 'Type the price per unit, like 880');
-  if (qty === null) return formErr(f, 'qty', 'Type how many, like 2');
+  if (!qty) return formErr(f, 'qty', 'Type how many, like 2');
   if (!DATE_RE.test(v.date)) return formErr(f, 'date', 'Choose the date');
   const paid = v.pay && v.paid.trim() ? parseAmount(v.paid) : 0, cur0 = BUY_CURS.includes(v.pcur) ? v.pcur : 'USD', rate = cur0 !== 'USD' && v.orate.trim() ? parseAmount(v.orate) : undefined;
   if (paid === null) return formErr(f, 'paid', 'Type what was paid in dollars, like 500 — or leave it empty');
-  if (rate === null) return formErr(f, 'orate', `Type how many ${cur0} make one dollar, like 7.1 — or leave it empty`);
+  if (cur0 !== 'USD' && !rate) return formErr(f, 'orate', `Type how many ${cur0} make one dollar, like 7.1: budgets are kept in dollars`);
   const { alloc, bad: badShare } = allocsFrom(f);
-  if (badShare) { $('[name=aq]', badShare).focus(); return formErr(f, null, 'Type how many are for each project, like 10'); }
-  if (alloc.reduce((t, a) => t + a.q, 0) > qty) return formErr(f, null, `More shared out than the ${plain(qty)} bought.`);
+  if (badShare) { $('[name=aq]', badShare).focus(); return formErr(f, null, 'For each project: choose it and type how many, like 10'); }
+  if (alloc.reduce((t, a) => t + a.q, 0) > qty + 1e-9) return formErr(f, null, `More shared out than the ${plain(qty)} bought.`);
   const sup = supFrom(f);
   if (!sup) return formErr(f, f.elements.sup.value === '__new' ? 'supName' : 'sup', 'Who was it ordered from?');
   const by = myName() || S.lastBy || '', trip = tripOf(v.trip) ? v.trip : '', at = stampSec(), cur = BUY_CURS.includes(v.pcur) ? v.pcur : 'USD';
   const order = { sup, price, cur, qty, date: v.date, note: clean(v.note), ...(trip ? { trip } : {}), ...(rate ? { rate } : {}), ...(alloc.length ? { alloc } : {}) };
   let ids = S.seq, rest = null, pay = null;
-  if (n.qty && qty < n.qty && !alloc.some(a => a.p !== n.project)) { // part of it: the rest stays to buy, with every detail
+  if (n.qty && qty < n.qty) { // part of it: the rest stays to buy, with every detail
     const [[rid], s1] = nextIds('N', 1, ids); ids = s1;
     rest = { ...n, id: rid, qty: Math.round((n.qty - qty) * 1000) / 1000, status: 'tobuy', steps: { tobuy: today() }, from: n.id, by, createdAt: at };
     ['order', 'insp', 'ship', 'editedAt', 'editedBy', 'u', 'uid'].forEach(k => delete rest[k]);
@@ -5510,10 +5522,10 @@ function budgetsSheet() {
     <form data-form="budgets">
       ${ps.length ? ps.map(p => { const t = by[p.id] || { usd: 0, unrated: {}, items: 0 }, left = p.buyBudget ? Math.round((p.buyBudget - t.usd) * 100) / 100 : null;
         return `<section class="card pad" style="margin-bottom:12px"><b>${esc(p.name)}</b>
-          <p class="muted">${t.items} order line${t.items === 1 ? '' : 's'} · spent <b>${esc(usdText(t))}</b>${left === null ? '' : ` · <b class="${left < 0 ? 'out-c' : ''}">${left < 0 ? `${esc(money(-left, 'USD'))} over` : `${esc(money(left, 'USD'))} left`}</b>`}</p>
+          <p class="muted">${t.items} order line${t.items === 1 ? '' : 's'} · spent <b>${esc(usdText(t))}</b>${left === null ? '' : ` · <b class="${left < 0 ? 'out-c' : ''}">${left < 0 ? `${esc(money(-left, 'USD'))} over` : `${esc(money(left, 'USD'))} left`}</b>${Object.keys(t.unrated).length ? ' (not counting the orders with no dollar rate)' : ''}`}</p>
           <label class="fld"><span>Buying budget, in US dollars <em>(optional)</em></span><input name="b|${esc(p.id)}" inputmode="decimal" value="${esc(p.buyBudget ?? '')}" autocomplete="off"></label></section>`; }).join('')
         : empty('No projects yet', 'Add a project in Accounts first.')}
-      <div class="note">Extra (bought beyond what projects need): <b>${esc(extra ? usdText(extra) : money(0, 'USD'))}</b></div>
+      <div class="note">${EXTRA} (bought beyond what projects need): <b>${esc(extra ? usdText(extra) : money(0, 'USD'))}</b></div>
       <p class="err"></p>
       ${ps.length ? '<button class="btn out" style="margin-top:12px">Save the budgets 🔒</button>' : ''}
     </form>`);
@@ -5779,10 +5791,10 @@ function tripSpend(j) {
 function tripMoneyNote(j) {
   const sp = tripSpend(j), left = j.budget ? Math.round((j.budget - sp.total) * 100) / 100 : null;
   if (!sp.total && !j.budget) return '';
-  const rows = Object.entries(sp.by).sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1)).map(([p, t]) => `${esc(p ? projName(p) : 'Extra')}: <b>${esc(usdText(t))}</b>`);
+  const rows = Object.entries(sp.by).sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1)).map(([p, t]) => `${esc(p ? projName(p) : EXTRA)}: <b>${esc(usdText(t))}</b>`);
   return `<div class="note">💰 ${j.budget ? `Budget <b>${esc(money(j.budget, 'USD'))}</b> · ` : ''}spent <b>${esc(money(sp.total, 'USD'))}</b>${left === null ? '' : ` · <b class="${left < 0 ? 'out-c' : ''}">${left < 0 ? `${esc(money(-left, 'USD'))} over` : `${esc(money(left, 'USD'))} left`}</b>`}
     ${rows.length ? `<br>${rows.join('<br>')}` : ''}${sp.otherUsd ? `<br>Travel and other trip payments: <b>${esc(money(sp.otherUsd, 'USD'))}</b>` : ''}${sp.otherSsp.length ? ` + ${esc(sumText(sp.otherSsp))}` : ''}
-    ${sp.unrated ? '<br><span class="muted">Some orders have no dollar rate: they are not in the total.</span>' : ''}</div>`;
+    ${sp.unrated ? '<br><b class="out-c">Some orders have no dollar rate: they are not in the total.</b>' : ''}</div>`;
 }
 function tripDetail(id) {
   const j = tripOf(id);
@@ -5842,16 +5854,20 @@ function linkTripCosts(id) {
   if (!j) return;
   const from = plusDays(j.out, -21), to = plusDays(j.back || j.out, 14);
   const list = live(S.expenses).filter(e => !e.trip && !e.worker && e.at.slice(0, 10) >= from && e.at.slice(0, 10) <= to).sort((a, b) => byAt(b, a));
+  // a payment for goods names the item it paid for: the goods are counted once, at their order price
+  const goods = tripItems(id).filter(n => n.order), what = e => `<select name="n|${esc(e.id)}" aria-label="What it paid for" class="paid-for"><option value="">Travel or other (tickets, visa, hotel, transport)</option>${goods.map(n => `<option value="${esc(n.id)}" ${e.need === n.id ? 'selected' : ''}>For: ${esc(n.t)}</option>`).join('')}</select>`;
   openSheet(`${head('Link payments to the trip', 'out', j.to)}
     ${list.length ? `<form data-form="tripCosts" data-id="${esc(id)}">
-      <p class="hint">Payments from three weeks before it left to two weeks after it came back. Tick what the trip cost: tickets, visas, hotels, transport, the goods.</p>
-      <div class="card pad">${list.map(e => `<label class="fld check"><input type="checkbox" name="e" value="${esc(e.id)}"> ${esc(money(e.amount, e.cur))} · ${esc(e.reason)}<small class="muted">${esc([fmtDate(e.at.slice(0, 10)), e.paidTo].join(' · '))}</small></label>`).join('')}</div>
+      <p class="hint">Payments from three weeks before it left to two weeks after it came back. Tick what the trip cost, and say what each was for: a payment for goods is counted once, in the goods.</p>
+      <div class="card pad">${list.map(e => `<div class="link-pay"><label class="fld check"><input type="checkbox" name="e" value="${esc(e.id)}"> ${esc(money(e.amount, e.cur))} · ${esc(e.reason)}<small class="muted">${esc([fmtDate(e.at.slice(0, 10)), e.paidTo].join(' · '))}</small></label>${goods.length ? what(e) : ''}</div>`).join('')}</div>
       <p class="err"></p><button class="btn out">Link them</button></form>` : empty('No payments around those days', 'Add them in Accounts and choose this trip.')}`);
 }
 function saveTripCosts(f) {
   const id = f.dataset.id, ids = new Set($$('input[name=e]:checked', f).map(i => i.value)), by = myName() || S.lastBy || '';
   if (!ids.size) return formErr(f, null, 'Tick at least one payment.');
-  update({ expenses: S.expenses.map(e => (ids.has(e.id) ? { ...e, trip: id, editedAt: stampSec(), editedBy: by } : e)), log: logWith([...ids].map(e => ['Edited', e, `Trip: ${tripOf(id).to}`]), by), lastBy: by });
+  const need = e => { const v = f.elements[`n|${e}`] ? f.elements[`n|${e}`].value : ''; return needOf(v) ? v : undefined; };
+  update({ expenses: S.expenses.map(e => (ids.has(e.id) ? { ...e, trip: id, ...(need(e.id) ? { need: need(e.id) } : {}), editedAt: stampSec(), editedBy: by } : e)),
+    log: logWith([...ids].map(e => ['Edited', e, `Trip: ${tripOf(id).to}${need(e) ? `, for ${needOf(need(e)).t}` : ''}`]), by), lastBy: by });
   toast(`${ids.size} linked ✓`);
   tripDetail(id);
 }
@@ -5901,7 +5917,7 @@ const costSum = rows => Object.entries(rows.reduce((t, [cur, n]) => ({ ...t, [cu
 async function tripReport(id) {
   const j = tripOf(id);
   if (!j) return;
-  const items = tripItems(id), ordered = items.filter(n => n.order), open = items.filter(n => ['idea', 'tobuy'].includes(n.status)), costs = tripCosts(id);
+  const items = tripItems(id), ordered = items.filter(n => n.order && n.status !== 'dropped'), open = items.filter(n => ['idea', 'tobuy'].includes(n.status)), costs = tripCosts(id);
   const seen = new Set(), quotes = items.flatMap(n => (n.quotes || []).filter(q => (q.trip === id || !q.trip) && !seen.has(q.id) && seen.add(q.id)).map(q => [n, q])); // the rest of a part-ordered item carries the same quotes
   const goods = costSum(ordered.map(n => [n.order.cur, needTotal(n)])), sp = tripSpend(j);
   await shareStatement({ title: 'TRIP REPORT', no: statementNo(), date: fmtDate(today()), ref: id, info: tripInfo(j),
@@ -5912,11 +5928,13 @@ async function tripReport(id) {
         rows: quotes.map(([n, q]) => [n.t, (supOf(q.sup) || {}).name || '', cost(q.price, q.cur), q.moq || '', q.lead || '']) }] : []),
       ...(open.length ? [{ title: `Still to buy (${open.length})`, cols: [{ h: 'Item', w: 420, wrap: true }, { h: 'Qty', w: 140, right: true }, { h: 'Details', w: 500, wrap: true }], rows: open.map(n => [n.t, qtyText(n), (n.specs || []).map(([k, v]) => `${k}: ${v}`).join('; ')]) }] : []),
       { title: 'By project', cols: [{ h: 'For', w: 360, wrap: true }, { h: 'Order lines', w: 200, right: true }, { h: 'Cost in dollars', w: 500, right: true }],
-        rows: Object.entries(sp.by).sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1)).map(([p, t]) => [p ? projName(p) : 'Extra (beyond what projects need)', String(t.items), usdText(t)]) },
+        rows: Object.entries(sp.by).sort(([a], [b]) => (a ? 0 : 1) - (b ? 0 : 1)).map(([p, t]) => [p ? projName(p) : EXTRA, String(t.items), usdText(t)]) },
       { title: `What the trip cost (${costs.length})`, cols: [{ h: 'Date', w: 160 }, { h: 'Paid to', w: 260, wrap: true }, { h: 'For', w: 400, wrap: true }, { h: 'Amount', w: 240, right: true }],
         rows: costs.map(e => [fmtDate(e.at.slice(0, 10)), e.paidTo, e.reason, slipMoney(e.amount, e.cur)]) }],
-    summary: [...goods.map(g => ['Goods ordered', g]), ['Goods in dollars', money(sp.goodsUsd, 'USD')], ['Travel and other payments', money(sp.otherUsd, 'USD')], ['Spent on the trip', money(sp.total, 'USD'), true], ...(j.budget ? [['Budget', money(j.budget, 'USD')], [sp.total > j.budget ? 'Over budget' : 'Left', money(Math.abs(Math.round((j.budget - sp.total) * 100) / 100), 'USD'), true]] : [])],
-    verdict: j.budget ? { text: sp.total > j.budget ? 'OVER BUDGET' : 'WITHIN BUDGET', good: sp.total <= j.budget } : null,
+    summary: [...goods.map(g => ['Goods ordered', g]), ['Goods in dollars', money(sp.goodsUsd, 'USD')], ['Travel and other payments', money(sp.otherUsd, 'USD')], ...(sp.otherSsp.length ? [['Travel and other, in SSP', sumText(sp.otherSsp)]] : []),
+      ['Spent on the trip', money(sp.total, 'USD'), true], ...(j.budget ? [['Budget', money(j.budget, 'USD')], [sp.total > j.budget ? 'Over budget' : 'Left', money(Math.abs(Math.round((j.budget - sp.total) * 100) / 100), 'USD'), true]] : [])],
+    // a verdict only when every order is in dollars: one with no rate would make "within budget" a guess
+    verdict: j.budget ? (sp.unrated ? { text: 'SOME ORDERS HAVE NO DOLLAR RATE', good: false } : { text: sp.total > j.budget ? 'OVER BUDGET' : 'WITHIN BUDGET', good: sp.total <= j.budget }) : null,
     notes: j.note ? [['Notes', j.note.split('\n')]] : null }, pdfName('Trip report', j.to));
 }
 // A factory's inspection: blank (to print and tick) or with the results ticked on the phone (saved, or still on the screen)
@@ -6392,7 +6410,7 @@ document.addEventListener('input', e => {
   if (t.form && t.form.dataset.form === 'buyFilter' && t.name === 'q') filterBuying(t.form);
   if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form, t);
   if (t.name === 'list' && t.form && t.form.dataset.form === 'pasteList') countPasted(t.form);
-  if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form);
+  if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form, t);
 });
 document.addEventListener('change', e => {
   const t = e.target;
@@ -6418,7 +6436,7 @@ document.addEventListener('change', e => {
   if (t.name === 'cat' && t.form && t.form.dataset.form === 'need') { $('.newcat', t.form).hidden = t.value !== '__new'; $('.spec-sugg', t.form).outerHTML = specChips(t.value); }
   if (t.name === 'sup' && t.form) { const ns = $('.newsup', t.form); if (ns) ns.hidden = t.value !== '__new'; }
   if (t.name === 'pay' && t.form && t.form.dataset.form === 'order') $('.payf', t.form).hidden = !t.checked;
-  if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form);
+  if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form, t);
   if (t.name === 'others' && t.form) { $$('.pick[data-other="1"]', t.form).forEach(row => { row.hidden = !t.checked; if (!t.checked) $('input', row).checked = false; }); updatePick(t.form); }
   if (t.name === 'project' && t.form) { const np = $('.newp', t.form); if (np) { np.hidden = t.value !== '__new'; if (!np.hidden) $('input', np).focus(); } }
   if (t.id === 'month') { histMonth = t.value; $('#histRes').innerHTML = histResults(); }
