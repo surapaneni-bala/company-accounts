@@ -39,9 +39,9 @@ assert.match(res.sheet, /^https:\/\/docs\.google\.com\//);
 assert.ok(res.kinds.includes('T'), 'this script stores cash/bank moves');
 assert.strictEqual(JSON.parse(gas.doGet().getContent()).version, 20, 'opening the link shows the script version');
 
-// an older copy is ignored; a newer edit wins and is handed to the others
+// an older copy is not stored: the phone that sent it gets the newer copy back (never lost in silence); a newer edit wins
 res = post({ key, since: 6, push: [{ ...e1, u: 2, d: { ...e1.d, amount: 1 } }] });
-assert.deepStrictEqual([res.seq, res.pull.length], [6, 0]);
+assert.deepStrictEqual([res.seq, res.pull.map(p => [p.id, p.d.amount]), res.older], [6, [['E-AAA-0001', e1.d.amount]], ['E-AAA-0001']]);
 res = post({ key, since: 6, push: [{ ...e1, u: 10, d: { ...e1.d, amount: 200.2, editedAt: '2026-10-03T10:00:00', editedBy: 'Bala' } }] });
 assert.deepStrictEqual([res.seq, res.pull.map(p => p.id)], [7, ['E-AAA-0001']]);
 assert.strictEqual(res.pull[0].d.amount, 200.2);
