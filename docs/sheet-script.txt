@@ -121,7 +121,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 20; // shown when the web app link is opened in a browser
+const VERSION = 21; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -310,6 +310,12 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     // one too, and the newer one goes back to that phone, which shows it instead of its own (never lost in silence).
     const stored = i === undefined ? 0 : Number(out[i][2]), sane = stored > cap ? 0 : stored, d = limited ? Object.assign({}, p.d, { by: user.name }) : p.d; // signed by the login that sent it
     let u = Math.min(p.u, cap);
+    // a login other than an admin never changes what is there (an edit is a change request): refused alike whether it can
+    // see the entry or not, so nothing is learnt about entries it may not see; the same copy sent again is skipped
+    if (limited && i !== undefined) { if (out[i][4] !== JSON.stringify(d)) refused.push(p.id); return; }
+    // an edit made from an older copy than the sheet's (b: the copy it started from): the entry changed on another phone
+    // meanwhile, so this one would undo that change — not stored; the sheet's copy goes back and that phone says so
+    if (i !== undefined && typeof p.b === 'number' && sane > p.b && out[i][4] !== JSON.stringify(d)) { behind.push(i); return; }
     if (i !== undefined && sane > u) { behind.push(i); return; }
     if (i !== undefined && sane === u) { if (out[i][4] === JSON.stringify(d)) return; u = sane + 1; } // a different copy at the same instant is the later one
     const before = i === undefined ? null : JSON.parse(out[i][4]);
