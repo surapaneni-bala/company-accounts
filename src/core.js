@@ -43,11 +43,14 @@ function update(patch) {
   const uid = signedIn() ? { uid: session.user.id } : {};
   for (const key of Object.keys(SYNC_KEYS)) {
     if (!patch[key]) continue;
-    const before = new Set(S[key]), known = new Set(S[key].map(r => recId(key, r)));
+    const before = new Set(S[key]), was = new Map(S[key].map(r => [recId(key, r), r.u || 0]));
     stamped[key] = patch[key].map(r => {
       if (before.has(r)) return r;
-      dirty.add(recId(key, r));
-      return { ...r, ...(known.has(recId(key, r)) ? {} : uid), u: now };
+      const id = recId(key, r);
+      dirty.add(id);
+      // newer than the copy it was made from, even when this phone's clock is behind: an edit or a delete is never
+      // taken for an older copy and skipped by the sheet (a deleted rent entry stayed in the sheet, 17 Oct 2026)
+      return { ...r, ...(was.has(id) ? {} : uid), u: Math.max(now, (was.get(id) || 0) + 1) };
     });
   }
   if ('company' in patch || 'pass' in patch) { dirty.add('settings'); stamped.settingsU = now; }
@@ -355,7 +358,7 @@ function viewHome() {
   const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${brandBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${brandBanner()}${doubleBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? 'Your expenses — only the ones you entered. The balances are kept by the admins.' : 'Your expenses — only you and the admins see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>

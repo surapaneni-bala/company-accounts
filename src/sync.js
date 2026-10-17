@@ -235,6 +235,9 @@ async function syncNow() {
     if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
     lastRefused = refused;
     if (notAllowed.size) resendRefused(notAllowed);
+    // changes the sheet already had a newer copy of (changed on another phone): this phone now shows that copy
+    const older = (res.older || []).filter(id => sent.has(id));
+    if (older.length) toast(`${older.length} change${older.length === 1 ? ' was' : 's were'} made on another phone more recently — this phone now shows the newer one: ${older.slice(0, 3).map(recordLabel).join('; ')}`);
     if (S.dirty.some(id => !sent.has(id))) syncAgain = true; // more waiting than one batch: send the rest straight after
     sync = notAllowed.size ? { state: 'error', at: stampSec(), err: notAllowedMsg([...notAllowed]) }
       : refused.size ? { state: 'error', at: stampSec(), err: OUTDATED_MSG } : { state: 'ok', at: stampSec(), err: '' };

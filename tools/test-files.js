@@ -381,4 +381,14 @@ assert.deepStrictEqual([xRow[3], xRow[5], xRow[6], xRow[8]], [1000, 4500, 450000
 const led = rows('Ledger').filter(r => r[2] === 'X-OW1-0001');
 assert.deepStrictEqual(led.map(r => [r[6], r[7], r[8]]), [['USD', '', 1000], ['SSP', 4500000, '']], 'the ledger: the dollars out and the SSP in');
 
+/* ---------- a change the sheet already has a newer copy of is never lost in silence ---------- */
+post({ token: owner, since: 0, push: [exp('E-OW1-0300', 500, 'x', { reason: 'Rent' })] });
+const lost = post({ token: owner, since: 1e9, push: [exp('E-OW1-0300', 400, 'x', { reason: 'Rent', deleted: '2026-10-17T09:00:00', deletedBy: 'Owner' })] });
+assert.deepStrictEqual([lost.older, lost.pull.filter(p => p.id === 'E-OW1-0300').map(p => [p.u, !!p.d.deleted])], [['E-OW1-0300'], [[500, false]]], 'an older copy: the phone is told, and gets the newer one back');
+const again = post({ token: owner, since: 1e9, push: [exp('E-OW1-0300', 500, 'x', { reason: 'Rent' })] });
+assert.deepStrictEqual([again.older, again.pull.length], [[], 0], 'the same copy sent again (a lost reply): nothing to say');
+const future = Date.now() + 3 * 864e5;
+post({ token: owner, since: 0, push: [exp('E-OW1-0301', future, 'x')] });
+assert.ok(post({ token: owner, since: 0, push: [] }).pull.find(p => p.id === 'E-OW1-0301').u <= Date.now() + 5 * 60000, 'a phone clock days ahead cannot lock a record against later edits');
+
 console.log('Employees and files: all checks passed');

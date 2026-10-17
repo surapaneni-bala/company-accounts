@@ -220,7 +220,7 @@ function sync_(req) {
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role !== 'admin' ? '' : ss.getUrl(), kinds: KINDS, // the sheet shows every balance
-    pull: result.pull.map(r => view_(user, r, hidden)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V'))), refused: result.refused, me: user ? public_(user) : null,
+    pull: result.pull.map(r => view_(user, r, hidden)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V'))), refused: result.refused, older: result.older || [], me: user ? public_(user) : null,
     logins: !!user || users_().length > 0, warning: warning,
   };
 }
@@ -296,7 +296,7 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
   out.forEach((r, i) => { index[r[0]] = i; });
   let seq = out.reduce((m, r) => Math.max(m, Number(r[3]) || 0), 0);
   let changed = false;
-  const refused = [], touched = [], trash = [];
+  const refused = [], touched = [], trash = [], behind = [];
   const limited = !!user && user.role !== 'admin', now = Date.now();
   (Array.isArray(push) ? push : []).forEach((p, n) => {
     if (!p || typeof p.id !== 'string' || !p.id || KINDS.indexOf(p.k) < 0 || typeof p.u !== 'number' || !isObj_(p.d)) return;
@@ -304,8 +304,12 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     if (limited && (n >= MAX_PUSH || JSON.stringify(p.d).length > MAX_RECORD)) { refused.push(p.id); return; }
     const i = index[p.id];
     if (i !== undefined && out[i][1] !== p.k) { refused.push(p.id); return; } // a record never changes kind
-    const u = limited ? Math.min(p.u, now) : p.u; // a phone can't stamp its copy in the future and so block later edits
-    if (i !== undefined && Number(out[i][2]) >= u) return; // already have this copy or a newer one (e.g. sent again after a lost reply)
+    // a phone can't stamp its copy in the future and so block later edits (an admin's clock may be up to 5 minutes ahead)
+    const u = Math.min(p.u, limited ? now : now + 5 * 60000);
+    if (i !== undefined && Number(out[i][2]) >= u) { // already have this copy (sent again after a lost reply) or a newer one:
+      if (Number(out[i][2]) > u) behind.push(i); //   the newer one goes back to that phone, which shows it instead of its own
+      return;
+    }
     const before = i === undefined ? null : JSON.parse(out[i][4]);
     if (!allowed_(user || null, p, before)) { refused.push(p.id); return; }
     if (codeOnly && (p.k === 'W' || p.k === 'F' || p.k === 'V')) { refused.push(p.id); return; }
@@ -332,8 +336,8 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     // the unstamped original of a cancelled paper once its stamped copy is in; the stamped copy once an admin takes the cancel back
     if (p.k === 'F' && before && before.fileId !== d.fileId && (d.stamped || before.stamped)) trash.push(before.fileId);
   });
-  const pull = out.filter(r => Number(r[3]) > since).map(toRec_);
-  return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused, touched: touched, trash: trash };
+  const pull = out.filter((r, i) => Number(r[3]) > since || behind.indexOf(i) >= 0).map(toRec_);
+  return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused, touched: touched, trash: trash, older: behind.map(i => out[i][0]) };
 }
 
 /* ---------- logins ---------- */

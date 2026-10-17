@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ TextEncoder });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject };', ctx);
-const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject } = ctx.api;
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles };', ctx);
+const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles } = ctx.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 
 /* ---------- days on a 30-day month: joining and leaving days both count, day 31 counts as day 30 ---------- */
@@ -189,5 +189,16 @@ assert.deepStrictEqual(plain(spendByProject([{ order: toilets, project: 'P-1', s
   { order: toilets, project: 'P-1', status: 'dropped' }])),
   { 'P-1': { usd: 2400, unrated: {}, items: 2 }, '': { usd: 200, unrated: {}, items: 1 }, 'P-2': { usd: 1000, unrated: { CNY: 400 }, items: 2 } },
   'the villa: 10 toilets $400 + 2 sofas ¥14,200 at 7.1 = $2,000; extra: 5 toilets $200; the other project: a sofa $1,000 and lamps with no rate kept in yuan; a dropped item counts nothing');
+
+/* ---------- the same payment entered twice ---------- */
+const dpay = (id, at, amount, by, extra = {}) => ({ id, at: at + 'T10:00', amount, cur: 'USD', paidTo: 'Landlord', reason: 'Rent', by, ...extra });
+const doubles = plain(findDoubles([dpay('D1', '2026-10-15', 4200, 'Bala'), dpay('D2', '2026-10-15', 4200, 'Babu', { paidTo: 'Land rent', reason: 'Rent up to Jan' }),
+  dpay('D3', '2026-08-19', 100, 'Bala', { paidTo: 'Airport lounge', reason: 'Lounge' }), dpay('D4', '2026-08-19', 100, 'Bala', { paidTo: 'Airport', reason: 'Management fee' }),
+  dpay('D5', '2026-09-01', 300, 'Bala', { paidTo: 'Shop', reason: 'Nails' }), dpay('D6', '2026-09-01', 300, 'Bala', { paidTo: 'shop', reason: 'nails ' }),
+  dpay('D7', '2026-09-01', 100, 'Agnes', { worker: 'W-1' }), dpay('D8', '2026-09-01', 100, 'Bala', { worker: 'W-2' }),
+  dpay('D9', '2026-09-05', 50, 'Bala', { batch: 'B-1' }), dpay('D10', '2026-09-05', 50, 'Agnes', { batch: 'B-1' }),
+  dpay('D11', '2026-10-15', 4200, 'Babu', { cur: 'SSP' }), dpay('D12', '2026-10-25', 4200, 'Babu'), dpay('D13', '2026-10-16', 4200, 'Agnes', { deleted: 'x' })])).map(d => d.key);
+assert.deepStrictEqual(doubles, ['D1|D2', 'D5|D6'], 'the rent typed by two people; one person twice with the same payee and reason; not two different airport fees, salaries, one bulk entry, another currency, ten days apart or a deleted one');
+assert.deepStrictEqual(plain(findDoubles([dpay('D1', '2026-10-15', 4200, 'Bala'), dpay('D2', '2026-10-15', 4200, 'Babu')], ['D1|D2'])), [], 'said not to be a double: not asked again');
 
 console.log('Pay maths, words and PDF: all checks passed');

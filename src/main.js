@@ -123,6 +123,8 @@ const ACTIONS = {
   pasteList: () => pasteListSheet(),
   budgets: () => budgetsSheet(),
   ssp: () => sspSheet(),
+  doubles: () => doublesSheet(),
+  notDouble: b => notDouble(b.dataset.key),
   revealSsp: async () => { if (await pinPrompt({ why: 'Enter your code to see the balances' })) { showMoney = true; sspSheet(); } },
   addExchange: () => exchangeForm(),
   openExchange: b => exchangeDetail(b.dataset.id),

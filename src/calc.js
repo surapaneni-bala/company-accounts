@@ -197,6 +197,22 @@ function spendByProject(items) {
   return out;
 }
 
+/* ---------- the same payment entered twice ---------- */
+// Two people paying or recording one payment (owner, 17 Oct 2026: the rent typed by two people): the same money within two
+// days, entered by different people; or by one person twice with the same payee and reason (a double tap). Salaries, the
+// pieces of an advance and the lines of one bulk entry are never doubles. Pairs said not to be one are skipped (seen: ids).
+function findDoubles(expenses, seen = []) {
+  const ok = new Set(seen), list = expenses.filter(e => !e.deleted && !e.worker && !e.from), out = [];
+  const same = (a, b) => squash(a) === squash(b);
+  list.forEach((a, i) => list.slice(i + 1).forEach(b => {
+    if (a.cur !== b.cur || inCents(a.amount) !== inCents(b.amount) || Math.abs(dayNo(a.at) - dayNo(b.at)) > 2 || (a.batch && a.batch === b.batch)) return;
+    const key = [a.id, b.id].sort().join('|');
+    if (ok.has(key)) return;
+    if ((a.by || '') !== (b.by || '') || (same(a.paidTo, b.paidTo) && same(a.reason, b.reason))) out.push({ key, a, b });
+  }));
+  return out;
+}
+
 /* ---------- invoices and quotations ---------- */
 // The money on an invoice: each line is quantity × unit price to the cent; tax (a percentage, 0 = none) on their sum.
 function invoiceTotals(inv) {
