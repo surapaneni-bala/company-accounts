@@ -20,6 +20,7 @@ function tripsSheet() {
     return `<button class="row" data-act="openTrip" data-id="${esc(j.id)}"><span class="dot">✈️</span><span class="main"><span class="t"><span class="tt">${esc(j.to)}</span>${on ? '<i class="tag warn">Travelling</i>' : j.out > now ? '<i class="tag">Coming</i>' : ''}</span>
       <span class="s">${esc([tripDays(j), j.who.join(', '), items.length && `${items.length} items${open ? `, ${open} to buy` : ''}`].filter(Boolean).join(' · '))}</span></span></button>`; };
   openSheet(`${head('Trips', 'out')}
+    ${buyNav('trips')}
     <button class="btn out" data-act="addTrip">＋ Plan a trip</button>
     ${js.length ? `<div class="card list inset" style="margin-top:14px">${js.map(row).join('')}</div>` : `<div style="height:14px"></div>${empty('No trips yet', 'Plan one: who goes, where and when. Then put the items to buy on its list.')}`}`);
   comeBack(tripsSheet);
@@ -90,9 +91,9 @@ function tripDetail(id) {
     ${j.note ? `<p class="pre">${esc(j.note)}</p>` : ''}
     <div class="two"><button class="btn ghost" data-act="tripPdf" data-id="${esc(id)}">📄 Buying list PDF</button><button class="btn ghost" data-act="tripText" data-id="${esc(id)}">💬 List on WhatsApp</button></div>
     <h3 class="subh">To buy on this trip (${open.length})</h3>
-    ${open.length ? needGroups(open).map(([c, l]) => `<details class="buy-cat" open><summary>${esc(c)} <small>${l.length}</small></summary><div class="card list inset">${l.map(needRow).join('')}</div></details>`).join('') : '<p class="muted">Nothing yet.</p>'}
+    ${open.length ? ckSections(open) : '<p class="muted">Nothing yet.</p>'}
     <button class="btn ghost" data-act="pickForTrip" data-id="${esc(id)}" style="margin-top:10px">＋ Put items from the buying list on it</button>
-    ${done.length ? `<h3 class="subh">Ordered on this trip (${done.length})</h3><div class="card list inset">${done.map(needRow).join('')}</div>` : ''}
+    ${done.length ? `<h3 class="subh">Ordered on this trip (${done.length})</h3>${ckList(done)}` : ''}
     ${sups.length ? `<h3 class="subh">Factories to inspect</h3><div class="card list inset">${sups.map(u => `<button class="row" data-act="inspect" data-id="${esc(u.id)}"><span class="dot">🔍</span><span class="main"><span class="t"><span class="tt">${esc(u.name)}</span></span><span class="s">${toInspect(u.id).length} items</span></span></button>`).join('')}</div>` : ''}
     <h3 class="subh">What the trip cost (${costs.length})</h3>
     ${costs.length ? `<p class="note">${sumText(costs)}</p><div class="card list inset">${costs.map(x => itemRow(x, 'E', true)).join('')}</div>` : '<p class="muted">Flights, visas, hotels, transport: link them here, or choose this trip when you add a payment.</p>'}

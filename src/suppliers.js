@@ -14,6 +14,7 @@ const toInspect = id => supItems(id).filter(n => ['ordered', 'inspected'].includ
 function suppliersSheet() {
   const us = live(S.suppliers).sort((a, b) => a.name.localeCompare(b.name));
   openSheet(`${head('Suppliers and factories', 'out')}
+    ${buyNav('suppliers')}
     <button class="btn out" data-act="addSupplier">＋ Add a supplier</button>
     ${us.length ? `<div class="card list inset" style="margin-top:14px">${us.map(u => { const o = supItems(u.id).length, w = toInspect(u.id).length; return `<button class="row" data-act="openSupplier" data-id="${esc(u.id)}"><span class="dot">🏭</span>
       <span class="main"><span class="t"><span class="tt">${esc(u.name)}</span>${w ? `<i class="tag warn">${w} to inspect</i>` : ''}</span><span class="s">${esc([SUP_KINDS[u.kind], u.city, u.country, o && `${o} ordered`].filter(Boolean).join(' · '))}</span></span></button>`; }).join('')}</div>`
@@ -32,8 +33,8 @@ function supplierDetail(id) {
     ${photoStrip(id)}
     <div class="two" style="margin-top:10px">${attachButton(id, '📷 Card or showroom photo', 'attachment', 'image/*')}${attachButton(id, '📎 Price list (PDF)', 'attachment', 'application/pdf')}</div>
     ${filesList(filesFor(id).filter(f => !isPic(f)), 'Files')}
-    <h3 class="subh">Ordered here (${ordered.length})</h3>${ordered.length ? `<div class="card list inset">${ordered.map(needRow).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
-    ${quoted.length ? `<h3 class="subh">Quoted, not ordered (${quoted.length})</h3><div class="card list inset">${quoted.map(needRow).join('')}</div>` : ''}
+    <h3 class="subh">Ordered here (${ordered.length})</h3>${ordered.length ? `${ckList(ordered)}` : '<p class="muted">Nothing yet.</p>'}
+    ${quoted.length ? `<h3 class="subh">Quoted, not ordered (${quoted.length})</h3>${ckList(quoted)}` : ''}
     <div class="two" style="margin-top:18px"><button class="btn ghost" data-act="editSupplier" data-id="${esc(id)}">✏️ Edit</button>${ordered.length || quoted.length ? '' : `<button class="btn danger" data-act="delSupplier" data-id="${esc(id)}">🗑 Delete 🔒</button>`}</div>`);
   paintThumbs();
   comeBack(() => supplierDetail(id));

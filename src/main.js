@@ -122,6 +122,8 @@ const ACTIONS = {
   buying: () => buyingSheet(),
   pasteList: () => pasteListSheet(),
   budgets: () => budgetsSheet(),
+  tickNeed: b => tickNeed(b.dataset.id),
+  buyTab: b => { buyView = { ...buyView, view: b.dataset.tab }; buyingSheet(); },
   addAlloc: () => { $('#sheet .allocs').insertAdjacentHTML('beforeend', allocRow()); refreshOrder($('#sheet form')); },
   delAlloc: b => { const f = b.closest('form'); b.closest('.alloc-row').remove(); refreshOrder(f); },
   addNeed: () => needForm(),
@@ -212,6 +214,8 @@ document.addEventListener('input', e => {
   if (t.name === 'invite' && t.form) inviteHint(t.form);
   if (t.id === 'q') { histQuery = t.value; $('#histRes').innerHTML = histResults(); }
   if (t.form && t.form.dataset.form === 'buyFilter' && t.name === 'q') filterBuying(t.form);
+  // a new item's category follows its name until one is chosen by hand
+  if (t.name === 't' && t.form && t.form.dataset.form === 'need' && !t.form.dataset.catSet) { const c = guessCat(t.value), sel = t.form.elements.cat; if ([...sel.options].some(o => o.value === c) && sel.value !== c) { sel.value = c; $('.spec-sugg', t.form).outerHTML = specChips(c); } }
   if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form, t);
   if (t.name === 'list' && t.form && t.form.dataset.form === 'pasteList') countPasted(t.form);
   if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form, t);
@@ -237,7 +241,7 @@ document.addEventListener('change', e => {
   if (t.name === 'pick' && t.form) updatePick(t.form);
   if (t.form && t.form.dataset.form === 'buyFilter' && t.name !== 'q') filterBuying(t.form);
   if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form, t);
-  if (t.name === 'cat' && t.form && t.form.dataset.form === 'need') { $('.newcat', t.form).hidden = t.value !== '__new'; $('.spec-sugg', t.form).outerHTML = specChips(t.value); }
+  if (t.name === 'cat' && t.form && t.form.dataset.form === 'need') { t.form.dataset.catSet = '1'; $('.newcat', t.form).hidden = t.value !== '__new'; $('.spec-sugg', t.form).outerHTML = specChips(t.value); }
   if (t.name === 'sup' && t.form) { const ns = $('.newsup', t.form); if (ns) ns.hidden = t.value !== '__new'; }
   if (t.name === 'pay' && t.form && t.form.dataset.form === 'order') $('.payf', t.form).hidden = !t.checked;
   if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form, t);

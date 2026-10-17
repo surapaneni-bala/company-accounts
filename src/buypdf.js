@@ -8,8 +8,8 @@ const pdfName = (title, words) => `${title} ${fileSafe(words)} ${today()}.pdf`;
 async function buyListPdf() {
   const list = live(S.needs).filter(buyMatches);
   await shareStatement({ title: 'BUYING LIST', no: statementNo(), date: fmtDate(today()), ref: '',
-    info: [['List', BUY_VIEWS[buyView.view][0]], ['Project', buyView.project ? projName(buyView.project) : 'All'], ['Items', String(list.length)], ['Search', buyView.q || '—']],
-    sections: needGroups(list).map(([c, l]) => ({ title: c, cols: BUY_COLS, rows: l.map(buyRow) })), summary: [['Items', String(list.length), true]], verdict: null }, pdfName('Buying list', BUY_VIEWS[buyView.view][0]));
+    info: [['List', (BUY_TABS[buyView.view] || BUY_TABS.open)[0]], ['Project', buyView.project ? projName(buyView.project) : 'All'], ['Items', String(list.length)], ['Search', buyView.q || '—']],
+    sections: needGroups(list).map(([c, l]) => ({ title: c, cols: BUY_COLS, rows: l.map(buyRow) })), summary: [['Items', String(list.length), true]], verdict: null }, pdfName('Buying list', (BUY_TABS[buyView.view] || BUY_TABS.open)[0]));
 }
 async function tripPdf(id) {
   const j = tripOf(id), open = j ? tripItems(id).filter(n => ['idea', 'tobuy'].includes(n.status)) : [];
