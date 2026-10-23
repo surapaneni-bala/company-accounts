@@ -65,7 +65,7 @@ const notAllowedMsg = ids => {
     ? `The Google Sheet did not accept ${n} change${n === 1 ? '' : 's'}: ${list}. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — send a screenshot of this to whoever looks after the app.`
     : `${n} change${n === 1 ? ' is' : 's are'} not allowed for your login, so ${n === 1 ? 'it was' : 'they were'} not sent: ${list}. ${n === 1 ? 'It is' : 'They are'} kept safe on this phone — ask an admin to sign in here to send ${n === 1 ? 'it' : 'them'}.`;
 };
-const SCRIPT_URL = 'https://app.b-e-p-l.com/sheet-script.txt'; // the sheet script, published next to the app
+const SCRIPT_URL = `https://app.b-e-p-l.com/sheet-script.txt?v=${NEWEST_SCRIPT}`; // the sheet script, published next to the app (?v: never an older copy a phone kept)
 let sync = { state: 'idle', at: '', err: '' }; // idle | syncing | ok | offline | error
 let syncBusy = false, syncAgain = false, syncTimer = 0;
 
