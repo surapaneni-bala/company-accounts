@@ -126,6 +126,7 @@ const ACTIONS = {
   doubles: () => doublesSheet(),
   notDouble: b => notDouble(b.dataset.key),
   lostSeen: () => { S = { ...S, lost: [] }; save(); render(); },
+  retryUploads: () => { uploadFails.clear(); uploadErr = ''; uploadFiles(); },
   revealSsp: async () => { if (await pinPrompt({ why: 'Enter your code to see the balances' })) { showMoney = true; sspSheet(); } },
   addExchange: () => exchangeForm(),
   openExchange: b => exchangeDetail(b.dataset.id),

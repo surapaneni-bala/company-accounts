@@ -262,6 +262,9 @@ async function resendRefused(ids) {
 const forDeleted = id => Object.keys(SYNC_KEYS).some(k => (S[k] || []).some(r => r.id === id && r.deleted));
 // Upload what's waiting, one file at a time; each one's record then goes out with the next sync.
 // ponytail: an upload whose reply is lost is sent again, leaving a spare copy in Drive; harmless, never a lost file.
+// A file the sheet does not take (too big, damaged, refused) is set aside with its reason and tried again after the others:
+// it never holds up the files behind it (owner, 23 Oct 2026: "6 files have not uploaded yet"). Only no internet stops the round.
+const uploadFails = new Map();
 async function uploadFiles() {
   if (uploading || !S || !S.link || mustSignIn() || (S.link.v || 2) < 4) return;
   uploading = true;
@@ -269,7 +272,7 @@ async function uploadFiles() {
     if (can('settings') && S.link.v >= 9) await queueStamps(); // the sheet bins the unstamped original from script v9
     if (!outbox.length) return;
     paintSync();
-    for (const meta of outbox) {
+    for (const meta of [...outbox].sort((a, b) => (uploadFails.has(a.id) ? 1 : 0) - (uploadFails.has(b.id) ? 1 : 0))) {
       let rec = await fileGet(meta.id);
       if (rec && rec.pending && forDeleted(rec.for)) await fileDel(meta.id); // its entry was deleted before it went up
       if (!rec || !rec.pending || forDeleted(rec.for)) { outbox = outbox.filter(x => x.id !== meta.id); continue; }
@@ -280,15 +283,18 @@ async function uploadFiles() {
       let res;
       // key: sent again after a lost answer, the sheet answers with the copy it already made (no second copy)
       try { res = await callServer(S.link, { op: 'upload', name: rec.name, mime: rec.mime, data: toB64(rec.data), key: rec.id }); }
-      catch (e) { uploadErr = await uploadFailure(e); break; }
+      catch (e) { const why = await uploadFailure(e); if (e.offline || e.code === 'LOGIN') { uploadErr = why; break; } uploadFails.set(meta.id, why); continue; }
       // a reply without the file's Drive number is not an upload (a record without one could never be filed): try again later
-      if (!/^[\w-]{10,100}$/.test(String(res.fileId || ''))) { uploadErr = 'the Google Sheet did not give the file its Drive number — it tries again by itself.'; break; }
+      if (!/^[\w-]{10,100}$/.test(String(res.fileId || ''))) { uploadFails.set(meta.id, 'the Google Sheet did not give it its Drive number — it is tried again by itself.'); continue; }
       const { data, pending, ...d } = rec, fresh = { ...d, fileId: res.fileId };
       update({ files: S.files.some(x => x.id === d.id) ? S.files.map(x => (x.id === d.id ? { ...x, ...fresh } : x)) : [...S.files, fresh] });
       await filePut({ ...rec, fileId: res.fileId, pending: false });
       outbox = outbox.filter(x => x.id !== meta.id);
+      uploadFails.delete(meta.id);
       uploadErr = '';
     }
+    [...uploadFails.keys()].forEach(id => { if (!outbox.some(o => o.id === id)) uploadFails.delete(id); });
+    if (uploadFails.size && !uploadErr) uploadErr = `${uploadFails.size} file${uploadFails.size === 1 ? '' : 's'} could not go up yet (see each one below) — the others are not held up.`;
   } catch (e) { uploadErr = e.message; } finally { uploading = false; paintSync(); }
 }
 

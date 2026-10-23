@@ -41,6 +41,10 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
 const NEWEST_SCRIPT = 21; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+// What an older script still keeps on the phones: the version that first stores it. From NEEDED_SCRIPT on, everything goes
+// up and a newer script only improves things — said quietly, never as a warning (owner, 23 Oct 2026: the message showed
+// "needed" while everything worked).
+const NEEDED_SCRIPT = 20, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines']];
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';
@@ -293,7 +297,10 @@ function syncCard() {
   return `<section class="card pad" id="syncCard"><h3>📊 Company Google Sheet</h3>
     <p class="muted">${esc(syncText())}${outbox.length ? ` ${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload: ${esc(uploadWhy())}` : ''}</p>
     ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>'
-      : (S.link.v || 2) < NEWEST_SCRIPT && can('settings') ? `<p class="note">A newer Google Sheet script is ready (version ${NEWEST_SCRIPT}; this sheet runs ${S.link.v || 2}). It is needed for employees, files, vouchers and days not worked. <button class="link" data-act="howUpdate">Show me how</button></p>` : ''}
+      : (S.link.v || 2) < NEEDED_SCRIPT && can('settings') ? `<p class="note">The Google Sheet script needs updating (this sheet runs version ${S.link.v || 2}; this app needs ${NEWEST_SCRIPT}). Until then ${esc(SCRIPT_GAINS.filter(([v]) => (S.link.v || 2) < v).map(([, t]) => t).join(', '))} stay on this phone. <button class="link" data-act="howUpdate">Show me how</button></p>`
+      : (S.link.v || 2) < NEWEST_SCRIPT && can('settings') ? `<p class="muted">Everything is syncing. An improved sheet script (version ${NEWEST_SCRIPT}; this sheet runs ${S.link.v}) makes it safer when two phones change the same entry — update it when you have two minutes: <button class="link" data-act="howUpdate">Show me how</button></p>` : ''}
+    ${outbox.length ? `<details class="more"><summary>${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload</summary><ul class="waiting">${outbox.slice(0, 12).map(f => `<li>${esc(f.no || f.name)}${uploadFails.has(f.id) ? ` — <span class="out-c">${esc(uploadFails.get(f.id))}</span>` : ''}</li>`).join('')}</ul>
+      <button class="btn small ghost" data-act="retryUploads">Try again now</button></details>` : ''}
     ${S.link.sheet && can('money') ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
     <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="syncNow">Sync now</button>${can('phones') ? '<button class="btn ghost" data-act="invite">📲 Add a phone 🔒</button>' : ''}</div>
     ${signedIn() ? '' : '<p class="center"><button class="link" data-act="disconnect">Disconnect this device 🔒</button></p>'}</section>`;
