@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#F3EFE7">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -28,8 +28,10 @@
 * { box-sizing: border-box; }
 html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; } /* no double-tap zoom on phones; text never enlarged by the browser on its own */
 /* Fit every phone (owner, 23 Oct 2026: "some pages are already zoomed"): nothing may make the page wider than the screen
-   (a phone then zooms the whole page out), long words break, and a text box is never under 16px (an iPhone zooms into it) */
-body { overflow-x: clip; overflow-wrap: anywhere; }
+   (a phone then zooms the whole page out), long words break, and a text box is never under 16px (an iPhone zooms into it).
+   break-word, not anywhere: a word breaks only when it cannot fit at all, so buttons and labels keep whole words
+   ("Install", "Reason") instead of being squeezed to one letter a line; names and notes that may be long say anywhere themselves */
+body { overflow-x: clip; overflow-wrap: break-word; }
 input, select, textarea { max-width: 100%; min-width: 0; }
 input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px; }
 html, body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
@@ -92,9 +94,15 @@ button { font: inherit; color: inherit; }
 
 /* lists */
 .card { background: var(--card); border-radius: var(--r-md); box-shadow: var(--shadow); }
-.pad { padding: 20px; }
+.pad { padding: clamp(14px, 4.5vw, 20px); }
 .list { overflow: hidden; }
-.row { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 14px 16px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; cursor: pointer; transition: background .15s; }
+.row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 12px; align-items: start; width: 100%; padding: 14px 16px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; cursor: pointer; transition: background .15s; }
+/* the title with its amount on the first line; the details under both, the full width (not squeezed beside the amount) */
+.row > .dot { grid-row: 1 / span 2; }
+.row > .main { display: contents; }
+.row > .main > .t { grid-column: 2; grid-row: 1; }
+.row > .amt { grid-column: 3; grid-row: 1; text-align: right; }
+.row > .main > .s { grid-column: 2 / -1; grid-row: 2; }
 .row:first-child { border-top: 0; }
 .row:hover { background: #FAF8F3; }
 .dot { width: 40px; height: 40px; flex: none; border-radius: 13px; display: grid; place-items: center; font-weight: 800; font-size: 22px; }
@@ -136,7 +144,13 @@ button { font: inherit; color: inherit; }
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .stats div { background: var(--paper); border-radius: 12px; padding: 8px 10px; min-width: 0; }
 .stats small { display: block; color: var(--muted); font-size: 12px; font-weight: 700; }
-.stats b { display: block; font-variant-numeric: tabular-nums; font-size: 15px; overflow-wrap: anywhere; }
+.stats b { display: block; font-variant-numeric: tabular-nums; font-size: clamp(13px, 3.8vw, 15px); overflow-wrap: normal; } /* "SSP" may go on its own line, a number is never cut */
+@media (max-width: 380px) { /* too narrow for three boxes side by side: one line each */
+  .stats { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .stats div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .stats span { text-align: right; }
+  .stats b { font-size: 15px; }
+}
 .stats .in b { color: var(--in); } .stats .out b { color: var(--out); }
 b.in { color: var(--in); } b.out { color: var(--out); }
 
@@ -144,7 +158,7 @@ b.in { color: var(--in); } b.out { color: var(--out); }
 .card h3 { margin: 0 0 6px; }
 a.btn { display: block; text-align: center; text-decoration: none; }
 .sub { display: block; font-size: 14px; font-weight: 700; color: var(--muted); margin-top: 2px; }
-.fld textarea { width: 100%; min-height: 170px; font: 14px/1.45 ui-monospace, Menlo, Consolas, monospace; padding: 12px; border: 2px solid var(--line); border-radius: var(--r-sm); background: var(--field); color: var(--ink); resize: vertical; }
+.fld textarea { width: 100%; min-height: 170px; font: 16px/1.45 ui-monospace, Menlo, Consolas, monospace; padding: 12px; border: 2px solid var(--line); border-radius: var(--r-sm); background: var(--field); color: var(--ink); resize: vertical; }
 .fld textarea:focus { outline: none; border-color: var(--ink); background: #fff; }
 .note.cols { font-size: 13px; font-weight: 800; word-spacing: 2px; }
 .ok-line { color: var(--in); margin: 0 0 6px; }
@@ -176,17 +190,18 @@ details.manual { margin: 4px 0 12px; } details.manual summary { cursor: pointer;
 .pick b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fld.check { display: flex; gap: 10px; align-items: center; font-weight: 700; }
 .fld.check input { width: 20px; height: 20px; padding: 0; margin: 0; flex: none; }
+.fld.check > span { display: block; font: inherit; margin: 0; min-width: 0; overflow-wrap: anywhere; } /* the words, with their small line under them (not a field title) */
 .steps { margin: 0 0 16px; padding-left: 22px; display: grid; gap: 8px; }
 .muted { color: var(--muted); font-size: 15px; }
 .setrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
 .stack { display: grid; gap: 14px; }
 .banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--warn-soft); color: var(--warn); font-weight: 700; padding: 12px 14px; border-radius: var(--r-sm); margin-bottom: 14px; font-size: 15px; }
-.banner .btn { background: var(--warn); color: #fff; }
+.banner .btn { background: var(--warn); color: #fff; flex: none; white-space: nowrap; }
 .banner.new { background: #E8ECF6; color: var(--ink); }
 .banner.new .btn { background: var(--ink); }
 
 /* buttons */
-.btn { border: 0; cursor: pointer; width: 100%; font-weight: 800; font-size: 18px; padding: 16px 20px; border-radius: 16px; transition: transform .15s var(--ease), filter .15s; }
+.btn { border: 0; cursor: pointer; width: 100%; font-weight: 800; font-size: 18px; padding: 16px clamp(8px, 4vw, 20px); border-radius: 16px; transition: transform .15s var(--ease), filter .15s; }
 .btn:hover { filter: brightness(1.06); }
 .btn:active { transform: scale(.98); }
 .btn.primary { background: var(--ink); color: #fff; }
@@ -206,17 +221,19 @@ nav.tabs button.on { color: var(--ink); background: var(--paper); }
 nav.tabs svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* sheets (dialogs) */
-dialog.sheet { border: 0; padding: 0; width: min(640px, calc(100% - 32px)); max-height: 92vh; overflow: auto; border-radius: 26px; background: var(--card); color: var(--ink); box-shadow: 0 30px 80px -20px rgba(0,0,0,.45); }
+dialog.sheet { border: 0; padding: 0; width: min(640px, calc(100% - 32px)); max-height: 92vh; max-height: 92dvh; overflow: auto; border-radius: 26px; background: var(--card); color: var(--ink); box-shadow: 0 30px 80px -20px rgba(0,0,0,.45); }
 dialog::backdrop { background: rgba(27,34,50,.5); backdrop-filter: blur(3px); }
 .sin { padding: 20px 20px 24px; }
 .sh-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
-.sh-head h2 { margin: 0; font-size: 24px; display: flex; align-items: center; gap: 10px; }
-.sh-head h2::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--tone, var(--ink)); flex: none; }
+.sh-head h2 { margin: 0; font-size: 24px; line-height: 1.25; display: flex; align-items: flex-start; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.sh-head h2::before { content: ""; width: 12px; height: 12px; margin-top: calc(.625em - 6px); border-radius: 50%; background: var(--tone, var(--ink)); flex: none; } /* beside the first line of a long title */
+.sh-head > div { min-width: 0; }
+.sh-head .close { flex: none; }
 .sh-head small { color: var(--muted); font-weight: 700; }
 .close { border: 0; background: var(--paper); width: 42px; height: 42px; border-radius: 50%; font-size: 26px; line-height: 1; cursor: pointer; flex: none; }
 .tone-out { --tone: var(--out); } .tone-in { --tone: var(--in); }
 @media (max-width: 640px) {
-  dialog.sheet:not(.pwbox) { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 26px 26px 0 0; max-height: 94vh; }
+  dialog.sheet:not(.pwbox) { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 26px 26px 0 0; max-height: 94vh; max-height: 94dvh; } /* dvh: the part of the screen really seen (an iPhone's toolbars not counted) */
 }
 @media (prefers-reduced-motion: no-preference) {
   dialog[open] { animation: up .35s var(--ease); }
@@ -288,8 +305,21 @@ dialog::backdrop { background: rgba(27,34,50,.5); backdrop-filter: blur(3px); }
 .facts div:first-child { border-top: 0; }
 .facts dt { color: var(--muted); font-weight: 700; }
 .facts dd { margin: 0; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
+/* an account number is never split: on a narrow phone it goes under its label instead */
+.facts dd.nb { white-space: nowrap; margin-left: auto; font-variant-numeric: tabular-nums; }
+.facts div:has(> dd.nb) { flex-wrap: wrap; row-gap: 2px; }
 .subh { margin: 20px 0 8px; font-size: 15px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .list.inset { background: var(--paper); box-shadow: none; }
+.list.inset .row { padding: 12px; column-gap: 10px; } /* a list inside a card: less room lost to two paddings */
+/* a list too narrow for the title and the amount side by side (a small phone with large text): the amount under the title */
+.list { container-type: inline-size; }
+@container (max-width: 300px) {
+  .row { grid-template-columns: auto minmax(0, 1fr); }
+  .row > .dot { grid-row: 1 / span 3; }
+  .row > .amt { grid-column: 2; grid-row: 2; text-align: left; padding-top: 2px; }
+  .list .row > .amt small { display: inline; margin-left: 6px; }
+  .row > .main > .s { grid-column: 2; grid-row: 3; }
+}
 
 /* password + setup */
 dialog.pwbox { width: min(400px, calc(100% - 32px)); text-align: center; }
@@ -327,15 +357,18 @@ a.btn { display: flex; align-items: center; justify-content: center; text-align:
 .framer-tools { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 22px; color: var(--muted); }
 .framer-tools input { flex: 1; }
 .framer-hint { margin: 6px 0 0; font-size: 14px; }
+/* framing a profile photo: a circle in a square; outside the circle is darkened */
+.framer.round { aspect-ratio: 1; max-width: 320px; margin: 10px auto 0; background: #E8ECF6; }
+.framer.round .frame-guide { border: 0; border-radius: 50%; background: none; box-shadow: 0 0 0 3px #fff, 0 0 0 999px rgba(20, 24, 38, .55); }
 .okbig { font-size: 30px; font-weight: 800; color: var(--in); text-align: center; margin: 4px 0 6px; }
 
 /* staff */
-.dot.avatar { background: #E8ECF6; color: var(--ink); font-size: 15px; overflow: hidden; border-radius: 50%; }
+.dot.avatar { position: relative; width: 52px; height: 52px; background: #E8ECF6; color: var(--ink); font-size: 18px; overflow: hidden; border-radius: 50%; }
 .dot.avatar img { width: 100%; height: 100%; object-fit: cover; }
 .amt small { display: block; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; text-align: right; }
 .amt.neg { color: var(--out); }
 .wtop { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-.wphoto { width: 84px; height: 84px; flex: none; border-radius: 50%; background: #E8ECF6; display: grid; place-items: center; font-weight: 800; font-size: 26px; overflow: hidden; }
+.wphoto { position: relative; width: clamp(104px, 34vw, 136px); height: clamp(104px, 34vw, 136px); flex: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; background: #E8ECF6; color: var(--ink); display: grid; place-items: center; font-weight: 800; font-size: 38px; overflow: hidden; box-shadow: 0 0 0 4px var(--card), 0 0 0 5px var(--line); }
 .wphoto img { width: 100%; height: 100%; object-fit: cover; }
 .wtop > div { min-width: 0; }
 .wtop .dbig { white-space: nowrap; font-size: clamp(24px, 8vw, 44px); }
@@ -355,7 +388,7 @@ a.btn { display: flex; align-items: center; justify-content: center; text-align:
 .brandthumb img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
 .sugg { display: grid; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); }
 .sugg:first-child { border-top: 0; }
-.fld textarea.plain { font: inherit; font-size: 16px; min-height: 90px; }
+textarea.plain { width: 100%; font: inherit; font-size: 16px; min-height: 90px; padding: 12px; border: 2px solid var(--line); border-radius: var(--r-sm); background: var(--field); color: var(--ink); }
 details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-weight: 800; color: var(--muted); padding: 8px 4px 12px; }
 .payinfo { line-height: 1.5; }
 .addoff { display: flex; gap: 8px; align-items: center; }
@@ -408,8 +441,9 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .insp { margin-bottom: 14px; }
 .checks { display: grid; gap: 2px; margin: 8px 0 12px; }
 .okrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
-.okrow > span { font-weight: 600; overflow-wrap: anywhere; }
+.okrow > span { font-weight: 600; overflow-wrap: break-word; min-width: 0; }
 .okbad { display: flex; gap: 6px; }
+@media (max-width: 340px) { .okrow { grid-template-columns: minmax(0, 1fr); gap: 6px; } .okbad { justify-content: flex-end; } } /* a small phone: the line, then its ✓ ✗ under it */
 .okbad label { position: relative; }
 .okbad input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
 .okbad span { display: grid; place-items: center; min-width: 44px; height: 44px; padding: 0 8px; border: 2px solid var(--line); border-radius: 12px; font-weight: 800; font-size: 18px; }
@@ -424,8 +458,9 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .row.sub { padding-left: 34px; background: rgba(0,0,0,.015); }
 .link-pay { padding: 6px 0 10px; border-bottom: 1px solid var(--line); }
 /* Buying as a checklist: tabs, one add line, three segments, a circle per item, details only when opened */
-.subnav { display: flex; gap: 6px; overflow-x: auto; margin: -6px -2px 14px; padding: 2px; scrollbar-width: none; }
-.subnav button { flex: none; border: 0; background: var(--card); box-shadow: var(--shadow); border-radius: 999px; padding: 9px 14px; font-weight: 800; font-size: 15px; cursor: pointer; }
+.subnav { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin: -6px 0 14px; padding: 2px; } /* all four always fit, on any phone */
+.subnav button { border: 0; background: var(--card); box-shadow: var(--shadow); border-radius: 14px; padding: 7px 1px 8px; font-weight: 800; font-size: clamp(10.5px, 3.4vw, 14px); line-height: 1.2; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.subnav button span { display: block; font-size: 19px; line-height: 1.3; }
 .subnav button[aria-current="page"] { background: var(--ink); color: #fff; }
 .qadd { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: var(--r-md); box-shadow: var(--shadow); padding: 6px 6px 6px 16px; border: 2px solid transparent; }
 .qadd:focus-within { border-color: var(--ink); }
@@ -476,17 +511,17 @@ form[data-form=checkPaper] input:focus { outline: none; border-color: var(--ink)
 .hero button { display: block; width: 100%; border: 0; padding: 0; background: none; cursor: pointer; }
 .hero img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
 .crumb { border: 0; background: none; padding: 0 0 8px; color: var(--muted); font-weight: 700; cursor: pointer; text-align: left; }
-.steps { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin: 6px 0 16px; padding: 0; counter-reset: s; }
-.steps li { position: relative; text-align: center; font-size: 12px; font-weight: 700; color: var(--muted); padding-top: 22px; line-height: 1.2; }
-.steps li span { position: absolute; top: 4px; left: 50%; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #fff; border: 2px solid #CFC7B6; z-index: 1; }
-.steps li::before { content: ""; position: absolute; top: 10px; left: -50%; width: 100%; height: 2px; background: #E2DBCC; }
-.steps li:first-child::before { display: none; }
-.steps li.on { color: var(--ink); }
-.steps li.on span { background: var(--in); border-color: var(--in); }
-.steps li.on::before { background: var(--in); }
-.steps li.now { font-weight: 900; }
-.steps li.now span { box-shadow: 0 0 0 4px var(--in-soft); }
-.steps small { display: block; font-weight: 600; color: var(--muted); font-size: 11px; }
+.stepper { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin: 6px 0 16px; padding: 0; counter-reset: s; }
+.stepper li { position: relative; text-align: center; font-size: clamp(10px, 3.1vw, 12px); font-weight: 700; color: var(--muted); padding-top: 22px; line-height: 1.2; }
+.stepper li span { position: absolute; top: 4px; left: 50%; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #fff; border: 2px solid #CFC7B6; z-index: 1; }
+.stepper li::before { content: ""; position: absolute; top: 10px; left: -50%; width: 100%; height: 2px; background: #E2DBCC; }
+.stepper li:first-child::before { display: none; }
+.stepper li.on { color: var(--ink); }
+.stepper li.on span { background: var(--in); border-color: var(--in); }
+.stepper li.on::before { background: var(--in); }
+.stepper li.now { font-weight: 900; }
+.stepper li.now span { box-shadow: 0 0 0 4px var(--in-soft); }
+.stepper small { display: block; font-weight: 600; color: var(--muted); font-size: 11px; }
 .next { margin-bottom: 14px; }
 .next .center { margin: 6px 0 0; }
 .dcard { background: var(--card); border-radius: var(--r-md); box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 12px; }
@@ -578,7 +613,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '04929cec73'; // filled in by tools/build.js
+const APP_VERSION = '77c7cac930'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -846,7 +881,7 @@ function render() {
   $('#whoChip').hidden = !signedIn();
   $('#whoChip').textContent = signedIn() ? `👤 ${session.user.name.split(' ')[0]}` : '';
   // the company's logo where its name would be; inside a section, the section's name
-  $('#coName').innerHTML = tab === 'menu' || !can('staff') ? `<img class="co-logo" src="logo-wide.png" alt="${esc(S.company)}">` : tab === 'staff' ? 'Employees' : 'Accounts';
+  $('#coName').innerHTML = tab === 'menu' || !can('staff') ? `<img class="co-logo" src="logo-wide.png" alt="${esc(S.company)}">` : ({ staff: 'Employees', hist: 'History', proj: 'Projects', sheet: 'Google Sheet' })[tab] || 'Accounts';
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
   const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were
@@ -2363,9 +2398,10 @@ const photoField = who => `<div class="fld photo-fld"><span>Photo of ${esc(who)}
   <p class="muted framer-hint" hidden>Move the photo with your finger and zoom in or out (all the way out shows the whole photo) — it goes on the slip exactly like this.</p>
   <p class="note reused-note" hidden>📷 The photo from the old voucher: use it as it is, move or zoom it, or take another.</p></div>`;
 const startFramer = input => input.files[0] && frameFile(input.form, input.files[0]).catch(e => alert(e.message));
-async function frameFile(f, file, reused = false) {
-  const img = await imgFrom(file), a = img.naturalWidth / img.naturalHeight;
-  f._frame = { file, img, reused, zoom: 1, min: Math.min(a / PHOTO_RATIO, PHOTO_RATIO / a), x: 0, y: 0, fresh: true }; // zoom 1 fills the box, min shows the whole photo
+// A round framer (a profile photo) is square, and never zooms out past filling it. crop: where it was framed before.
+async function frameFile(f, file, reused = false, crop = null) {
+  const img = await imgFrom(file), a = img.naturalWidth / img.naturalHeight, round = $('.framer', f).classList.contains('round');
+  f._frame = { file, img, reused, crop, zoom: 1, min: round ? 1 : Math.min(a / PHOTO_RATIO, PHOTO_RATIO / a), x: 0, y: 0, fresh: true }; // zoom 1 fills the box, min shows the whole photo
   const box = $('.photo-fld', f);
   ['.framer', '.framer-tools', '.framer-hint'].forEach(sel => { $(sel, box).hidden = false; });
   $('.reused-note', box).hidden = !reused;
@@ -2379,8 +2415,10 @@ function drawFramer(f) {
   const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1, cw = r.width, ch = r.height;
   if (cv.width !== Math.round(cw * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
   if (fr.cw && cw !== fr.cw) { fr.x *= cw / fr.cw; fr.y *= cw / fr.cw; } // the box changed size (phone turned): keep the framing
-  const iw = fr.img.naturalWidth, ih = fr.img.naturalHeight, s = Math.max(cw / iw, ch / ih) * fr.zoom;
-  if (fr.fresh) { fr.x = (cw - iw * s) / 2; fr.y = (ch - ih * s) / 2; fr.fresh = false; } // starts centred
+  const iw = fr.img.naturalWidth, ih = fr.img.naturalHeight, fit = Math.max(cw / iw, ch / ih);
+  if (fr.fresh && fr.crop) { fr.zoom = Math.min(4, Math.max(fr.min, cw / (fr.crop[2] * iw) / fit)); f.elements.zoom.value = fr.zoom; }
+  const s = fit * fr.zoom;
+  if (fr.fresh) { [fr.x, fr.y] = fr.crop ? [-fr.crop[0] * iw * s, -fr.crop[1] * iw * s] : [(cw - iw * s) / 2, (ch - ih * s) / 2]; fr.fresh = false; } // as framed before, or centred
   const keep = (v, room) => Math.min(Math.max(0, room), Math.max(Math.min(0, room), v)); // larger than the box: no gaps; smaller: stays inside it
   fr.x = keep(fr.x, cw - iw * s); fr.y = keep(fr.y, ch - ih * s);
   fr.cw = cw; fr.s = s;
@@ -2425,6 +2463,13 @@ function framedPhoto(f) {
   g.drawImage(fr.img, fr.x * k, fr.y * k, fr.img.naturalWidth * fr.s * k, fr.img.naturalHeight * fr.s * k);
   return c;
 }
+// The square a round framer shows, as parts of the photo's width: [left, top, size]. Kept with a profile photo.
+const frameCrop = fr => [-fr.x / fr.s, -fr.y / fr.s, fr.cw / fr.s].map(n => Math.round(n / fr.img.naturalWidth * 1e4) / 1e4);
+// a kept crop, if it is a sound one (it comes back from the sheet: never trusted into a style as it is)
+const cropOf = f => { const c = f && f.crop; return Array.isArray(c) && c.length === 3 && c.every(Number.isFinite) && c[0] >= 0 && c[1] >= 0 && c[2] >= 0.01 && c[0] + c[2] <= 1.001 ? c : null; };
+// a profile photo in its circle: the part chosen when it was framed (a photo framed before this: its middle)
+const avatarImg = (f, url) => { const c = cropOf(f);
+  return `<img src="${url}" alt=""${c ? ` style="position:absolute;max-width:none;height:auto;width:${100 / c[2]}%;left:${-100 * c[0] / c[2]}%;top:${-100 * c[1] / c[2]}%"` : ''}>`; };
 // A payment made again (its voucher cancelled when the amount changed): the photo taken for the old voucher is put in the
 // box, to use as it is, frame again or replace (owner, 15 Oct 2026). The signature is always taken new.
 const lastPhoto = id => filesFor(id, 'photo').filter(f => !f.removed && !f.replaced).pop();
@@ -4002,7 +4047,7 @@ const thumbs = new Map();
 function loadThumbs() {
   $$('[data-photo]').forEach(async el => {
     const id = el.dataset.photo;
-    try { if (!thumbs.has(id)) thumbs.set(id, URL.createObjectURL(await fileBlob(id))); el.innerHTML = `<img src="${thumbs.get(id)}" alt="">`; } catch { /* offline: the initials stay */ }
+    try { if (!thumbs.has(id)) thumbs.set(id, URL.createObjectURL(await fileBlob(id))); el.innerHTML = avatarImg(fileMeta(id), thumbs.get(id)); } catch { /* offline: the initials stay */ }
   });
 }
 
@@ -4016,7 +4061,7 @@ function viewStaff() {
 function workerRow(w) {
   const l = ledgerOf(w), photo = latestFile(w.id, 'profile');
   return `<button class="row" data-act="openWorker" data-id="${esc(w.id)}">
-    <span class="dot avatar" ${photo ? `data-photo="${esc(photo.id)}"` : ''}>${photo && thumbs.has(photo.id) ? `<img src="${thumbs.get(photo.id)}" alt="">` : esc(initials(w.name))}</span>
+    <span class="dot avatar" ${photo ? `data-photo="${esc(photo.id)}"` : ''}>${photo && thumbs.has(photo.id) ? avatarImg(photo, thumbs.get(photo.id)) : esc(initials(w.name))}</span>
     <span class="main"><span class="t"><span class="tt">${esc(w.name)}</span>${waitingFor(w.id).length ? '<i class="tag warn">Waiting</i>' : ''}</span>
     <span class="s">${esc([w.job, `${money(w.wage, w.cur)} a month`].filter(Boolean).join(' · '))}</span></span>
     <span class="amt${l.balance < 0 ? ' neg' : ''}">${money(l.balance, l.cur)}<small>${owedLabel(l)}</small></span></button>`;
@@ -4029,13 +4074,13 @@ function workerDetail(id) {
   const pays = live(S.expenses).filter(e => e.worker === id).sort((a, b) => byAt(b, a));
   const facts = [['Job', w.job], ['Phone', w.phone], ['Monthly wage', money(w.wage, w.cur)], ['Started', fmtDate(w.start)], ['Salary cleared up to', w.clearedTo && fmtDate(w.clearedTo)], ['Left on', w.left && fmtDate(w.left)],
     ['ID number', w.idNo], ['Before the app', w.openingAmount ? beforeText(w.openingAmount, w.cur) : '']];
-  const idPhoto = latestFile(id, 'idphoto');
+  const idPhoto = latestFile(id, 'idphoto'), photo = latestFile(id, 'profile');
   // every voucher and slip given to them, and their signed statements
   const payIds = new Set(pays.map(e => e.id));
   const docs = [...live(S.files), ...outbox.map(f => ({ ...f, pending: true }))].filter(f => (payIds.has(f.for) && ['voucher', 'slip'].includes(f.type)) || (f.for === id && f.type === 'statement'))
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   openSheet(`${head(w.name, '', w.id)}
-    <div class="wtop"><span class="wphoto" id="wPhoto">${esc(initials(w.name))}</span>
+    <div class="wtop"><button type="button" class="wphoto" id="wPhoto" data-act="profilePhoto" data-id="${esc(id)}" aria-label="${photo ? 'Move or change' : 'Add'} the profile photo">${esc(initials(w.name))}</button>
       <div><div class="dbig ${l.balance < 0 ? 'out' : ''}" style="margin:0">${money(l.balance, l.cur)}</div><small class="muted">${l.balance >= 0 ? `still to pay ${esc(w.name)}` : 'paid more than earned so far'}${left ? ' · has left' : ''}</small></div></div>
     ${waitingNote(id)}
     ${approvedAdvances(id).map(c => `<div class="banner new"><span>✅ Advance of ${money(+c.after.amount, c.after.cur)} approved by ${esc(c.decidedBy)}.</span><button class="btn small" data-act="payWorker" data-pay="advance" data-id="${esc(id)}" data-approval="${esc(c.id)}">Give it</button></div>`).join('')}
@@ -4044,7 +4089,7 @@ function workerDetail(id) {
       : `<button class="btn out" data-act="payWorker" data-pay="salary" data-id="${esc(id)}">💵 Pay salary</button><button class="btn ghost" data-act="payWorker" data-pay="advance" data-id="${esc(id)}">➖ Advance</button>`}<button class="btn ghost" data-act="workerStatement" data-id="${esc(id)}">📄 Statement</button></div>
     <dl class="facts" style="margin-top:16px">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
     <div class="two">${canChange() ? `<button class="btn ghost" data-act="editWorker" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${left || !canChange() ? '' : `<button class="btn danger" data-act="markLeft" data-id="${esc(id)}">🚪 Has left 🔒</button>`}</div>
-    <div class="two" style="margin-top:10px">${attachButton(id, '🙂 Profile photo', 'profile', 'image/*')}${idPhoto ? `<button class="btn ghost" data-act="showFile" data-id="${esc(idPhoto.id)}">🪪 ID photo</button>` : attachButton(id, '🪪 Add ID photo', 'idphoto')}</div>
+    <div class="two" style="margin-top:10px"><button type="button" class="btn ghost" data-act="profilePhoto" data-id="${esc(id)}">🙂 ${photo ? 'Adjust profile photo' : 'Add profile photo'}</button>${idPhoto ? `<button class="btn ghost" data-act="showFile" data-id="${esc(idPhoto.id)}">🪪 ID photo</button>` : attachButton(id, '🪪 Add ID photo', 'idphoto')}</div>
     <h3 class="subh">Wage by month</h3>
     <div class="card list inset">${[...l.months].reverse().slice(0, 12).map(m => `<div class="mrow"><span>${monthName(m.month)}</span><span class="muted">${m.days} days${m.daysOff ? ` − ${m.daysOff} not worked` : ''}</span><b>${money(m.earned, l.cur)}</b></div>`).join('') || '<p class="muted pad">Starts on ' + esc(fmtDate(w.start)) + '.</p>'}</div>
     <p class="muted">Earned ${money(l.earned, l.cur)}${l.opening > 0 ? ` + ${money(l.opening, l.cur)} owed from before the app` : l.opening < 0 ? ` − ${money(-l.opening, l.cur)} paid before the app` : ''} − paid ${money(l.paid, l.cur)} = ${money(l.balance, l.cur)}.${l.unconverted.length ? ` ⚠️ ${l.unconverted.length} payment(s) in another currency without a rate are not counted.` : ''}</p>
@@ -4058,8 +4103,48 @@ function workerDetail(id) {
     ${can('delete') ? `<button class="btn danger" data-act="del" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Delete employee 🔒</button>`
       : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Ask to delete employee 🔒</button>` : ''}`);
   comeBack(() => workerDetail(id));
-  const photo = latestFile(id, 'profile');
   if (photo) { $('#wPhoto').dataset.photo = photo.id; loadThumbs(); }
+}
+
+/* ---------- the profile photo, framed by hand in a circle ---------- */
+// Owner, 23 Oct 2026: "adjust the profile photo of employees so that their face fits perfectly in the circle". The photo is
+// kept whole, with the circle chosen (crop), so it can be moved again any time from the photo itself.
+const profileField = (title, hint) => `<div class="fld photo-fld"><span>${title}</span>
+  <label class="btn ghost">📷 Take or choose a photo<input type="file" name="photo" accept="image/*" hidden></label>
+  <div class="framer round" hidden><canvas></canvas><i class="frame-guide"></i></div>
+  <div class="framer-tools" hidden><b aria-hidden="true">−</b><input type="range" name="zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom the photo"><b aria-hidden="true">＋</b></div>
+  <p class="muted framer-hint" hidden>${hint}</p>
+  <p class="note reused-note" hidden>The photo as it is now: move or zoom it, or take another.</p></div>`;
+const PROFILE_HINT = 'Move the photo with your finger and zoom in until the face fills the circle.';
+async function profileSheet(id) {
+  const w = workerOf(id), photo = latestFile(id, 'profile');
+  if (!w) return;
+  openSheet(`${head('Profile photo', '', w.name)}
+    <form data-form="profile" data-id="${esc(id)}">
+      ${profileField(photo ? 'Move it, zoom it, or take another' : 'A photo of their face', PROFILE_HINT)}
+      <p class="err"></p>
+      <button class="btn primary">Save the photo</button>
+    </form>`); // × goes back to the employee (their page set where to go back to)
+  if (!photo) return;
+  const f = $('#sheet form');
+  try { const blob = await fileBlob(photo.id); if (f.isConnected && !f._frame) await frameFile(f, blob, true, cropOf(photo)); }
+  catch { if (f.isConnected && !f._frame) formErr(f, null, 'The photo is not on this phone yet (no internet?). Take a new one, or try again online.'); }
+}
+// the framed photo of a form, kept whole with its circle; false when no photo was framed
+async function keepProfile(f, id) {
+  const fr = f._frame;
+  if (!fr || !fr.cw) return false;
+  const p = await prepareFile(fr.file);
+  await keepFile({ for: id, type: 'profile', name: p.name, mime: p.mime, crop: frameCrop(fr) }, p.data);
+  return true;
+}
+async function saveProfile(f) {
+  const id = f.dataset.id;
+  if (!f._frame) return formErr(f, null, 'Take or choose a photo first.');
+  const was = cropOf(latestFile(id, 'profile'));
+  if (f._frame.reused && was && f._frame.cw && frameCrop(f._frame).every((n, i) => Math.abs(n - was[i]) < 0.002)) { workerDetail(id); return toast('Nothing changed'); } // not sent again for nothing
+  try { await keepProfile(f, id); } catch (e) { return formErr(f, null, e.message); }
+  workerDetail(id); toast('Profile photo saved ✓');
 }
 
 function workerForm(old) {
@@ -4085,7 +4170,7 @@ function workerForm(old) {
       </div>`}
       ${textField('idNo', 'National ID or passport number', '', d.idNo, false)}
       ${old ? '' : `<label class="fld"><span>Photo of the national ID or passport</span><input type="file" name="idphoto" accept="image/*,application/pdf" required></label>
-      <label class="fld"><span>Profile photo <em>(optional — shown in the staff list)</em></span><input type="file" name="profile" accept="image/*" capture="environment"></label>`}
+      ${profileField('Profile photo <em>(optional — shown in the staff list)</em>', PROFILE_HINT)}`}
       ${byField()}${approvalNote(old)}
       <p class="err"></p>
       <button class="btn primary">${old ? saveLabel() : 'Add employee'}</button>
@@ -4148,12 +4233,9 @@ async function saveWorker(f) {
   const extra = [rec.clearedTo && `salary cleared up to ${fmtDate(rec.clearedTo)}`, rec.openingAmount && beforeText(rec.openingAmount, rec.cur)].filter(Boolean).join(' · ');
   update({ workers: [...S.workers, { id, ...rec, status: 'active', by, createdAt: stampSec() }], seq, lastBy: by,
     log: logWith([['Employee', id, `${rec.name} added · ${rec.job} · ${money(wage, rec.cur)} a month from ${fmtDate(rec.start)}${extra ? ' · ' + extra : ''}`]], by) });
-  for (const type of ['idphoto', 'profile']) {
-    const file = f.elements[type].files[0];
-    if (!file) continue;
-    try { const p = await prepareFile(file); await keepFile({ for: id, type, name: p.name, mime: p.mime }, p.data); }
-    catch (e) { alert(`${FILE_NAME[type]}: ${e.message}`); }
-  }
+  try { const file = f.elements.idphoto.files[0], p = file && await prepareFile(file); if (p) await keepFile({ for: id, type: 'idphoto', name: p.name, mime: p.mime }, p.data); }
+  catch (e) { alert(`${FILE_NAME.idphoto}: ${e.message}`); }
+  try { await keepProfile(f, id); } catch (e) { alert(`${FILE_NAME.profile}: ${e.message}`); }
   render(); workerDetail(id); toast(`${rec.name} added ✓`);
 }
 
@@ -4610,7 +4692,7 @@ function bankDetail(id) {
   const b = bankOf(id);
   if (!b) return false;
   openSheet(`${head(b.bank, 'in', b.cur || '')}
-    <dl class="facts">${bankLines(b).map(([k, v]) => `<div><dt>${k || 'Note'}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    <dl class="facts">${bankLines(b).map(([k, v]) => `<div><dt>${k || 'Note'}</dt><dd${['Account number', 'SWIFT code'].includes(k) ? ' class="nb"' : ''}>${esc(v)}</dd></div>`).join('')}</dl>
     ${shareButtons(bankText([b]), 'copyBank', id)}
     ${can('settings') ? `<div class="two" style="margin-top:18px"><button class="btn ghost" data-act="editBank" data-id="${esc(id)}">✏️ Edit 🔒</button><button class="btn danger" data-act="delBank" data-id="${esc(id)}">🗑 Delete 🔒</button></div>` : ''}`);
   comeBack(() => bankDetail(id));
@@ -5288,7 +5370,7 @@ function needGroups(list) {
 
 /* ---------- the list ---------- */
 // Buying's tabs: the checklist, trips, suppliers, budgets
-const buyNav = active => `<nav class="subnav" aria-label="Buying">${[['buying', '✓ List'], ['trips', '✈️ Trips'], ['suppliers', '🏭 Suppliers'], ['budgets', '💰 Budgets']].map(([a, t]) => `<button type="button" data-act="${a}"${a === active ? ' aria-current="page"' : ''}>${t}</button>`).join('')}</nav>`;
+const buyNav = active => `<nav class="subnav" aria-label="Buying">${[['buying', '📝', 'List'], ['trips', '✈️', 'Trips'], ['suppliers', '🏭', 'Suppliers'], ['budgets', '💰', 'Budgets']].map(([a, i, t]) => `<button type="button" data-act="${a}"${a === active ? ' aria-current="page"' : ''}><span aria-hidden="true">${i}</span>${t}</button>`).join('')}</nav>`;
 // three tabs, as simple as a shopping list: still to buy, bought (on its way), received; dropped ones apart
 const BUY_TABS = { open: ['To buy', ['idea', 'tobuy']], bought: ['Bought', ['ordered', 'inspected', 'shipped']], received: ['Received', ['received']], dropped: ['Dropped', ['dropped']] };
 let buyView = { view: 'open', project: '', q: '' };
@@ -5503,7 +5585,7 @@ const STEPS = [['tobuy', 'To buy'], ['ordered', 'Bought'], ['inspected', 'Checke
 const dayMonth = d => fmtDate(d).replace(/ \d{4}$/, '');
 function stepper(n) {
   const at = STEPS.findIndex(([s]) => s === n.status);
-  return `<ol class="steps" aria-label="Where it stands">${STEPS.map(([s, t], i) => `<li class="${i <= at ? 'on' : ''}${i === at ? ' now' : ''}"${i === at ? ' aria-current="step"' : ''}><span aria-hidden="true"></span>${t}${n.steps && n.steps[s] ? `<small>${esc(dayMonth(n.steps[s]))}</small>` : ''}</li>`).join('')}</ol>`;
+  return `<ol class="stepper" aria-label="Where it stands">${STEPS.map(([s, t], i) => `<li class="${i <= at ? 'on' : ''}${i === at ? ' now' : ''}"${i === at ? ' aria-current="step"' : ''}><span aria-hidden="true"></span>${t}${n.steps && n.steps[s] ? `<small>${esc(dayMonth(n.steps[s]))}</small>` : ''}</li>`).join('')}</ol>`;
 }
 // the one thing to do next, big; the rarer ones as links under it
 function nextStep(n) {
@@ -6078,7 +6160,7 @@ function pickForTrip(id) {
   openSheet(`${head('Put items on the trip', 'out', j.to)}
     ${list.length ? `<form data-form="tripPick" data-id="${esc(id)}">
       <p class="hint">Ticked: to buy in ${esc(j.country || j.to)} or anywhere. Tick or untick, then save.</p>
-      ${needGroups(list).map(([c, l]) => `<h3 class="subh">${esc(c)}</h3><div class="card pad">${l.map(n => `<label class="fld check"><input type="checkbox" name="n" value="${esc(n.id)}" ${match(n) ? 'checked' : ''}> ${esc(n.t)}<small class="muted">${esc(needLine(n))}</small></label>`).join('')}</div>`).join('')}
+      ${needGroups(list).map(([c, l]) => `<h3 class="subh">${esc(c)}</h3><div class="card pad">${l.map(n => `<label class="fld check"><input type="checkbox" name="n" value="${esc(n.id)}" ${match(n) ? 'checked' : ''}><span>${esc(n.t)}<small class="muted">${esc(needLine(n))}</small></span></label>`).join('')}</div>`).join('')}
       <p class="err"></p><button class="btn out">Put them on the list</button></form>` : empty('Nothing to add', 'Every open item is already on a trip. Add new ones in Buying.')}`);
 }
 function saveTripPick(f) {
@@ -6099,7 +6181,7 @@ function linkTripCosts(id) {
   openSheet(`${head('Link payments to the trip', 'out', j.to)}
     ${list.length ? `<form data-form="tripCosts" data-id="${esc(id)}">
       <p class="hint">Payments from three weeks before it left to two weeks after it came back. Tick what the trip cost, and say what each was for: a payment for goods is counted once, in the goods.</p>
-      <div class="card pad">${list.map(e => `<div class="link-pay"><label class="fld check"><input type="checkbox" name="e" value="${esc(e.id)}"> ${esc(money(e.amount, e.cur))} · ${esc(e.reason)}<small class="muted">${esc([fmtDate(e.at.slice(0, 10)), e.paidTo].join(' · '))}</small></label>${goods.length ? what(e) : ''}</div>`).join('')}</div>
+      <div class="card pad">${list.map(e => `<div class="link-pay"><label class="fld check"><input type="checkbox" name="e" value="${esc(e.id)}"><span>${esc(money(e.amount, e.cur))} · ${esc(e.reason)}<small class="muted">${esc([fmtDate(e.at.slice(0, 10)), e.paidTo].join(' · '))}</small></span></label>${goods.length ? what(e) : ''}</div>`).join('')}</div>
       <p class="err"></p><button class="btn out">Link them</button></form>` : empty('No payments around those days', 'Add them in Accounts and choose this trip.')}`);
 }
 function saveTripCosts(f) {
@@ -6635,6 +6717,7 @@ const ACTIONS = {
   conceal: () => { showMoney = false; render(); },
   addWorker: () => workerForm(),
   openWorker: b => workerDetail(b.dataset.id),
+  profilePhoto: b => profileSheet(b.dataset.id),
   editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
   markLeft: async b => { if (await unlock('Enter the password to record that this employee has left.')) leftForm(b.dataset.id); },
   payWorker: b => payForm(b.dataset.id, b.dataset.pay, b.dataset.approval),
@@ -6748,7 +6831,7 @@ const ACTIONS = {
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
   idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList, subIdea: saveSubIdea, budgets: saveBudgets, exchange: saveExchange };
 
 function refreshAmount(input) {
