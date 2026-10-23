@@ -6,7 +6,7 @@
 // 1. Start Chrome:  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
 //                   --remote-debugging-port=9333 --user-data-dir=/tmp/chrome-layout about:blank &
 // 2. Serve the app: node tools/pages-like-server.js docs 8795 &
-// 3. Run:           node tools/layout-check.js http://127.0.0.1:8795/ [--shots DIR]
+// 3. Run:           node tools/layout-check.js http://127.0.0.1:8795/ [--shots DIR] [--widths 768,1024]
 //    --shots DIR    also saves a picture of every screen at every width (DIR/<width>-<nn>-<screen>.png)
 // Exits 1 when something is found; prints each screen, width and element.
 'use strict';
@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const args = process.argv.slice(2), url = args.find(a => /^https?:/.test(a)) || 'http://127.0.0.1:8795/';
 const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : '';
-const WIDTHS = [300, 320, 360, 375, 412]; // 300: a 360px phone with large text (Android font size, also in the APK)
+const WIDTHS = args.includes('--widths') ? args[args.indexOf('--widths') + 1].split(',').map(Number) : [300, 320, 360, 375, 412]; // 300: a 360px phone with large text (Android font size, also in the APK)
 
 // runs in the page: sample records for every screen; window.__show(i) opens screen i
 const SETUP = () => {
@@ -79,6 +79,21 @@ const CHECK = () => {
   // titles and buttons whose text is cut off
   [...root.querySelectorAll('h1, h2, h3, button, summary')].filter(el => shown(el) && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== 'visible')
     .slice(0, 3).forEach(el => out.push(`${name(el)} cuts its text off ("${text(el)}")`));
+  // text drawn with "…" because it does not fit, and ordinary words split over two lines ("Stateme / nt"); a word
+  // over 14 letters may split (a reference number, a joined-up name: it cannot fit anyway)
+  const texts = el => [...el.childNodes].filter(n => n.nodeType === 3 && n.textContent.trim());
+  const rangeOf = (n, a = 0, b = n.textContent.length) => { const r = document.createRange(); r.setStart(n, a); r.setEnd(n, b); return r; };
+  const cut = [], split = new Set();
+  [...root.querySelectorAll('*')].filter(shown).forEach(el => {
+    const cs = getComputedStyle(el);
+    if (cs.textOverflow === 'ellipsis') {
+      const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      if (texts(el).some(n => rangeOf(n).getBoundingClientRect().width > room + 0.5)) cut.push(el);
+    }
+    texts(el).forEach(n => { for (const m of n.textContent.matchAll(/[\p{L}\p{N}](?:[\p{L}\p{N}'’]|[.,](?=\p{N}))*/gu)) if (m[0].length <= 14 && [...rangeOf(n, m.index, m.index + m[0].length).getClientRects()].filter(r => r.width > 0.5).length > 1) split.add(m[0]); });
+  });
+  cut.slice(0, 3).forEach(el => out.push(`${name(el)} shows its text cut with "…" ("${text(el)}")`));
+  if (split.size) out.push(`words split over two lines: ${[...split].slice(0, 6).join(', ')}`);
   // the sheet's title row: the title must not run under the close button
   const h = sheet && sheet.querySelector('.sh-head'), x = h && h.querySelector('.close'), t = h && h.querySelector('h2');
   if (t && x && t.getBoundingClientRect().right > x.getBoundingClientRect().left + 0.5) out.push(`the title runs under the close button ("${text(t)}")`);
@@ -96,12 +111,20 @@ const CHECK = () => {
   ws.onmessage = m => { const d = JSON.parse(m.data); if (d.id && waiting[d.id]) waiting[d.id](d); };
   await new Promise(r => (ws.onopen = r));
   if (shots) fs.mkdirSync(shots, { recursive: true });
+  const newest = (await (await fetch(new URL('version.json', url))).json()).version;
   let found = 0;
   for (const w of WIDTHS) {
     await call('Emulation.setDeviceMetricsOverride', { width: w, height: 800, deviceScaleFactor: 2, mobile: true });
     await call('Page.navigate', { url });
-    // wait for the app itself (after a new build the offline copy updates and reloads the page once)
-    for (let t = 0; t < 40; t++) { await new Promise(r => setTimeout(r, 500)); if (t >= 4 && await run("typeof noRecords === 'function' && document.readyState === 'complete'")) break; }
+    // wait for the newest build itself: after a new build the offline copy updates and reloads the page; until then the
+    // page is the build before (the check would look at old screens)
+    let ready = false;
+    for (let t = 0; t < 60 && !ready; t++) {
+      await new Promise(r => setTimeout(r, 500));
+      ready = t >= 4 && await run(`typeof APP_VERSION === 'string' && APP_VERSION === ${JSON.stringify(newest)} && typeof noRecords === 'function' && document.readyState === 'complete'`);
+      if (!ready && t % 12 === 11) await call('Page.reload', { ignoreCache: true });
+    }
+    if (!ready) { console.log(`— ${w}px: the page never showed build ${newest}`); found++; continue; }
     const names = await run(`(${SETUP})()`);
     if (!Array.isArray(names)) { console.log(`— ${w}px: could not set up the screens`); found++; continue; }
     const problems = [];

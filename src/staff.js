@@ -102,8 +102,7 @@ async function profileSheet(id) {
       ${profileField(photo ? 'Move it, zoom it, or take another' : 'A photo of their face', PROFILE_HINT)}
       <p class="err"></p>
       <button class="btn primary">Save the photo</button>
-    </form>`);
-  comeBack(() => workerDetail(id));
+    </form>`); // × goes back to the employee (their page set where to go back to)
   if (!photo) return;
   const f = $('#sheet form');
   try { const blob = await fileBlob(photo.id); if (f.isConnected && !f._frame) await frameFile(f, blob, true, cropOf(photo)); }

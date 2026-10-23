@@ -587,7 +587,7 @@ function framedPhoto(f) {
 // The square a round framer shows, as parts of the photo's width: [left, top, size]. Kept with a profile photo.
 const frameCrop = fr => [-fr.x / fr.s, -fr.y / fr.s, fr.cw / fr.s].map(n => Math.round(n / fr.img.naturalWidth * 1e4) / 1e4);
 // a kept crop, if it is a sound one (it comes back from the sheet: never trusted into a style as it is)
-const cropOf = f => { const c = f && f.crop; return Array.isArray(c) && c.length === 3 && c.every(Number.isFinite) && c[2] > 0 && c[2] <= 1 ? c : null; };
+const cropOf = f => { const c = f && f.crop; return Array.isArray(c) && c.length === 3 && c.every(Number.isFinite) && c[0] >= 0 && c[1] >= 0 && c[2] >= 0.01 && c[0] + c[2] <= 1.001 ? c : null; };
 // a profile photo in its circle: the part chosen when it was framed (a photo framed before this: its middle)
 const avatarImg = (f, url) => { const c = cropOf(f);
   return `<img src="${url}" alt=""${c ? ` style="position:absolute;max-width:none;height:auto;width:${100 / c[2]}%;left:${-100 * c[0] / c[2]}%;top:${-100 * c[1] / c[2]}%"` : ''}>`; };

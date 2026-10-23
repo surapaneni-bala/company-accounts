@@ -35,7 +35,7 @@ function bankDetail(id) {
   const b = bankOf(id);
   if (!b) return false;
   openSheet(`${head(b.bank, 'in', b.cur || '')}
-    <dl class="facts">${bankLines(b).map(([k, v]) => `<div><dt>${k || 'Note'}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    <dl class="facts">${bankLines(b).map(([k, v]) => `<div><dt>${k || 'Note'}</dt><dd${['Account number', 'SWIFT code'].includes(k) ? ' class="nb"' : ''}>${esc(v)}</dd></div>`).join('')}</dl>
     ${shareButtons(bankText([b]), 'copyBank', id)}
     ${can('settings') ? `<div class="two" style="margin-top:18px"><button class="btn ghost" data-act="editBank" data-id="${esc(id)}">✏️ Edit 🔒</button><button class="btn danger" data-act="delBank" data-id="${esc(id)}">🗑 Delete 🔒</button></div>` : ''}`);
   comeBack(() => bankDetail(id));
