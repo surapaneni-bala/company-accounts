@@ -122,7 +122,7 @@ function pickForTrip(id) {
   openSheet(`${head('Put items on the trip', 'out', j.to)}
     ${list.length ? `<form data-form="tripPick" data-id="${esc(id)}">
       <p class="hint">Ticked: to buy in ${esc(j.country || j.to)} or anywhere. Tick or untick, then save.</p>
-      ${needGroups(list).map(([c, l]) => `<h3 class="subh">${esc(c)}</h3><div class="card pad">${l.map(n => `<label class="fld check"><input type="checkbox" name="n" value="${esc(n.id)}" ${match(n) ? 'checked' : ''}> ${esc(n.t)}<small class="muted">${esc(needLine(n))}</small></label>`).join('')}</div>`).join('')}
+      ${needGroups(list).map(([c, l]) => `<h3 class="subh">${esc(c)}</h3><div class="card pad">${l.map(n => `<label class="fld check"><input type="checkbox" name="n" value="${esc(n.id)}" ${match(n) ? 'checked' : ''}><span>${esc(n.t)}<small class="muted">${esc(needLine(n))}</small></span></label>`).join('')}</div>`).join('')}
       <p class="err"></p><button class="btn out">Put them on the list</button></form>` : empty('Nothing to add', 'Every open item is already on a trip. Add new ones in Buying.')}`);
 }
 function saveTripPick(f) {
@@ -143,7 +143,7 @@ function linkTripCosts(id) {
   openSheet(`${head('Link payments to the trip', 'out', j.to)}
     ${list.length ? `<form data-form="tripCosts" data-id="${esc(id)}">
       <p class="hint">Payments from three weeks before it left to two weeks after it came back. Tick what the trip cost, and say what each was for: a payment for goods is counted once, in the goods.</p>
-      <div class="card pad">${list.map(e => `<div class="link-pay"><label class="fld check"><input type="checkbox" name="e" value="${esc(e.id)}"> ${esc(money(e.amount, e.cur))} · ${esc(e.reason)}<small class="muted">${esc([fmtDate(e.at.slice(0, 10)), e.paidTo].join(' · '))}</small></label>${goods.length ? what(e) : ''}</div>`).join('')}</div>
+      <div class="card pad">${list.map(e => `<div class="link-pay"><label class="fld check"><input type="checkbox" name="e" value="${esc(e.id)}"><span>${esc(money(e.amount, e.cur))} · ${esc(e.reason)}<small class="muted">${esc([fmtDate(e.at.slice(0, 10)), e.paidTo].join(' · '))}</small></span></label>${goods.length ? what(e) : ''}</div>`).join('')}</div>
       <p class="err"></p><button class="btn out">Link them</button></form>` : empty('No payments around those days', 'Add them in Accounts and choose this trip.')}`);
 }
 function saveTripCosts(f) {

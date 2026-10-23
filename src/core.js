@@ -267,7 +267,7 @@ function render() {
   $('#whoChip').hidden = !signedIn();
   $('#whoChip').textContent = signedIn() ? `👤 ${session.user.name.split(' ')[0]}` : '';
   // the company's logo where its name would be; inside a section, the section's name
-  $('#coName').innerHTML = tab === 'menu' || !can('staff') ? `<img class="co-logo" src="logo-wide.png" alt="${esc(S.company)}">` : tab === 'staff' ? 'Employees' : 'Accounts';
+  $('#coName').innerHTML = tab === 'menu' || !can('staff') ? `<img class="co-logo" src="logo-wide.png" alt="${esc(S.company)}">` : ({ staff: 'Employees', hist: 'History', proj: 'Projects', sheet: 'Google Sheet' })[tab] || 'Accounts';
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
   const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were

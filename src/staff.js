@@ -25,7 +25,7 @@ const thumbs = new Map();
 function loadThumbs() {
   $$('[data-photo]').forEach(async el => {
     const id = el.dataset.photo;
-    try { if (!thumbs.has(id)) thumbs.set(id, URL.createObjectURL(await fileBlob(id))); el.innerHTML = `<img src="${thumbs.get(id)}" alt="">`; } catch { /* offline: the initials stay */ }
+    try { if (!thumbs.has(id)) thumbs.set(id, URL.createObjectURL(await fileBlob(id))); el.innerHTML = avatarImg(fileMeta(id), thumbs.get(id)); } catch { /* offline: the initials stay */ }
   });
 }
 
@@ -39,7 +39,7 @@ function viewStaff() {
 function workerRow(w) {
   const l = ledgerOf(w), photo = latestFile(w.id, 'profile');
   return `<button class="row" data-act="openWorker" data-id="${esc(w.id)}">
-    <span class="dot avatar" ${photo ? `data-photo="${esc(photo.id)}"` : ''}>${photo && thumbs.has(photo.id) ? `<img src="${thumbs.get(photo.id)}" alt="">` : esc(initials(w.name))}</span>
+    <span class="dot avatar" ${photo ? `data-photo="${esc(photo.id)}"` : ''}>${photo && thumbs.has(photo.id) ? avatarImg(photo, thumbs.get(photo.id)) : esc(initials(w.name))}</span>
     <span class="main"><span class="t"><span class="tt">${esc(w.name)}</span>${waitingFor(w.id).length ? '<i class="tag warn">Waiting</i>' : ''}</span>
     <span class="s">${esc([w.job, `${money(w.wage, w.cur)} a month`].filter(Boolean).join(' · '))}</span></span>
     <span class="amt${l.balance < 0 ? ' neg' : ''}">${money(l.balance, l.cur)}<small>${owedLabel(l)}</small></span></button>`;
@@ -52,13 +52,13 @@ function workerDetail(id) {
   const pays = live(S.expenses).filter(e => e.worker === id).sort((a, b) => byAt(b, a));
   const facts = [['Job', w.job], ['Phone', w.phone], ['Monthly wage', money(w.wage, w.cur)], ['Started', fmtDate(w.start)], ['Salary cleared up to', w.clearedTo && fmtDate(w.clearedTo)], ['Left on', w.left && fmtDate(w.left)],
     ['ID number', w.idNo], ['Before the app', w.openingAmount ? beforeText(w.openingAmount, w.cur) : '']];
-  const idPhoto = latestFile(id, 'idphoto');
+  const idPhoto = latestFile(id, 'idphoto'), photo = latestFile(id, 'profile');
   // every voucher and slip given to them, and their signed statements
   const payIds = new Set(pays.map(e => e.id));
   const docs = [...live(S.files), ...outbox.map(f => ({ ...f, pending: true }))].filter(f => (payIds.has(f.for) && ['voucher', 'slip'].includes(f.type)) || (f.for === id && f.type === 'statement'))
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   openSheet(`${head(w.name, '', w.id)}
-    <div class="wtop"><span class="wphoto" id="wPhoto">${esc(initials(w.name))}</span>
+    <div class="wtop"><button type="button" class="wphoto" id="wPhoto" data-act="profilePhoto" data-id="${esc(id)}" aria-label="${photo ? 'Move or change' : 'Add'} the profile photo">${esc(initials(w.name))}</button>
       <div><div class="dbig ${l.balance < 0 ? 'out' : ''}" style="margin:0">${money(l.balance, l.cur)}</div><small class="muted">${l.balance >= 0 ? `still to pay ${esc(w.name)}` : 'paid more than earned so far'}${left ? ' · has left' : ''}</small></div></div>
     ${waitingNote(id)}
     ${approvedAdvances(id).map(c => `<div class="banner new"><span>✅ Advance of ${money(+c.after.amount, c.after.cur)} approved by ${esc(c.decidedBy)}.</span><button class="btn small" data-act="payWorker" data-pay="advance" data-id="${esc(id)}" data-approval="${esc(c.id)}">Give it</button></div>`).join('')}
@@ -67,7 +67,7 @@ function workerDetail(id) {
       : `<button class="btn out" data-act="payWorker" data-pay="salary" data-id="${esc(id)}">💵 Pay salary</button><button class="btn ghost" data-act="payWorker" data-pay="advance" data-id="${esc(id)}">➖ Advance</button>`}<button class="btn ghost" data-act="workerStatement" data-id="${esc(id)}">📄 Statement</button></div>
     <dl class="facts" style="margin-top:16px">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
     <div class="two">${canChange() ? `<button class="btn ghost" data-act="editWorker" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${left || !canChange() ? '' : `<button class="btn danger" data-act="markLeft" data-id="${esc(id)}">🚪 Has left 🔒</button>`}</div>
-    <div class="two" style="margin-top:10px">${attachButton(id, '🙂 Profile photo', 'profile', 'image/*')}${idPhoto ? `<button class="btn ghost" data-act="showFile" data-id="${esc(idPhoto.id)}">🪪 ID photo</button>` : attachButton(id, '🪪 Add ID photo', 'idphoto')}</div>
+    <div class="two" style="margin-top:10px"><button type="button" class="btn ghost" data-act="profilePhoto" data-id="${esc(id)}">🙂 ${photo ? 'Adjust profile photo' : 'Add profile photo'}</button>${idPhoto ? `<button class="btn ghost" data-act="showFile" data-id="${esc(idPhoto.id)}">🪪 ID photo</button>` : attachButton(id, '🪪 Add ID photo', 'idphoto')}</div>
     <h3 class="subh">Wage by month</h3>
     <div class="card list inset">${[...l.months].reverse().slice(0, 12).map(m => `<div class="mrow"><span>${monthName(m.month)}</span><span class="muted">${m.days} days${m.daysOff ? ` − ${m.daysOff} not worked` : ''}</span><b>${money(m.earned, l.cur)}</b></div>`).join('') || '<p class="muted pad">Starts on ' + esc(fmtDate(w.start)) + '.</p>'}</div>
     <p class="muted">Earned ${money(l.earned, l.cur)}${l.opening > 0 ? ` + ${money(l.opening, l.cur)} owed from before the app` : l.opening < 0 ? ` − ${money(-l.opening, l.cur)} paid before the app` : ''} − paid ${money(l.paid, l.cur)} = ${money(l.balance, l.cur)}.${l.unconverted.length ? ` ⚠️ ${l.unconverted.length} payment(s) in another currency without a rate are not counted.` : ''}</p>
@@ -81,8 +81,49 @@ function workerDetail(id) {
     ${can('delete') ? `<button class="btn danger" data-act="del" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Delete employee 🔒</button>`
       : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Ask to delete employee 🔒</button>` : ''}`);
   comeBack(() => workerDetail(id));
-  const photo = latestFile(id, 'profile');
   if (photo) { $('#wPhoto').dataset.photo = photo.id; loadThumbs(); }
+}
+
+/* ---------- the profile photo, framed by hand in a circle ---------- */
+// Owner, 23 Oct 2026: "adjust the profile photo of employees so that their face fits perfectly in the circle". The photo is
+// kept whole, with the circle chosen (crop), so it can be moved again any time from the photo itself.
+const profileField = (title, hint) => `<div class="fld photo-fld"><span>${title}</span>
+  <label class="btn ghost">📷 Take or choose a photo<input type="file" name="photo" accept="image/*" hidden></label>
+  <div class="framer round" hidden><canvas></canvas><i class="frame-guide"></i></div>
+  <div class="framer-tools" hidden><b aria-hidden="true">−</b><input type="range" name="zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom the photo"><b aria-hidden="true">＋</b></div>
+  <p class="muted framer-hint" hidden>${hint}</p>
+  <p class="note reused-note" hidden>The photo as it is now: move or zoom it, or take another.</p></div>`;
+const PROFILE_HINT = 'Move the photo with your finger and zoom in until the face fills the circle.';
+async function profileSheet(id) {
+  const w = workerOf(id), photo = latestFile(id, 'profile');
+  if (!w) return;
+  openSheet(`${head('Profile photo', '', w.name)}
+    <form data-form="profile" data-id="${esc(id)}">
+      ${profileField(photo ? 'Move it, zoom it, or take another' : 'A photo of their face', PROFILE_HINT)}
+      <p class="err"></p>
+      <button class="btn primary">Save the photo</button>
+    </form>`);
+  comeBack(() => workerDetail(id));
+  if (!photo) return;
+  const f = $('#sheet form');
+  try { const blob = await fileBlob(photo.id); if (f.isConnected && !f._frame) await frameFile(f, blob, true, cropOf(photo)); }
+  catch { if (f.isConnected && !f._frame) formErr(f, null, 'The photo is not on this phone yet (no internet?). Take a new one, or try again online.'); }
+}
+// the framed photo of a form, kept whole with its circle; false when no photo was framed
+async function keepProfile(f, id) {
+  const fr = f._frame;
+  if (!fr || !fr.cw) return false;
+  const p = await prepareFile(fr.file);
+  await keepFile({ for: id, type: 'profile', name: p.name, mime: p.mime, crop: frameCrop(fr) }, p.data);
+  return true;
+}
+async function saveProfile(f) {
+  const id = f.dataset.id;
+  if (!f._frame) return formErr(f, null, 'Take or choose a photo first.');
+  const was = cropOf(latestFile(id, 'profile'));
+  if (f._frame.reused && was && f._frame.cw && frameCrop(f._frame).every((n, i) => Math.abs(n - was[i]) < 0.002)) { workerDetail(id); return toast('Nothing changed'); } // not sent again for nothing
+  try { await keepProfile(f, id); } catch (e) { return formErr(f, null, e.message); }
+  workerDetail(id); toast('Profile photo saved ✓');
 }
 
 function workerForm(old) {
@@ -108,7 +149,7 @@ function workerForm(old) {
       </div>`}
       ${textField('idNo', 'National ID or passport number', '', d.idNo, false)}
       ${old ? '' : `<label class="fld"><span>Photo of the national ID or passport</span><input type="file" name="idphoto" accept="image/*,application/pdf" required></label>
-      <label class="fld"><span>Profile photo <em>(optional — shown in the staff list)</em></span><input type="file" name="profile" accept="image/*" capture="environment"></label>`}
+      ${profileField('Profile photo <em>(optional — shown in the staff list)</em>', PROFILE_HINT)}`}
       ${byField()}${approvalNote(old)}
       <p class="err"></p>
       <button class="btn primary">${old ? saveLabel() : 'Add employee'}</button>
@@ -171,12 +212,9 @@ async function saveWorker(f) {
   const extra = [rec.clearedTo && `salary cleared up to ${fmtDate(rec.clearedTo)}`, rec.openingAmount && beforeText(rec.openingAmount, rec.cur)].filter(Boolean).join(' · ');
   update({ workers: [...S.workers, { id, ...rec, status: 'active', by, createdAt: stampSec() }], seq, lastBy: by,
     log: logWith([['Employee', id, `${rec.name} added · ${rec.job} · ${money(wage, rec.cur)} a month from ${fmtDate(rec.start)}${extra ? ' · ' + extra : ''}`]], by) });
-  for (const type of ['idphoto', 'profile']) {
-    const file = f.elements[type].files[0];
-    if (!file) continue;
-    try { const p = await prepareFile(file); await keepFile({ for: id, type, name: p.name, mime: p.mime }, p.data); }
-    catch (e) { alert(`${FILE_NAME[type]}: ${e.message}`); }
-  }
+  try { const file = f.elements.idphoto.files[0], p = file && await prepareFile(file); if (p) await keepFile({ for: id, type: 'idphoto', name: p.name, mime: p.mime }, p.data); }
+  catch (e) { alert(`${FILE_NAME.idphoto}: ${e.message}`); }
+  try { await keepProfile(f, id); } catch (e) { alert(`${FILE_NAME.profile}: ${e.message}`); }
   render(); workerDetail(id); toast(`${rec.name} added ✓`);
 }
 

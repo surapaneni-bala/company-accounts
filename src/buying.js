@@ -56,7 +56,7 @@ function needGroups(list) {
 
 /* ---------- the list ---------- */
 // Buying's tabs: the checklist, trips, suppliers, budgets
-const buyNav = active => `<nav class="subnav" aria-label="Buying">${[['buying', '✓ List'], ['trips', '✈️ Trips'], ['suppliers', '🏭 Suppliers'], ['budgets', '💰 Budgets']].map(([a, t]) => `<button type="button" data-act="${a}"${a === active ? ' aria-current="page"' : ''}>${t}</button>`).join('')}</nav>`;
+const buyNav = active => `<nav class="subnav" aria-label="Buying">${[['buying', '📝', 'List'], ['trips', '✈️', 'Trips'], ['suppliers', '🏭', 'Suppliers'], ['budgets', '💰', 'Budgets']].map(([a, i, t]) => `<button type="button" data-act="${a}"${a === active ? ' aria-current="page"' : ''}><span aria-hidden="true">${i}</span>${t}</button>`).join('')}</nav>`;
 // three tabs, as simple as a shopping list: still to buy, bought (on its way), received; dropped ones apart
 const BUY_TABS = { open: ['To buy', ['idea', 'tobuy']], bought: ['Bought', ['ordered', 'inspected', 'shipped']], received: ['Received', ['received']], dropped: ['Dropped', ['dropped']] };
 let buyView = { view: 'open', project: '', q: '' };
@@ -271,7 +271,7 @@ const STEPS = [['tobuy', 'To buy'], ['ordered', 'Bought'], ['inspected', 'Checke
 const dayMonth = d => fmtDate(d).replace(/ \d{4}$/, '');
 function stepper(n) {
   const at = STEPS.findIndex(([s]) => s === n.status);
-  return `<ol class="steps" aria-label="Where it stands">${STEPS.map(([s, t], i) => `<li class="${i <= at ? 'on' : ''}${i === at ? ' now' : ''}"${i === at ? ' aria-current="step"' : ''}><span aria-hidden="true"></span>${t}${n.steps && n.steps[s] ? `<small>${esc(dayMonth(n.steps[s]))}</small>` : ''}</li>`).join('')}</ol>`;
+  return `<ol class="stepper" aria-label="Where it stands">${STEPS.map(([s, t], i) => `<li class="${i <= at ? 'on' : ''}${i === at ? ' now' : ''}"${i === at ? ' aria-current="step"' : ''}><span aria-hidden="true"></span>${t}${n.steps && n.steps[s] ? `<small>${esc(dayMonth(n.steps[s]))}</small>` : ''}</li>`).join('')}</ol>`;
 }
 // the one thing to do next, big; the rarer ones as links under it
 function nextStep(n) {

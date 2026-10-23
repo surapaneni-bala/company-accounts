@@ -519,9 +519,10 @@ const photoField = who => `<div class="fld photo-fld"><span>Photo of ${esc(who)}
   <p class="muted framer-hint" hidden>Move the photo with your finger and zoom in or out (all the way out shows the whole photo) — it goes on the slip exactly like this.</p>
   <p class="note reused-note" hidden>📷 The photo from the old voucher: use it as it is, move or zoom it, or take another.</p></div>`;
 const startFramer = input => input.files[0] && frameFile(input.form, input.files[0]).catch(e => alert(e.message));
-async function frameFile(f, file, reused = false) {
-  const img = await imgFrom(file), a = img.naturalWidth / img.naturalHeight;
-  f._frame = { file, img, reused, zoom: 1, min: Math.min(a / PHOTO_RATIO, PHOTO_RATIO / a), x: 0, y: 0, fresh: true }; // zoom 1 fills the box, min shows the whole photo
+// A round framer (a profile photo) is square, and never zooms out past filling it. crop: where it was framed before.
+async function frameFile(f, file, reused = false, crop = null) {
+  const img = await imgFrom(file), a = img.naturalWidth / img.naturalHeight, round = $('.framer', f).classList.contains('round');
+  f._frame = { file, img, reused, crop, zoom: 1, min: round ? 1 : Math.min(a / PHOTO_RATIO, PHOTO_RATIO / a), x: 0, y: 0, fresh: true }; // zoom 1 fills the box, min shows the whole photo
   const box = $('.photo-fld', f);
   ['.framer', '.framer-tools', '.framer-hint'].forEach(sel => { $(sel, box).hidden = false; });
   $('.reused-note', box).hidden = !reused;
@@ -535,8 +536,10 @@ function drawFramer(f) {
   const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1, cw = r.width, ch = r.height;
   if (cv.width !== Math.round(cw * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
   if (fr.cw && cw !== fr.cw) { fr.x *= cw / fr.cw; fr.y *= cw / fr.cw; } // the box changed size (phone turned): keep the framing
-  const iw = fr.img.naturalWidth, ih = fr.img.naturalHeight, s = Math.max(cw / iw, ch / ih) * fr.zoom;
-  if (fr.fresh) { fr.x = (cw - iw * s) / 2; fr.y = (ch - ih * s) / 2; fr.fresh = false; } // starts centred
+  const iw = fr.img.naturalWidth, ih = fr.img.naturalHeight, fit = Math.max(cw / iw, ch / ih);
+  if (fr.fresh && fr.crop) { fr.zoom = Math.min(4, Math.max(fr.min, cw / (fr.crop[2] * iw) / fit)); f.elements.zoom.value = fr.zoom; }
+  const s = fit * fr.zoom;
+  if (fr.fresh) { [fr.x, fr.y] = fr.crop ? [-fr.crop[0] * iw * s, -fr.crop[1] * iw * s] : [(cw - iw * s) / 2, (ch - ih * s) / 2]; fr.fresh = false; } // as framed before, or centred
   const keep = (v, room) => Math.min(Math.max(0, room), Math.max(Math.min(0, room), v)); // larger than the box: no gaps; smaller: stays inside it
   fr.x = keep(fr.x, cw - iw * s); fr.y = keep(fr.y, ch - ih * s);
   fr.cw = cw; fr.s = s;
@@ -581,6 +584,13 @@ function framedPhoto(f) {
   g.drawImage(fr.img, fr.x * k, fr.y * k, fr.img.naturalWidth * fr.s * k, fr.img.naturalHeight * fr.s * k);
   return c;
 }
+// The square a round framer shows, as parts of the photo's width: [left, top, size]. Kept with a profile photo.
+const frameCrop = fr => [-fr.x / fr.s, -fr.y / fr.s, fr.cw / fr.s].map(n => Math.round(n / fr.img.naturalWidth * 1e4) / 1e4);
+// a kept crop, if it is a sound one (it comes back from the sheet: never trusted into a style as it is)
+const cropOf = f => { const c = f && f.crop; return Array.isArray(c) && c.length === 3 && c.every(Number.isFinite) && c[2] > 0 && c[2] <= 1 ? c : null; };
+// a profile photo in its circle: the part chosen when it was framed (a photo framed before this: its middle)
+const avatarImg = (f, url) => { const c = cropOf(f);
+  return `<img src="${url}" alt=""${c ? ` style="position:absolute;max-width:none;height:auto;width:${100 / c[2]}%;left:${-100 * c[0] / c[2]}%;top:${-100 * c[1] / c[2]}%"` : ''}>`; };
 // A payment made again (its voucher cancelled when the amount changed): the photo taken for the old voucher is put in the
 // box, to use as it is, frame again or replace (owner, 15 Oct 2026). The signature is always taken new.
 const lastPhoto = id => filesFor(id, 'photo').filter(f => !f.removed && !f.replaced).pop();
