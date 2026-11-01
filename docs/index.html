@@ -129,7 +129,7 @@ button { font: inherit; color: inherit; }
 .filters { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .filters input, .filters select { font: inherit; font-size: 16px; padding: 12px 14px; border: 2px solid var(--line); border-radius: var(--r-sm); background: var(--card); min-width: 0; }
 .sumline { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 6px 0; font-weight: 700; color: var(--muted); }
-.sumline b { font-size: 22px; } .out-c { color: var(--out); } .in-c { color: var(--in); }
+.sumline { gap: 12px; } .sumline > span { white-space: nowrap; } .sumline b { font-size: 22px; text-align: right; } /* "6 entries" stays on one line; a long total wraps on the right */ .out-c { color: var(--out); } .in-c { color: var(--in); }
 
 /* projects */
 .proj { display: block; width: 100%; border: 0; text-align: left; cursor: pointer; padding: 18px; margin-bottom: 12px; transition: transform .2s var(--ease); }
@@ -191,6 +191,11 @@ details.manual { margin: 4px 0 12px; } details.manual summary { cursor: pointer;
 .fld.check { display: flex; gap: 10px; align-items: center; font-weight: 700; }
 .fld.check input { width: 20px; height: 20px; padding: 0; margin: 0; flex: none; }
 .fld.check > span { display: block; font: inherit; margin: 0; min-width: 0; overflow-wrap: anywhere; } /* the words, with their small line under them (not a field title) */
+/* a login's "what else may they see": a plain group of ticks */
+fieldset.fld { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
+fieldset.fld .fld.check { margin-bottom: 8px; font-weight: 600; }
+.see-h { margin: 12px 0 6px; font-size: 14px; font-weight: 700; }
+fieldset[disabled] .fld.check { opacity: .5; }
 .steps { margin: 0 0 16px; padding-left: 22px; display: grid; gap: 8px; }
 .muted { color: var(--muted); font-size: 15px; }
 .setrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
@@ -221,6 +226,7 @@ nav.tabs button.on { color: var(--ink); background: var(--paper); }
 nav.tabs svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* sheets (dialogs) */
+dialog.sheet:focus { outline: none; } /* the sheet itself takes the focus when it opens: no ring drawn round its × on a phone */
 dialog.sheet { border: 0; padding: 0; width: min(640px, calc(100% - 32px)); max-height: 92vh; max-height: 92dvh; overflow: auto; border-radius: 26px; background: var(--card); color: var(--ink); box-shadow: 0 30px 80px -20px rgba(0,0,0,.45); }
 dialog::backdrop { background: rgba(27,34,50,.5); backdrop-filter: blur(3px); }
 .sin { padding: 20px 20px 24px; }
@@ -248,6 +254,13 @@ dialog::backdrop { background: rgba(27,34,50,.5); backdrop-filter: blur(3px); }
 .fld em { font-style: normal; color: var(--muted); font-weight: 600; }
 .fld input, .fld select, #pwIn { width: 100%; font: inherit; font-size: 18px; padding: 14px 16px; border: 2px solid var(--line); border-radius: var(--r-sm); background: var(--field); color: var(--ink); }
 .fld input:focus, .fld select:focus, #pwIn:focus, .brow input:focus { outline: none; border-color: var(--ink); background: #fff; }
+/* iPhone only (-webkit-touch-callout): Safari draws a date box at its own width, wider than a half-screen column, so it ran off
+   the right edge (Edit trip, New document); drawn plain it fills its column, the date on the left like every other box. Tapping
+   it still opens the iPhone's date wheel. */
+@supports (-webkit-touch-callout: none) {
+  input[type=date], input[type=datetime-local], input[type=time], input[type=month] { -webkit-appearance: none; appearance: none; display: block; width: 100%; min-width: 0; min-height: calc(1.25em + 32px); }
+  input::-webkit-date-and-time-value { text-align: left; }
+}
 .amt-in { display: flex; align-items: center; gap: 6px; border: 2px solid var(--line); border-radius: 18px; padding: 4px 16px; background: var(--field); }
 .amt-in:focus-within { border-color: var(--ink); background: #fff; }
 .amt-in b { font-size: 30px; color: var(--muted); }
@@ -592,7 +605,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
   </div>
 </nav>
 
-<dialog id="sheet" class="sheet"><div class="sin" id="sheetIn"></div></dialog>
+<dialog id="sheet" class="sheet" tabindex="-1"><div class="sin" id="sheetIn"></div></dialog>
 
 <dialog id="pw" class="sheet pwbox">
   <form id="pwForm" class="sin">
@@ -613,7 +626,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '77c7cac930'; // filled in by tools/build.js
+const APP_VERSION = '8590765875'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -692,10 +705,11 @@ const total = a => a.reduce((t, x) => t + cents(x.amount), 0) / 100;
 const minus = (a, b) => (cents(a) - cents(b)) / 100;
 const byCur = items => Object.fromEntries(CURS.map(c => [c, total(items.filter(x => x.cur === c))]));
 const byAt = (a, b) => a.at.localeCompare(b.at) || (a.createdAt || '').localeCompare(b.createdAt || '') || a.id.localeCompare(b.id);
-// The office manager's Accounts show only the expenses she entered (owner, 12 Oct 2026). An admin's payments to employees
-// (and regular payments) still reach her phone, for the Employees screens only.
+// The office manager's Accounts show only the expenses she entered (owner, 12 Oct 2026), and those an admin lets her see:
+// some projects, places or people, or every payment (1 Nov 2026, seesEntry). An admin's other payments to employees (and
+// regular payments) still reach her phone, for the Employees screens only.
 const ownAccounts = () => signedIn() && !can('money') && can('staff');
-const accountsE = () => (ownAccounts() ? live(S.expenses).filter(e => e.uid === session.user.id) : live(S.expenses));
+const accountsE = () => (ownAccounts() ? live(S.expenses).filter(e => e.uid === session.user.id || seesEntry(session.user.sees, e)) : live(S.expenses));
 const projName = id => id ? (S.projects.find(p => p.id === id)?.name || 'Unknown project') : 'General (no project)';
 const fileSafe = s => s.replace(/[\\/:*?"<>|]+/g, '').trim() || 'Company';
 const randHex = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -803,7 +817,7 @@ function openSheet(html) {
   if (!d.open) { back = null; d.showModal(); }
   here = null;
   d.scrollTop = 0;
-  ($('[autofocus]', d) || $('.close', d))?.focus();
+  ($('[autofocus]', d) || d).focus(); // the sheet itself (a ring round × looked like a mistake on iPhones); keyboard users go on from there
 }
 // a sheet others can return to: call right after drawing it
 function comeBack(fn) { here = back = fn; }
@@ -836,7 +850,7 @@ function suggestions(field) {
 const datalists = () => ['paidTo', 'reason', 'location', 'by'].map(f => `<datalist id="dl-${f}">${suggestions(f).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('');
 const textField = (name, label, ph, val, req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input name="${name}" placeholder="${ph}" value="${esc(val)}" ${['paidTo', 'reason', 'location'].includes(name) ? `list="dl-${name}"` : ''} autocomplete="off" maxlength="160" ${req ? 'required' : ''}></label>`;
 const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${esc(c)}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
-const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${esc(val || '')}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
+const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${esc(val || '')}" autocomplete="off" ${req ? 'required' : ''} ${req && !val ? 'autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
 // Every SSP entry states that day's rate (SSP for 1 US dollar), so its dollar value is known later.
 const rateField = (cur, rate) => `<label class="fld ratef" ${cur === 'SSP' ? '' : 'hidden'}><span>SSP for 1 USD <em>(today's rate)</em></span><input name="rate" inputmode="decimal" placeholder="e.g. 4500" value="${esc(rate || S.lastRate || '')}" autocomplete="off" ${cur === 'SSP' ? 'required' : ''}><small class="amt-preview rate-usd"></small></label>`;
 // the rate typed in a form: undefined for USD, null when SSP and missing or wrong
@@ -975,7 +989,7 @@ function viewHome() {
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
   return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${brandBanner()}${lostBanner()}${doubleBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
-  ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? 'Your expenses — only the ones you entered. The balances are kept by the admins.' : 'Your expenses — only you and the admins see them.'}</p>`}
+  ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? `${signedIn() && session.user.sees ? 'The expenses you entered, and those an admin lets you see.' : 'Your expenses — only the ones you entered.'} The balances are kept by the admins.` : 'Your expenses — only you and the admins see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
     ${signedIn() ? `<button class="eye" data-act="${hide ? 'reveal' : 'conceal'}">${hide ? '👁 Show' : '🙈 Hide'}</button>` : ''}
@@ -1820,6 +1834,30 @@ function workerLedger(w, pays, today, absences = []) {
   mine.forEach(p => { const c = inWage(p, w.cur); if (c === null) unconverted.push(p.id); else paid += c; });
   const opening = Math.round((w.openingAmount || 0) * 100);
   return { cur: w.cur, months, earned: earned / 100, paid: paid / 100, opening: opening / 100, balance: (opening + earned - paid) / 100, unconverted };
+}
+
+// An advance paid back a little each month (owner, 1 Nov 2026: "I took an advance of 1000 and earn 200 a month: cut 100 a
+// month and give me 100 as salary till the advance is cleared"). The account itself never changes — the advance is a payment
+// like any other, so until it is repaid they owe it (a balance below zero); only what is paid each month does.
+// In cents: owedEnd = owed up to the end of the month paid (every payment counted); owedBefore = the same up to the end of the
+// month before; paidMonth = salary already paid for this month (that is not more advance); repay = the most taken back in a
+// month (0: all of it from the next salary, as before). → pay = to pay now, debt = advance owed as the month starts,
+// back = what comes off it this month, left = still owed after paying `pay`.
+function salaryDue(owedEnd, owedBefore, paidMonth, repay) {
+  const debt = Math.max(0, -(owedBefore + paidMonth));
+  const pay = Math.max(0, owedEnd + (repay > 0 ? Math.max(0, debt - repay) : 0));
+  const left = Math.min(debt, Math.max(0, pay - owedEnd));
+  return { pay, debt, back: debt - left, left };
+}
+
+// What else an office manager may see in Accounts, besides what she entered (owner, 1 Nov 2026): every payment, or those for
+// some projects, at some places, or entered by some people. sees = { all, p: [project ids], l: [places], u: [login ids] }.
+// The Google Sheet decides what reaches her phone by the same rule (seesE_ in Code.gs); this only sorts what is there.
+const placeKey = s => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+function seesEntry(sees, e) {
+  if (!sees || typeof sees !== 'object') return false;
+  const has = (list, v) => Array.isArray(list) && !!v && list.includes(v);
+  return sees.all === true || has(sees.p, e.project) || has(sees.l, placeKey(e.location)) || has(sees.u, e.uid);
 }
 
 // Advances given in a month, in US dollars (the monthly limit is in dollars).
@@ -3158,10 +3196,11 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 21; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 22; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // What an older script still keeps on the phones: the version that first stores it. From NEEDED_SCRIPT on, everything goes
 // up and a newer script only improves things — said quietly, never as a warning (owner, 23 Oct 2026: the message showed
 // "needed" while everything worked).
+const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [22, 'you can choose what else an office manager may see']];
 const NEEDED_SCRIPT = 20, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines']];
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
@@ -3239,7 +3278,8 @@ function inviteHint(f) {
 // Signing in and setting up logins send their own details instead.
 async function callServer(link, body) {
   const who = body.op === 'login' || body.op === 'setup' ? {} : signedIn() ? { token: session.token } : { key: link.k };
-  const text = JSON.stringify({ ...body, ...who }), ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), SYNC_TIMEOUT_MS + text.length / SLOWEST_BPS * 1000);
+  // sees: 1 = this app knows what an office manager may be given (sheet script v22 sends it only then)
+  const text = JSON.stringify({ ...body, ...who, sees: 1 }), ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), SYNC_TIMEOUT_MS + text.length / SLOWEST_BPS * 1000);
   let res;
   // text/plain body = no CORS preflight, which Apps Script cannot answer
   try { res = await fetch(link.u, { method: 'POST', body: text, signal: ctl.signal }); }
@@ -3327,8 +3367,9 @@ function applyPull(pull, force = new Map()) {
 
 // A login without the money right (the office manager since script v11) must not keep money it received before: once
 // the sheet stops sending it, everything not waiting to be sent leaves this phone and what it may see is fetched again.
-// Since script v14 that includes expenses others entered, except payments to an employee or of a regular payment.
-const notMine = (e, unsent) => e.uid !== session.user.id && !e.worker && !e.regular && !unsent.has(e.id);
+// Since script v14 that includes expenses others entered, except payments to an employee or of a regular payment, and (v22)
+// those an admin lets her see (seesEntry).
+const notMine = (e, unsent) => e.uid !== session.user.id && !e.worker && !e.regular && !seesEntry(session.user.sees, e) && !unsent.has(e.id);
 function dropMoney() {
   if (!signedIn() || can('money') || (S.link.v || 0) < 11) return false;
   const unsent = new Set(S.dirty);
@@ -3351,7 +3392,7 @@ async function syncNow() {
     // by the sheet's copy — unless they were edited again while this request ran (they go again, and are refused again)
     const before = stampsNow(), lostIds = new Set((res.older || []).filter(id => push.some(p => p.id === id && p.u === before.get(id))));
     const lostNow = [...lostIds].map(id => ({ id, what: recordLabel(id), at: stampSec() }));
-    const changed = applyPull(res.pull || [], new Map([...lostIds].map(id => [id, before.get(id)])));
+    const changed = applyPull(res.pull || [], new Map([...lostIds].map(id => [id, before.get(id)]))) || !!(res.forget || []).length;
     if (changed) repairImportedMoves(); // a device on an old version may have sent mistaken expenses
     // a record edited while the request was running stays queued
     // records the sheet's script cannot store yet stay queued until it is updated
@@ -3361,9 +3402,12 @@ async function syncNow() {
     const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link;
     S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
     S = { ...S, base: Object.fromEntries(Object.entries(S.base || {}).filter(([id]) => S.dirty.includes(id))) }; // sent: the next edit starts from the new copy
+    // entries an office manager may no longer see (moved to another project or place): her old copies go, unless changed here
+    const forget = new Set((res.forget || []).filter(id => !S.dirty.includes(id)));
+    if (forget.size) S = { ...S, expenses: S.expenses.filter(e => !forget.has(e.id)) };
+    if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once; what she may see, before checking it
     if (dropMoney()) return; // this login may not hold the company's money: fetch again what it may see
     save();
-    if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
     lastRefused = refused;
     if (notAllowed.size) resendRefused(notAllowed);
     // the time the sheet stored each copy at: taken in place of this phone's own stamp (its clock may be wrong), unless
@@ -3416,7 +3460,7 @@ function syncCard() {
     <p class="muted">${esc(syncText())}${outbox.length ? ` ${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload: ${esc(uploadWhy())}` : ''}</p>
     ${sync.err === OUTDATED_MSG ? '<button class="btn primary" data-act="howUpdate" style="margin-bottom:10px">Show me how to update it</button>'
       : (S.link.v || 2) < NEEDED_SCRIPT && can('settings') ? `<p class="note">The Google Sheet script needs updating (this sheet runs version ${S.link.v || 2}; this app needs ${NEWEST_SCRIPT}). Until then ${esc(SCRIPT_GAINS.filter(([v]) => (S.link.v || 2) < v).map(([, t]) => t).join(', '))} stay on this phone. <button class="link" data-act="howUpdate">Show me how</button></p>`
-      : (S.link.v || 2) < NEWEST_SCRIPT && can('settings') ? `<p class="muted">Everything is syncing. An improved sheet script (version ${NEWEST_SCRIPT}; this sheet runs ${S.link.v}) makes it safer when two phones change the same entry — update it when you have two minutes: <button class="link" data-act="howUpdate">Show me how</button></p>` : ''}
+      : (S.link.v || 2) < NEWEST_SCRIPT && can('settings') ? `<p class="muted">Everything is syncing. With the newer sheet script (version ${NEWEST_SCRIPT}; this sheet runs ${S.link.v}) ${esc(OPTIONAL_GAINS.filter(([v]) => S.link.v < v).map(([, t]) => t).join(', and '))} — update it when you have two minutes: <button class="link" data-act="howUpdate">Show me how</button></p>` : ''}
     ${outbox.length ? `<details class="more"><summary>${outbox.length} file${outbox.length === 1 ? '' : 's'} waiting to upload</summary><ul class="waiting">${outbox.slice(0, 12).map(f => `<li>${esc(f.no || f.name)}${uploadFails.has(f.id) ? ` — <span class="out-c">${esc(uploadFails.get(f.id))}</span>` : ''}</li>`).join('')}</ul>
       <button class="btn small ghost" data-act="retryUploads">Try again now</button></details>` : ''}
     ${S.link.sheet && can('money') ? `<a class="btn in" href="${esc(S.link.sheet)}" target="_blank" rel="noopener">Open the Google Sheet</a>` : ''}
@@ -3546,7 +3590,7 @@ function migrate(s) {
 // The sign-in lives in its own storage slot, so it never ends up in a backup file.
 const SESSION_KEY = KEY + '-login';
 const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper' };
-const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Staff and salaries · her own expenses only, no company money · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
+const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Staff and salaries · their own payments, and any you choose below · no company money · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
 const RIGHTS = {
   admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones', 'staff'],
   manager: ['add', 'suggest', 'date', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval; no money (balances)
@@ -3690,7 +3734,33 @@ const lastSeen = u => (u.lastLogin ? ` · signed in ${fmtAbs(stamp(new Date(u.la
 const userRow = u => `<button class="row" data-act="userForm" data-id="${esc(u.id)}">
   <span class="dot">${u.active ? '👤' : '⛔'}</span>
   <span class="main"><span class="t"><span class="tt">${esc(u.name)}</span>${u.active ? '' : '<i class="tag warn">Blocked</i>'}${session.user.id === u.id ? '<i class="tag">You</i>' : ''}</span>
-  <span class="s">${esc(u.username)} · ${ROLES[u.role]}${lastSeen(u)}</span></span></button>`;
+  <span class="s">${esc(u.username)} · ${ROLES[u.role]}${u.sees ? ` · also sees ${esc(seesText(u.sees))}` : ''}${lastSeen(u)}</span></span></button>`;
+// What else an office manager may see (owner, 1 Nov 2026), in words: "every payment" or "Villa project, Juba, what Babu enters"
+const tidyPlace = s => String(s || '').trim().replace(/\s+/g, ' ');
+const placeName = key => tidyPlace((live(S.expenses).find(e => placeKey(e.location) === key) || { location: key }).location);
+function seesText(s) {
+  if (s.all) return 'every payment';
+  const who = id => (usersCache.find(u => u.id === id) || { name: 'someone' }).name;
+  return [...(s.p || []).map(projName), ...(s.l || []).map(placeName), ...(s.u || []).map(id => `what ${who(id)} enters`)].join(', ');
+}
+// the choice in the login form: every payment, or the projects, places and people ticked
+function seesField(u) {
+  const s = (u && u.sees) || {}, on = (list, v) => (list || []).includes(v) ? 'checked' : '';
+  // what was given stays offered even when nothing uses it now (a deleted project, a place no longer typed): saving the login
+  // for something else never takes it away by itself
+  const places = [...new Map([...(s.l || []).map(k => [k, placeName(k)]), ...live(S.expenses).filter(e => placeKey(e.location)).map(e => [placeKey(e.location), tidyPlace(e.location)])]).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const projects = [...live(S.projects), ...(s.p || []).filter(id => !live(S.projects).some(p => p.id === id)).map(id => ({ id, name: projName(id) }))];
+  const people = [...usersCache.filter(x => !u || x.id !== u.id), ...(s.u || []).filter(id => !usersCache.some(x => x.id === id)).map(id => ({ id, name: 'A login that no longer exists' }))];
+  const box = (name, v, label, list) => `<label class="fld check"><input type="checkbox" name="${name}" value="${esc(v)}" ${on(list, v)}><span>${esc(label)}</span></label>`;
+  const old = (S.link && S.link.v || 0) < 22;
+  return `<fieldset class="fld sees" ${u && u.role === 'manager' ? '' : 'hidden'} ${old ? 'disabled' : ''}><span>What else may they see in Accounts? <em>(their own payments always; never money received or balances)</em></span>
+    ${old ? `<p class="note">This needs the Google Sheet script version 22 (the sheet runs ${S.link ? S.link.v || 2 : '—'}). Sheet tab → Show me how.</p>` : ''}
+    <label class="fld check"><input type="checkbox" name="seeAll" ${s.all ? 'checked' : ''}><span><b>Every payment</b></span></label>
+    ${projects.length ? `<p class="muted see-h">Or the payments for these projects</p>${projects.map(p => box('seeP', p.id, p.name, s.p)).join('')}` : ''}
+    ${places.length ? `<p class="muted see-h">At these places</p>${places.map(([k, label]) => box('seeL', k, label, s.l)).join('')}` : ''}
+    ${people.length ? `<p class="muted see-h">Entered by</p>${people.map(x => box('seeU', x.id, x.name, s.u)).join('')}` : ''}
+  </fieldset>`;
+}
 function userForm(id) {
   const u = usersCache.find(x => x.id === id);
   const role = u ? u.role : 'store';
@@ -3699,6 +3769,7 @@ function userForm(id) {
       <label class="fld"><span>Name</span><input name="name" required maxlength="60" value="${esc(u?.name)}" placeholder="e.g. Mary" ${u ? '' : 'autofocus'}></label>
       <label class="fld"><span>Username <em>(what they type to sign in)</em></span><input name="username" required maxlength="30" autocapitalize="off" autocorrect="off" spellcheck="false" value="${esc(u?.username)}" placeholder="e.g. mary"></label>
       <div class="fld"><span>What may they do?</span><div class="curseg roles">${Object.keys(ROLES).map(r => `<label><input type="radio" name="role" value="${esc(r)}" ${r === role ? 'checked' : ''}><span><b>${ROLES[r]}</b><small>${ROLE_HELP[r]}</small></span></label>`).join('')}</div></div>
+      ${seesField(u)}
       <label class="fld"><span>${u ? 'New password <em>(leave empty to keep theirs)</em>' : 'Password'}</span><input name="password" ${u ? '' : 'required'} minlength="8" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="At least 8 characters"></label>
       ${u ? `<label class="fld check"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> Login is open <em>(untick to block this person)</em></label>` : ''}
       <p class="err"></p>
@@ -3709,13 +3780,19 @@ function userForm(id) {
 async function saveUserForm(f) {
   const v = Object.fromEntries(new FormData(f));
   const id = f.dataset.id;
-  const user = { name: clean(v.name), username: clean(v.username).toLowerCase(), role: v.role, ...(id ? { id, active: !!v.active } : {}), ...(v.password ? { password: v.password } : {}) };
+  const fd = new FormData(f), was = usersCache.find(x => x.id === id);
+  const sees = v.role !== 'manager' ? null : v.seeAll ? { all: true, p: [], l: [], u: [] } : { all: false, p: fd.getAll('seeP'), l: fd.getAll('seeL'), u: fd.getAll('seeU') };
+  const none = !sees || (!sees.all && !sees.p.length && !sees.l.length && !sees.u.length);
+  const user = { name: clean(v.name), username: clean(v.username).toLowerCase(), role: v.role, ...(id ? { id, active: !!v.active } : {}), ...(v.password ? { password: v.password } : {}), ...((S.link.v || 0) >= 22 ? { sees: none ? null : sees } : {}) };
+  const seesChanged = (S.link.v || 0) >= 22 && was && JSON.stringify(was.sees || null) !== JSON.stringify(none ? null : sees);
   $('.err', f).textContent = 'Saving…';
   try { usersCache = (await callServer(S.link, { op: 'saveUser', user })).users; }
   catch (e) { return formErr(f, null, e.offline ? 'No internet. Managing logins needs internet.' : e.message); }
-  const what = [id ? 'Login changed' : 'Login given', `${user.name} (${user.username}) · ${ROLES[user.role]}`, id && !user.active && 'blocked', id && v.password && 'new password'].filter(Boolean).join(' · ');
+  const now = usersCache.find(x => x.username === user.username);
+  const what = [id ? 'Login changed' : 'Login given', `${user.name} (${user.username}) · ${ROLES[user.role]}`, id && !user.active && 'blocked', id && v.password && 'new password',
+    (seesChanged || (!id && now && now.sees)) && (now && now.sees ? `also sees ${seesText(now.sees)}` : 'sees only their own payments')].filter(Boolean).join(' · ');
   update({ log: logWith([['Logins', id || '—', what]]) });
-  toast(id ? 'Saved ✓' : `Login created ✓ Tell ${user.name}: username "${user.username}" and the password`);
+  toast(!id ? `Login created ✓ Tell ${user.name}: username "${user.username}" and the password` : seesChanged ? `Saved ✓ ${user.name} signs in again to see the change` : 'Saved ✓');
   if (id === session.user.id && (user.role !== session.user.role || v.password)) return syncNow(); // own role or password changed: sign in again
   usersSheet();
 }
@@ -4083,6 +4160,7 @@ function workerDetail(id) {
     <div class="wtop"><button type="button" class="wphoto" id="wPhoto" data-act="profilePhoto" data-id="${esc(id)}" aria-label="${photo ? 'Move or change' : 'Add'} the profile photo">${esc(initials(w.name))}</button>
       <div><div class="dbig ${l.balance < 0 ? 'out' : ''}" style="margin:0">${money(l.balance, l.cur)}</div><small class="muted">${l.balance >= 0 ? `still to pay ${esc(w.name)}` : 'paid more than earned so far'}${left ? ' · has left' : ''}</small></div></div>
     ${waitingNote(id)}
+    ${left ? '' : advanceNote(w)}
     ${approvedAdvances(id).map(c => `<div class="banner new"><span>✅ Advance of ${money(+c.after.amount, c.after.cur)} approved by ${esc(c.decidedBy)}.</span><button class="btn small" data-act="payWorker" data-pay="advance" data-id="${esc(id)}" data-approval="${esc(c.id)}">Give it</button></div>`).join('')}
     <div class="two">${left
       ? `<button class="btn out" data-act="settle" data-id="${esc(id)}">${l.balance > 0.004 ? '💵 Pay final settlement' : '📑 Final settlement statement'}</button>`
@@ -4104,6 +4182,40 @@ function workerDetail(id) {
       : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Ask to delete employee 🔒</button>` : ''}`);
   comeBack(() => workerDetail(id));
   if (photo) { $('#wPhoto').dataset.photo = photo.id; loadThumbs(); }
+}
+
+// An advance not yet repaid: how much, and how it comes back (all from the next salary, or a part each month)
+function advanceNote(w) {
+  const month = payMonth(w);
+  if (!month) return '';
+  const now = month === today().slice(0, 7), d = dueFor(w, month, '', now);
+  if (!d.debt) return '';
+  const n = d.repay && monthsToRepay(w, d.debt, d.repay);
+  return `<div class="note">💵 Advance to repay: <b>${money(d.debt, w.cur)}</b> — ${d.repay ? `${money(d.repay, w.cur)} comes off each salary, about ${n} more month${n === 1 ? '' : 's'}` : 'all of it comes off the next salary'}. ${now ? `At the end of ${monthName(month)} pay` : `To pay for ${monthName(month)}:`} <b>${money(d.pay, w.cur)}</b>.
+    ${can('edit') && latestAdvance(w.id) ? `<button class="link" data-act="repayForm" data-id="${esc(w.id)}">${d.repay ? 'Change' : 'Take it back a little each month instead'} 🔒</button>` : ''}</div>`;
+}
+async function repayForm(id) {
+  const w = workerOf(id), a = latestAdvance(id);
+  if (!w || !a || !await unlock('Enter the password to change how the advance is taken back.')) return;
+  const d = dueFor(w, payMonth(w));
+  openSheet(`${head('Advance taken back from salary', 'out', w.name)}
+    <form data-form="repay" data-id="${esc(id)}">
+      <p class="note">Still to repay: <b>${money(d.debt, w.cur)}</b>. Their wage: ${money(w.wage, w.cur)} a month.</p>
+      ${repayField(w, repayOf(id))}
+      <p class="err"></p>
+      <button class="btn out">Save</button>
+    </form>`);
+}
+// kept on their latest advance (an admin's change; it does not touch what was paid or signed)
+function saveRepay(f) {
+  const w = workerOf(f.dataset.id), a = latestAdvance(f.dataset.id), repay = repayFrom(f);
+  if (!w || !a) return closeSheet();
+  if (repay === null) return formErr(f, 'repay', REPAY_ERR);
+  const by = myName() || S.lastBy || '';
+  update({ expenses: S.expenses.map(x => (x.id === a.id ? { ...x, repay, editedAt: stampSec(), editedBy: by } : x)),
+    log: logWith([['Edited', a.id, `${w.name}'s advance: ${repay ? `taken back at ${money(repay, w.cur)} a month` : 'all of it from the next salary'}`]], by) });
+  toast('Saved ✓');
+  workerDetail(w.id);
 }
 
 /* ---------- the profile photo, framed by hand in a circle ---------- */
@@ -4386,20 +4498,52 @@ function payMonth(w) {
 function owedFor(w, month) {
   return ledgerOf(w, month ? [today(), `${month}-31`].sort()[0] : today());
 }
+// An advance taken back a little each month (owner, 1 Nov 2026): the most that comes off one month's salary, set when the advance is
+// given (0: all of it from the next salary, as before). The latest advance that says decides, for all they still owe; a new
+// advance starts with the plan already there, so an advance typed in a hurry never changes it by itself.
+const latestAdvance = id => live(S.expenses).filter(e => e.worker === id && e.pay === 'advance').sort(byAt).pop();
+const repayOf = id => { const a = live(S.expenses).filter(e => e.worker === id && e.pay === 'advance' && Number.isFinite(e.repay) && e.repay >= 0).sort(byAt).pop(); return a ? a.repay : 0; };
+// the plan to keep on a new advance: what was typed, or 0 when the box was emptied while there was a plan (nothing when there never was)
+const planFields = (id, repay) => (repay || repayOf(id) ? { repay } : {});
+// a month's salary with the plan applied (calc.js salaryDue), in the wage's money: pay, debt (advance owed as the month starts),
+// back (what comes off it now), left (owed after paying `pay`), repay; skip = a payment left out (a slip shows what was due before it);
+// whole = the whole month, as if worked to its end (what is due when the month in progress ends)
+function dueFor(w, month, skip = '', whole = false) {
+  const all = live(S.expenses).filter(e => e.worker === w.id && e.id !== skip), at = whole ? `${month}-31` : [today(), `${month}-31`].sort()[0];
+  const owed = upTo => cents(workerLedger(w, all, upTo, S.absences).balance);
+  const paidMonth = all.filter(e => e.pay === 'salary' && e.month === month).reduce((t, e) => t + (inWage(e, w.cur) || 0), 0);
+  const repay = repayOf(w.id), d = salaryDue(owed(at), owed(dayBefore(`${month}-01`)), paidMonth, cents(repay));
+  return { pay: d.pay / 100, debt: d.debt / 100, back: d.back / 100, left: d.left / 100, repay };
+}
+// "about 9 more months": what is owed at what comes off a month (never more than the wage can give)
+const monthsToRepay = (w, owed, repay) => Math.ceil(owed / Math.min(repay, w.wage || repay));
+// w = the employee (null: not chosen yet — the amount is then in their wage's money)
+const repayField = (w, val = '') => `<label class="fld"><span>Taken back from salary <em>(optional — how much a month, in ${!w ? "their wage's money" : w.cur === 'USD' ? 'US dollars' : w.cur}; empty: all of it from the next salary)</em></span>
+  <input name="repay" inputmode="decimal" placeholder="e.g. ${!w || w.cur === 'USD' ? 100 : 100000}" value="${esc(val || '')}" autocomplete="off">${w ? `<small class="muted repay-note">Their wage: ${money(w.wage, w.cur)} a month.</small>` : ''}</label>`;
+// the plan typed in a form: 0 for none, null when it is not a number
+const repayFrom = f => { const t = String(f.elements.repay ? f.elements.repay.value : '').trim(); if (!t) return 0; const n = parseAmount(t); return n && n > 0 ? n : null; };
+const REPAY_ERR = 'Type how much comes off each month, like 100 — or leave it empty';
 function payInfo(f) {
   const w = workerOf(f.dataset.id), pay = f.dataset.pay;
   if (pay === 'advance') {
     const used = advancesUsd(live(S.expenses).filter(e => e.worker === w.id), today().slice(0, 7));
-    return `Advances given to ${esc(w.name)} this month: <b>${money(used, 'USD')}</b> of the ${money(ADVANCE_LIMIT_USD, 'USD')} limit.`;
+    const amount = parseAmount(f.elements.amount.value), repay = repayFrom(f), same = formCur(f) === w.cur, owed = payMonth(w) ? dueFor(w, payMonth(w)).debt : 0;
+    const plan = amount && repay ? ` <b>${money(repay, w.cur)}</b> comes off each salary${same ? ` — about ${monthsToRepay(w, owed + amount, repay)} months${owed ? `, with the ${money(owed, w.cur)} already owed` : ''}` : ''}.` : '';
+    return `Advances given to ${esc(w.name)} this month: <b>${money(used, 'USD')}</b> of the ${money(ADVANCE_LIMIT_USD, 'USD')} limit.${plan}`;
   }
   const month = f.elements.month ? f.elements.month.value : '';
   const l = owedFor(w, month), m = l.months.find(x => x.month === month), offs = month ? absencesOf(w.id, month) : [];
-  return `${m ? `${monthName(month)}: ${m.days - m.daysOff} days worked of ${m.days}${offs.length ? ` (not worked: ${esc(dayList(offs))})` : ''} → <b>${money(m.earned, l.cur)}</b><br>` : ''}Still to pay ${esc(w.name)}${month ? ` up to the end of ${monthName(month)}` : ''}: <b>${money(l.balance, l.cur)}</b>`;
+  const worked = m ? `${monthName(month)}: ${m.days - m.daysOff} days worked of ${m.days}${offs.length ? ` (not worked: ${esc(dayList(offs))})` : ''} → <b>${money(m.earned, l.cur)}</b><br>` : '';
+  const d = month ? dueFor(w, month) : null;
+  if (!d || !d.debt) return `${worked}Still to pay ${esc(w.name)}${month ? ` up to the end of ${monthName(month)}` : ''}: <b>${money(l.balance, l.cur)}</b>`;
+  return `${worked}Advance still to repay: <b>${money(d.debt, l.cur)}</b> · ${d.repay
+    ? `<b>${money(d.back, l.cur)}</b> comes off now (${money(d.repay, l.cur)} a month) · ${money(d.left, l.cur)} left after`
+    : `all of it comes off now (to take it back a little each month, set it on ${esc(w.name)}'s page)`}<br>To pay for ${monthName(month)}: <b>${money(d.pay, l.cur)}</b>`;
 }
 function payForm(id, pay, approval) {
   const w = workerOf(id), appr = approval && approvedAdvances(id).find(c => c.id === approval);
   const month = pay === 'salary' ? payMonth(w) : '';
-  const suggested = appr ? +appr.after.amount : pay === 'advance' ? '' : Math.max(0, owedFor(w, month).balance);
+  const suggested = appr ? +appr.after.amount : pay === 'advance' ? '' : pay === 'salary' ? dueFor(w, month).pay : Math.max(0, owedFor(w, month).balance);
   const cur = appr ? appr.after.cur : w.cur;
   const title = { salary: 'Pay salary', advance: 'Give an advance', settlement: 'Final settlement' }[pay];
   openSheet(`${head(title, 'out', w.name)}
@@ -4411,6 +4555,7 @@ function payForm(id, pay, approval) {
       ${appr ? `<input type="hidden" name="cur" value="${esc(cur)}"><p class="muted">Approved by ${esc(appr.decidedBy)}: ${money(+appr.after.amount, cur)}</p>` : curChips(cur, 'Paid in')}
       ${amountField(suggested, cur)}
       ${rateField(cur)}
+      ${pay === 'advance' ? repayField(w, appr && appr.repay !== undefined ? appr.repay : repayOf(w.id)) : ''}
       ${accountChips(S.lastMode || 'Cash', 'Paid from')}
       ${byField()}
       <p class="err"></p>
@@ -4422,8 +4567,8 @@ function payForm(id, pay, approval) {
 function refreshPay(f, t) {
   $('.payinfo', f).innerHTML = payInfo(f);
   if (t && (t.name === 'month' || t.name === 'offDate') && !f.dataset.typed) { // keep the suggested amount in step until they type their own
-    const w = workerOf(f.dataset.id), l = owedFor(w, f.elements.month.value);
-    f.elements.amount.value = Math.max(0, l.balance) || '';
+    const w = workerOf(f.dataset.id);
+    f.elements.amount.value = dueFor(w, f.elements.month.value).pay || '';
     refreshAmount(f.elements.amount);
   }
 }
@@ -4443,6 +4588,8 @@ function savePay(f) {
   const amount = parseAmount(v.amount), cur = formCur(f), rate = rateFrom(f, cur);
   if (amount === null) return formErr(f, 'amount', 'Type the amount paid, like 250');
   if (rate === null) return formErr(f, 'rate', RATE_ERR);
+  const repay = pay === 'advance' ? repayFrom(f) : 0;
+  if (repay === null) return formErr(f, 'repay', REPAY_ERR);
   const by = clean(v.by);
   if (!by) return formErr(f, 'by', 'Type your name');
   const appr = f.dataset.approval && approvedAdvances(w.id).find(c => c.id === f.dataset.approval);
@@ -4450,25 +4597,25 @@ function savePay(f) {
     const used = advancesUsd(live(S.expenses).filter(e => e.worker === w.id), today().slice(0, 7));
     const usd = cur === 'USD' ? amount : amount / rate;
     if (cents(used + usd) > cents(ADVANCE_LIMIT_USD)) {
-      if (!can('edit')) return askAdvance(w, amount, cur, by);
+      if (!can('edit')) return askAdvance(w, amount, cur, by, repay);
       if (!confirm(`This is more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit (${money(used, 'USD')} given this month already).\n\nGive it anyway?`)) return;
     }
   }
   if (appr && (cur !== appr.after.cur || amount > +appr.after.amount)) return formErr(f, 'amount', `The admin approved ${money(+appr.after.amount, appr.after.cur)} — not more.`);
   const month = pay === 'salary' ? v.month : '';
   const rec = { cur, amount, rate, paidTo: w.name, reason: PAY_REASON[pay](month), location: '', project: '', mode: v.mode || 'Cash', ...dateFrom({}),
-    worker: w.id, pay, ...(month ? { month } : {}), ...(appr ? { approval: appr.id } : {}) };
+    worker: w.id, pay, ...(month ? { month } : {}), ...(appr ? { approval: appr.id } : {}), ...(pay === 'advance' ? planFields(w.id, repay) : {}) };
   const [[id], seq] = nextIds('E', 1, S.seq);
   update({ expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq, lastBy: by, lastMode: rec.mode, ...(rate ? { lastRate: rate } : {}) });
   render(); toast(`Saved ✓ ${money(amount, cur)} to ${w.name}`);
   slipSheet('E', id);
 }
 // above the monthly limit, the office manager asks an admin first
-function askAdvance(w, amount, cur, by) {
+function askAdvance(w, amount, cur, by, repay = 0) {
   const [[id], seq] = nextIds('C', 1, S.seq);
-  const text = `Advance of ${money(amount, cur)} to ${w.name} — more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit`;
-  update({
-    changes: [...S.changes, { id, kind: 'W', target: w.id, action: 'advance', before: {}, after: { amount, cur }, text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
+  const text = `Advance of ${money(amount, cur)} to ${w.name} — more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit${repay ? ` · taken back at ${money(repay, w.cur)} a month` : ''}`;
+  update({ // the plan rides beside the request (after holds only the amount: what the sheet checks)
+    changes: [...S.changes, { id, kind: 'W', target: w.id, action: 'advance', before: {}, after: { amount, cur }, ...planFields(w.id, repay), text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
     log: logWith([['Advance asked', w.id, `${text} — waiting for an admin`]], by), lastBy: by,
   });
   closeSheet(); render(); toast('Sent to an admin ✓ You can give it once they approve.');
@@ -4490,12 +4637,19 @@ function payslipSpec(r) {
     const offs = dayList(absencesOf(w.id, r.month));
     if (m.daysOff) lines.push({ t: `Less ${m.daysOff} day${m.daysOff === 1 ? '' : 's'} not worked${offs ? `: ${offs}` : ''}`, v: `−${M(round2(w.wage * m.days / 30) - m.earned)}` });
     lines.push({ t: `Earned for ${monthName(r.month)}`, v: M(m.earned), strong: true });
-    const other = due === null ? 0 : round2(due - m.earned);
+    // an advance taken back a little each month: what was due before this payment, and what came off the advance
+    const plan = due === null ? null : dueFor(w, r.month, r.id);
+    const owing = plan && plan.repay && plan.debt ? { due: plan.pay, back: plan.back } : null;
+    if (owing) lines.push({ t: `Less advance taken back (${M(plan.repay)} a month)`, v: `−${M(owing.back)}` });
+    const shown = owing ? owing.due : due, other = shown === null ? 0 : round2(shown - m.earned + (owing ? owing.back : 0));
     if (other) lines.push({ t: other > 0 ? 'Earlier months still unpaid' : 'Less advances and earlier payments', v: `${other > 0 ? '+' : '−'}${M(Math.abs(other))}` });
-    if (due !== null) lines.push({ t: `Total due to end of ${MON[+r.month.slice(5, 7) - 1]} ${r.month.slice(0, 4)}`, v: M(due), strong: true });
-  } else if (r.pay === 'advance') lines.push({ t: 'Advance on salary', v: slipMoney(r.amount, r.cur) });
+    if (shown !== null) lines.push({ t: `Total due to end of ${MON[+r.month.slice(5, 7) - 1]} ${r.month.slice(0, 4)}`, v: M(shown), strong: true });
+  } else if (r.pay === 'advance') {
+    lines.push({ t: 'Advance on salary', v: slipMoney(r.amount, r.cur) });
+    if (r.repay > 0) lines.push({ t: 'Taken back from salary', v: `${M(r.repay)} a month` });
+  }
   else if (due !== null) lines.push({ t: `Total due up to the last day of work${w.left ? `, ${fmtDate(w.left)}` : ''}`, v: M(due), strong: true });
-  lines.push(after);
+  lines.push(r.pay === 'salary' && upTo.balance < 0 && repayOf(w.id) ? { ...after, t: 'Advance still to repay after this payment' } : after); // a month's salary settled: what is left is the advance
   const salary = r.pay === 'salary';
   return { title: SLIP_TITLE[r.pay] || SLIP_TITLE.voucher, party: ['Employee', `${w.name}${w.job ? ` · ${w.job}` : ''}`], when: [salary ? 'Pay period' : 'Date', salary ? monthName(r.month) : slipDay(r)],
     forLabel: salary ? 'Pay details' : 'Being payment for', lines,
@@ -5237,6 +5391,7 @@ async function empAdvanceSheet(id) {
     <form data-form="empAdvance" data-id="${esc(id)}">
       <label class="fld"><span>Which employee?</span><select name="worker">${guess ? '' : '<option value="">Choose…</option>'}${ws.map(w => `<option value="${esc(w.id)}" ${guess && w.id === guess.id ? 'selected' : ''}>${esc(w.name)}${w.status === 'left' ? ' (has left)' : ''}</option>`).join('')}</select></label>
       <p class="muted">It is taken off their pay, like an advance given from Employees. "Paid to" and the signed voucher stay as they are.</p>
+      ${repayField(null)}
       <p class="err"></p>
       <button class="btn out">Link as a salary advance</button>
     </form>`);
@@ -5245,10 +5400,13 @@ function saveEmpAdvance(f) {
   const r = S.expenses.find(x => x.id === f.dataset.id && !x.deleted), w = workerOf(f.elements.worker.value);
   if (!r) return closeSheet();
   if (!w) return formErr(f, 'worker', 'Choose the employee');
+  const repay = repayFrom(f);
+  if (repay === null) return formErr(f, 'repay', REPAY_ERR);
   const day = r.at.slice(0, 10);
   if (w.clearedTo && day <= w.clearedTo && !confirm(`This was paid on ${fmtDate(day)}, before ${w.name}'s salary was cleared (up to ${fmtDate(w.clearedTo)}).\n\nLinking it takes it off their pay again. Link it anyway?`)) return;
   const by = myName() || S.lastBy || '';
-  update({ expenses: S.expenses.map(x => (x.id === r.id ? { ...x, worker: w.id, pay: 'advance', editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', r.id, `Linked to ${w.name} as a salary advance (${money(r.amount, r.cur)}) — it comes off their pay`]], by) });
+  update({ expenses: S.expenses.map(x => (x.id === r.id ? { ...x, worker: w.id, pay: 'advance', ...planFields(w.id, repay), editedAt: stampSec(), editedBy: by } : x)),
+    log: logWith([['Edited', r.id, `Linked to ${w.name} as a salary advance (${money(r.amount, r.cur)}) — it comes off their pay${repay ? `, ${money(repay, w.cur)} a month` : ''}`]], by) });
   toast(`Linked to ${w.name} ✓ — it comes off their pay`);
   detail('E', r.id);
 }
@@ -5260,7 +5418,7 @@ async function undoAdvance(id) {
   const w = emp && workerOf(r.worker), day = r.at.slice(0, 10);
   const cleared = w && w.clearedTo && day <= w.clearedTo ? `\n\n${w.name}'s salary was already cleared up to ${fmtDate(w.clearedTo)} with this advance taken off. Undoing it means they are owed ${money(r.amount, r.cur)} more.` : '';
   if (!confirm(emp ? `Is ${money(r.amount, r.cur)} to ${r.paidTo} not a salary advance to ${w ? w.name : 'an employee'}?\n\nIt stops coming off their pay and stays a normal payment.${cleared}` : `Is ${money(r.amount, r.cur)} to ${r.paidTo} not an advance?\n\nIt stays a normal payment.`)) return;
-  const by = myName() || S.lastBy || '', drop = emp ? ['worker', 'pay', 'month'] : ['advance', 'advanceTotal'];
+  const by = myName() || S.lastBy || '', drop = emp ? ['worker', 'pay', 'month', 'repay'] : ['advance', 'advanceTotal'];
   const plain = Object.fromEntries(Object.entries(r).filter(([k]) => !drop.includes(k)));
   update({ expenses: S.expenses.map(x => (x.id === id ? { ...plain, editedAt: stampSec(), editedBy: by } : x)), notAdvance: [...(S.notAdvance || []), id],
     log: logWith([['Edited', id, emp ? `Not a salary advance to ${w ? w.name : 'an employee'} after all — a normal payment again` : `Not an advance to ${r.paidTo} after all — a normal payment again`]], by) });
@@ -6718,6 +6876,7 @@ const ACTIONS = {
   addWorker: () => workerForm(),
   openWorker: b => workerDetail(b.dataset.id),
   profilePhoto: b => profileSheet(b.dataset.id),
+  repayForm: b => repayForm(b.dataset.id),
   editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
   markLeft: async b => { if (await unlock('Enter the password to record that this employee has left.')) leftForm(b.dataset.id); },
   payWorker: b => payForm(b.dataset.id, b.dataset.pay, b.dataset.approval),
@@ -6831,7 +6990,7 @@ const ACTIONS = {
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, repay: saveRepay, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
   idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList, subIdea: saveSubIdea, budgets: saveBudgets, exchange: saveExchange };
 
 function refreshAmount(input) {
@@ -6896,6 +7055,7 @@ document.addEventListener('change', e => {
   if (t.dataset.replace !== undefined) replaceFile(t);
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
+  if (t.name === 'role' && t.form && t.form.dataset.form === 'user') $('.sees', t.form).hidden = t.value !== 'manager';
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'kind' && t.form && t.form.dataset.form === 'doc') refreshDocKind(t.form);
   if (t.name === 'periods' && t.form && t.form.dataset.form === 'expense') refreshPeriods(t.form);
@@ -6954,6 +7114,16 @@ document.addEventListener('visibilitychange', () => {
   if (leftAt && !mine) lockApp();
 });
 setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
+// iPhone (and Chrome on Android): the on-screen keyboard covers the bottom of the screen without making the page shorter, so a
+// sheet standing on the bottom edge was slid up and its title went out of sight. While the keyboard is up, the open sheet stands
+// on the keyboard and is no taller than what is seen (not when the page is only zoomed in).
+function fitSheet() {
+  const v = window.visualViewport, d = $('#sheet');
+  const up = d.open && v.scale < 1.01 && innerHeight - v.height > 120;
+  d.style.marginBottom = up ? `${Math.max(0, innerHeight - v.height - v.offsetTop)}px` : '';
+  d.style.maxHeight = up ? `${v.height - 8}px` : '';
+}
+if (window.visualViewport) { visualViewport.addEventListener('resize', fitSheet); visualViewport.addEventListener('scroll', fitSheet); }
 setInterval(renderLock, 10000);
 
 if (S) { S = migrate(S); save(); repairImportedMoves(); }
