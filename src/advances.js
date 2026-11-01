@@ -63,6 +63,7 @@ async function empAdvanceSheet(id) {
     <form data-form="empAdvance" data-id="${esc(id)}">
       <label class="fld"><span>Which employee?</span><select name="worker">${guess ? '' : '<option value="">Choose…</option>'}${ws.map(w => `<option value="${esc(w.id)}" ${guess && w.id === guess.id ? 'selected' : ''}>${esc(w.name)}${w.status === 'left' ? ' (has left)' : ''}</option>`).join('')}</select></label>
       <p class="muted">It is taken off their pay, like an advance given from Employees. "Paid to" and the signed voucher stay as they are.</p>
+      ${repayField(guess || ws[0])}
       <p class="err"></p>
       <button class="btn out">Link as a salary advance</button>
     </form>`);
@@ -71,10 +72,13 @@ function saveEmpAdvance(f) {
   const r = S.expenses.find(x => x.id === f.dataset.id && !x.deleted), w = workerOf(f.elements.worker.value);
   if (!r) return closeSheet();
   if (!w) return formErr(f, 'worker', 'Choose the employee');
+  const repay = repayFrom(f);
+  if (repay === null) return formErr(f, 'repay', REPAY_ERR);
   const day = r.at.slice(0, 10);
   if (w.clearedTo && day <= w.clearedTo && !confirm(`This was paid on ${fmtDate(day)}, before ${w.name}'s salary was cleared (up to ${fmtDate(w.clearedTo)}).\n\nLinking it takes it off their pay again. Link it anyway?`)) return;
   const by = myName() || S.lastBy || '';
-  update({ expenses: S.expenses.map(x => (x.id === r.id ? { ...x, worker: w.id, pay: 'advance', editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', r.id, `Linked to ${w.name} as a salary advance (${money(r.amount, r.cur)}) — it comes off their pay`]], by) });
+  update({ expenses: S.expenses.map(x => (x.id === r.id ? { ...x, worker: w.id, pay: 'advance', ...(repay ? { repay } : {}), editedAt: stampSec(), editedBy: by } : x)),
+    log: logWith([['Edited', r.id, `Linked to ${w.name} as a salary advance (${money(r.amount, r.cur)}) — it comes off their pay${repay ? `, ${money(repay, w.cur)} a month` : ''}`]], by) });
   toast(`Linked to ${w.name} ✓ — it comes off their pay`);
   detail('E', r.id);
 }
@@ -86,7 +90,7 @@ async function undoAdvance(id) {
   const w = emp && workerOf(r.worker), day = r.at.slice(0, 10);
   const cleared = w && w.clearedTo && day <= w.clearedTo ? `\n\n${w.name}'s salary was already cleared up to ${fmtDate(w.clearedTo)} with this advance taken off. Undoing it means they are owed ${money(r.amount, r.cur)} more.` : '';
   if (!confirm(emp ? `Is ${money(r.amount, r.cur)} to ${r.paidTo} not a salary advance to ${w ? w.name : 'an employee'}?\n\nIt stops coming off their pay and stays a normal payment.${cleared}` : `Is ${money(r.amount, r.cur)} to ${r.paidTo} not an advance?\n\nIt stays a normal payment.`)) return;
-  const by = myName() || S.lastBy || '', drop = emp ? ['worker', 'pay', 'month'] : ['advance', 'advanceTotal'];
+  const by = myName() || S.lastBy || '', drop = emp ? ['worker', 'pay', 'month', 'repay'] : ['advance', 'advanceTotal'];
   const plain = Object.fromEntries(Object.entries(r).filter(([k]) => !drop.includes(k)));
   update({ expenses: S.expenses.map(x => (x.id === id ? { ...plain, editedAt: stampSec(), editedBy: by } : x)), notAdvance: [...(S.notAdvance || []), id],
     log: logWith([['Edited', id, emp ? `Not a salary advance to ${w ? w.name : 'an employee'} after all — a normal payment again` : `Not an advance to ${r.paidTo} after all — a normal payment again`]], by) });

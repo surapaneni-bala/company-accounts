@@ -265,6 +265,30 @@ function workerLedger(w, pays, today, absences = []) {
   return { cur: w.cur, months, earned: earned / 100, paid: paid / 100, opening: opening / 100, balance: (opening + earned - paid) / 100, unconverted };
 }
 
+// An advance paid back a little each month (owner, 1 Nov 2026: "I took an advance of 1000 and earn 200 a month: cut 100 a
+// month and give me 100 as salary till the advance is cleared"). The account itself never changes — the advance is a payment
+// like any other, so until it is repaid they owe it (a balance below zero); only what is paid each month does.
+// In cents: owedEnd = owed up to the end of the month paid (every payment counted); owedBefore = the same up to the end of the
+// month before; paidMonth = salary already paid for this month (that is not more advance); repay = the most taken back in a
+// month (0: all of it from the next salary, as before). → pay = to pay now, debt = advance owed as the month starts,
+// back = what comes off it this month, left = still owed after paying `pay`.
+function salaryDue(owedEnd, owedBefore, paidMonth, repay) {
+  const debt = Math.max(0, -(owedBefore + paidMonth));
+  const pay = Math.max(0, owedEnd + (repay > 0 ? Math.max(0, debt - repay) : 0));
+  const left = Math.min(debt, Math.max(0, pay - owedEnd));
+  return { pay, debt, back: debt - left, left };
+}
+
+// What else an office manager may see in Accounts, besides what she entered (owner, 1 Nov 2026): every payment, or those for
+// some projects, at some places, or entered by some people. sees = { all, p: [project ids], l: [places], u: [login ids] }.
+// The Google Sheet decides what reaches her phone by the same rule (seesE_ in Code.gs); this only sorts what is there.
+const placeKey = s => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+function seesEntry(sees, e) {
+  if (!sees || typeof sees !== 'object') return false;
+  const has = (list, v) => Array.isArray(list) && !!v && list.includes(v);
+  return sees.all === true || has(sees.p, e.project) || has(sees.l, placeKey(e.location)) || has(sees.u, e.uid);
+}
+
 // Advances given in a month, in US dollars (the monthly limit is in dollars).
 function advancesUsd(pays, month) {
   const cents = pays.filter(p => p.pay === 'advance' && !p.deleted && p.at.slice(0, 7) === month)

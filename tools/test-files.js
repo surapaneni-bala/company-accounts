@@ -278,7 +278,7 @@ assert.strictEqual(gas.mails.length, 0, 'no address: no email');
 assert.deepStrictEqual([post({ op: 'number', token: owner }).no, post({ op: 'number', token: owner }).no], ['INV-0001', 'INV-0002'], 'one unbroken series');
 assert.strictEqual(post({ op: 'number', token: m.token }).ok, false, 'only admins take a number');
 const client = (id, u, extra = {}) => ({ id, k: 'K', u, d: { id, name: 'Test Client Ltd', phone: '+000 111', ...extra } });
-const invoice = (id, u, extra = {}) => ({ id, k: 'I', u, d: { id, type: 'invoice', no: 'INV-0001', client: 'K-OW1-0001', date: '2026-10-11', due: '2026-10-25', cur: 'USD', items: [{ t: 'Cement 42.5', qty: 20, unit: 'bags', price: 15 }], tax: 0, ...extra } });
+const invoice = (id, u, extra = {}) => ({ id, k: 'I', u, d: { id, type: 'invoice', no: 'INV-0001', client: 'K-OW1-0001', date: '2026-10-11', due: '2099-10-25', cur: 'USD', items: [{ t: 'Cement 42.5', qty: 20, unit: 'bags', price: 15 }], tax: 0, ...extra } });
 const invPdf = upload('INV-0001.pdf', 'application/pdf', pdf), qtPdf = upload('QT-OW1-0001.pdf', 'application/pdf', pdf);
 assert.deepStrictEqual(post({ token: owner, since: 0, push: [client('K-OW1-0001', 130), invoice('I-OW1-0001', 130), invoice('I-OW1-0002', 130, { type: 'quote', no: 'QT-OW1-0001', due: '' }),
   invoice('I-OW1-0003', 130, { items: [] }), invoice('I-OW1-0004', 130, { items: [{ t: 'x', qty: 0, price: 1 }] }), invoice('I-OW1-0005', 130, { type: 'bill' }),

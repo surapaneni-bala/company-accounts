@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ TextEncoder });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles };', ctx);
-const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles } = ctx.api;
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry };', ctx);
+const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry } = ctx.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 
 /* ---------- days on a 30-day month: joining and leaving days both count, day 31 counts as day 30 ---------- */
@@ -205,5 +205,41 @@ assert.deepStrictEqual(plain(findDoubles([dpay('D1', '2026-10-15', 4200, 'Bala')
 
 const many = Array.from({ length: 6000 }, (_, i) => dpay(`M${i}`, `2026-${String(1 + (i % 12)).padStart(2, '0')}-${String(1 + (i % 28)).padStart(2, '0')}`, 10 + (i % 997), `P${i % 7}`, { paidTo: `Shop ${i % 50}`, reason: `Item ${i}` }));
 const t0 = Date.now(); findDoubles(many); assert.ok(Date.now() - t0 < 500, `6,000 payments are checked quickly (${Date.now() - t0} ms)`);
+
+/* ---------- an advance repaid a little each month (owner, 1 Nov 2026: "advance of 1000, I earn 200: cut 100 a month") ---------- */
+{
+  const w = { id: 'W-9', wage: 200, cur: 'USD', start: '2026-06-01', status: 'active' };
+  const p = (at, amount, kind, extra = {}) => ({ id: `E-${at}-${amount}`, worker: 'W-9', at: at + 'T10:00', amount, cur: 'USD', pay: kind, ...extra });
+  const salaries = ['06', '07', '08', '09'].map(m => p(`2026-${m}-28`, 200, 'salary', { month: `2026-${m}` }));
+  const owed = (list, upTo) => Math.round(workerLedger(w, list, upTo).balance * 100);
+  const due = (list, month, repay) => {
+    const end = owed(list, `${month}-31`), before = owed(list, new Date(Date.UTC(+month.slice(0, 4), +month.slice(5, 7) - 1, 0)).toISOString().slice(0, 10));
+    const paidMonth = list.filter(x => x.pay === 'salary' && x.month === month).reduce((t, x) => t + Math.round(x.amount * 100), 0);
+    return plain(salaryDue(end, before, paidMonth, Math.round(repay * 100)));
+  };
+  const adv = [...salaries, p('2026-10-05', 1000, 'advance', { repay: 100 })];
+  assert.deepStrictEqual(due(adv, '2026-10', 100), { pay: 10000, debt: 100000, back: 10000, left: 90000 }, 'October: $200 earned, $100 comes off, $100 paid, $900 still to repay');
+  const oct = [...adv, p('2026-10-31', 100, 'salary', { month: '2026-10' })];
+  assert.deepStrictEqual(due(oct, '2026-11', 100), { pay: 10000, debt: 90000, back: 10000, left: 80000 }, 'November: the same again, $800 left');
+  const half = [...adv, p('2026-10-15', 50, 'salary', { month: '2026-10' })];
+  assert.deepStrictEqual(due(half, '2026-10', 100), { pay: 5000, debt: 100000, back: 10000, left: 90000 }, '$50 of October paid already: $50 more (not counted as more advance)');
+  assert.deepStrictEqual(due(adv, '2026-10', 0), { pay: 0, debt: 100000, back: 20000, left: 80000 }, 'no plan: all of the salary goes to the advance, as before');
+  assert.deepStrictEqual(due(adv, '2026-10', 300), { pay: 0, debt: 100000, back: 20000, left: 80000 }, 'more a month than the wage: only what was earned can come off');
+  const last = [...salaries, p('2026-10-05', 50, 'advance', { repay: 100 })];
+  assert.deepStrictEqual(due(last, '2026-10', 100), { pay: 15000, debt: 5000, back: 5000, left: 0 }, 'the last $50: all of it comes off, $150 paid');
+  assert.deepStrictEqual(due(salaries.slice(0, 3), '2026-10', 100), { pay: 40000, debt: 0, back: 0, left: 0 }, 'no advance: September and October are paid');
+}
+
+/* ---------- what else an office manager may see in Accounts (owner, 1 Nov 2026) ---------- */
+{
+  const e = { id: 'E-1', project: 'P-1', location: '  Juba   Town ', uid: 'U-2' };
+  assert.strictEqual(seesEntry(null, e), false, 'nothing given: only her own');
+  assert.strictEqual(seesEntry({ all: true }, e), true, 'every payment');
+  assert.deepStrictEqual([seesEntry({ p: ['P-1'] }, e), seesEntry({ p: ['P-2'] }, e)], [true, false], 'a project');
+  assert.deepStrictEqual([seesEntry({ l: ['juba town'] }, e), seesEntry({ l: ['juba'] }, e)], [true, false], 'a place, however it was typed (case, spaces)');
+  assert.deepStrictEqual([seesEntry({ u: ['U-2'] }, e), seesEntry({ u: ['U-3'] }, e)], [true, false], 'what one person entered');
+  assert.strictEqual(seesEntry({ p: 'P-1', l: 5, u: null }, e), false, 'a damaged grant gives nothing');
+  assert.strictEqual(seesEntry({ l: [''] }, { id: 'E-2', location: '' }), false, 'an empty place matches nothing');
+}
 
 console.log('Pay maths, words and PDF: all checks passed');

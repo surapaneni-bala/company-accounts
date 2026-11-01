@@ -61,6 +61,7 @@ function workerDetail(id) {
     <div class="wtop"><button type="button" class="wphoto" id="wPhoto" data-act="profilePhoto" data-id="${esc(id)}" aria-label="${photo ? 'Move or change' : 'Add'} the profile photo">${esc(initials(w.name))}</button>
       <div><div class="dbig ${l.balance < 0 ? 'out' : ''}" style="margin:0">${money(l.balance, l.cur)}</div><small class="muted">${l.balance >= 0 ? `still to pay ${esc(w.name)}` : 'paid more than earned so far'}${left ? ' · has left' : ''}</small></div></div>
     ${waitingNote(id)}
+    ${left ? '' : advanceNote(w)}
     ${approvedAdvances(id).map(c => `<div class="banner new"><span>✅ Advance of ${money(+c.after.amount, c.after.cur)} approved by ${esc(c.decidedBy)}.</span><button class="btn small" data-act="payWorker" data-pay="advance" data-id="${esc(id)}" data-approval="${esc(c.id)}">Give it</button></div>`).join('')}
     <div class="two">${left
       ? `<button class="btn out" data-act="settle" data-id="${esc(id)}">${l.balance > 0.004 ? '💵 Pay final settlement' : '📑 Final settlement statement'}</button>`
@@ -82,6 +83,38 @@ function workerDetail(id) {
       : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Ask to delete employee 🔒</button>` : ''}`);
   comeBack(() => workerDetail(id));
   if (photo) { $('#wPhoto').dataset.photo = photo.id; loadThumbs(); }
+}
+
+// An advance not yet repaid: how much, and how it comes back (all from the next salary, or a part each month)
+function advanceNote(w) {
+  const d = dueFor(w, payMonth(w));
+  if (!d.debt) return '';
+  return `<div class="note">💵 Advance to repay: <b>${money(d.debt, w.cur)}</b> — ${d.repay ? `${money(d.repay, w.cur)} comes off each salary, about ${monthsToRepay(w, d.debt, d.repay)} more month${monthsToRepay(w, d.debt, d.repay) === 1 ? '' : 's'}` : 'all of it comes off the next salary'}.
+    ${can('edit') && latestAdvance(w.id) ? `<button class="link" data-act="repayForm" data-id="${esc(w.id)}">${d.repay ? 'Change' : 'Take it back a little each month instead'} 🔒</button>` : ''}</div>`;
+}
+async function repayForm(id) {
+  const w = workerOf(id), a = latestAdvance(id);
+  if (!w || !a || !await unlock('Enter the password to change how the advance is taken back.')) return;
+  const d = dueFor(w, payMonth(w));
+  openSheet(`${head('Advance taken back from salary', 'out', w.name)}
+    <form data-form="repay" data-id="${esc(id)}">
+      <p class="note">Still to repay: <b>${money(d.debt, w.cur)}</b>. Their wage: ${money(w.wage, w.cur)} a month.</p>
+      ${repayField(w, repayOf(id))}
+      <p class="err"></p>
+      <button class="btn out">Save</button>
+    </form>`);
+}
+// kept on their latest advance (an admin's change; it does not touch what was paid or signed)
+function saveRepay(f) {
+  const w = workerOf(f.dataset.id), a = latestAdvance(f.dataset.id), repay = repayFrom(f);
+  if (!w || !a) return closeSheet();
+  if (repay === null) return formErr(f, 'repay', REPAY_ERR);
+  const by = myName() || S.lastBy || '';
+  const { repay: _, ...rest } = a;
+  update({ expenses: S.expenses.map(x => (x.id === a.id ? { ...rest, ...(repay ? { repay } : {}), editedAt: stampSec(), editedBy: by } : x)),
+    log: logWith([['Edited', a.id, `${w.name}'s advance: ${repay ? `taken back at ${money(repay, w.cur)} a month` : 'all of it from the next salary'}`]], by) });
+  toast('Saved ✓');
+  workerDetail(w.id);
 }
 
 /* ---------- the profile photo, framed by hand in a circle ---------- */
@@ -364,20 +397,47 @@ function payMonth(w) {
 function owedFor(w, month) {
   return ledgerOf(w, month ? [today(), `${month}-31`].sort()[0] : today());
 }
+// An advance taken back a little each month (owner, 1 Nov 2026): the most that comes off one month's salary, set when the advance is
+// given. Their latest salary advance decides, for all they still owe (none set: all of it comes off the next salary, as before).
+const latestAdvance = id => live(S.expenses).filter(e => e.worker === id && e.pay === 'advance').sort(byAt).pop();
+const repayOf = id => { const a = latestAdvance(id); return a && Number.isFinite(a.repay) && a.repay > 0 ? a.repay : 0; };
+// a month's salary with the plan applied (calc.js salaryDue), in the wage's money: pay, debt (advance owed as the month starts),
+// back (what comes off it now), left (owed after paying `pay`), repay; skip = a payment left out (a slip shows what was due before it)
+function dueFor(w, month, skip = '') {
+  const all = live(S.expenses).filter(e => e.worker === w.id && e.id !== skip), at = [today(), `${month}-31`].sort()[0];
+  const owed = upTo => cents(workerLedger(w, all, upTo, S.absences).balance);
+  const paidMonth = all.filter(e => e.pay === 'salary' && e.month === month).reduce((t, e) => t + (inWage(e, w.cur) || 0), 0);
+  const repay = repayOf(w.id), d = salaryDue(owed(at), owed(dayBefore(`${month}-01`)), paidMonth, cents(repay));
+  return { pay: d.pay / 100, debt: d.debt / 100, back: d.back / 100, left: d.left / 100, repay };
+}
+// "about 9 more months": what is owed at what comes off a month (never more than the wage can give)
+const monthsToRepay = (w, owed, repay) => Math.ceil(owed / Math.min(repay, w.wage || repay));
+const repayField = (w, val = '') => `<label class="fld"><span>Taken back from salary <em>(optional — how much a month, in ${w.cur === 'USD' ? 'US dollars' : w.cur}; empty: all of it from the next salary)</em></span>
+  <input name="repay" inputmode="decimal" placeholder="e.g. ${w.cur === 'USD' ? 100 : 100000}" value="${esc(val || '')}" autocomplete="off"><small class="muted repay-note">Their wage: ${money(w.wage, w.cur)} a month.</small></label>`;
+// the plan typed in a form: 0 for none, null when it is not a number
+const repayFrom = f => { const t = String(f.elements.repay ? f.elements.repay.value : '').trim(); if (!t) return 0; const n = parseAmount(t); return n && n > 0 ? n : null; };
+const REPAY_ERR = 'Type how much comes off each month, like 100 — or leave it empty';
 function payInfo(f) {
   const w = workerOf(f.dataset.id), pay = f.dataset.pay;
   if (pay === 'advance') {
     const used = advancesUsd(live(S.expenses).filter(e => e.worker === w.id), today().slice(0, 7));
-    return `Advances given to ${esc(w.name)} this month: <b>${money(used, 'USD')}</b> of the ${money(ADVANCE_LIMIT_USD, 'USD')} limit.`;
+    const amount = parseAmount(f.elements.amount.value), repay = repayFrom(f), same = formCur(f) === w.cur;
+    const plan = amount && repay ? ` <b>${money(repay, w.cur)}</b> comes off each salary${same ? ` — about ${monthsToRepay(w, amount, repay)} months` : ''}.` : '';
+    return `Advances given to ${esc(w.name)} this month: <b>${money(used, 'USD')}</b> of the ${money(ADVANCE_LIMIT_USD, 'USD')} limit.${plan}`;
   }
   const month = f.elements.month ? f.elements.month.value : '';
   const l = owedFor(w, month), m = l.months.find(x => x.month === month), offs = month ? absencesOf(w.id, month) : [];
-  return `${m ? `${monthName(month)}: ${m.days - m.daysOff} days worked of ${m.days}${offs.length ? ` (not worked: ${esc(dayList(offs))})` : ''} → <b>${money(m.earned, l.cur)}</b><br>` : ''}Still to pay ${esc(w.name)}${month ? ` up to the end of ${monthName(month)}` : ''}: <b>${money(l.balance, l.cur)}</b>`;
+  const worked = m ? `${monthName(month)}: ${m.days - m.daysOff} days worked of ${m.days}${offs.length ? ` (not worked: ${esc(dayList(offs))})` : ''} → <b>${money(m.earned, l.cur)}</b><br>` : '';
+  const d = month ? dueFor(w, month) : null;
+  if (!d || !d.debt) return `${worked}Still to pay ${esc(w.name)}${month ? ` up to the end of ${monthName(month)}` : ''}: <b>${money(l.balance, l.cur)}</b>`;
+  return `${worked}Advance still to repay: <b>${money(d.debt, l.cur)}</b> · ${d.repay
+    ? `<b>${money(d.back, l.cur)}</b> comes off now (${money(d.repay, l.cur)} a month) · ${money(d.left, l.cur)} left after`
+    : `all of it comes off now (to take it back a little each month, set it on ${esc(w.name)}'s page)`}<br>To pay for ${monthName(month)}: <b>${money(d.pay, l.cur)}</b>`;
 }
 function payForm(id, pay, approval) {
   const w = workerOf(id), appr = approval && approvedAdvances(id).find(c => c.id === approval);
   const month = pay === 'salary' ? payMonth(w) : '';
-  const suggested = appr ? +appr.after.amount : pay === 'advance' ? '' : Math.max(0, owedFor(w, month).balance);
+  const suggested = appr ? +appr.after.amount : pay === 'advance' ? '' : pay === 'salary' ? dueFor(w, month).pay : Math.max(0, owedFor(w, month).balance);
   const cur = appr ? appr.after.cur : w.cur;
   const title = { salary: 'Pay salary', advance: 'Give an advance', settlement: 'Final settlement' }[pay];
   openSheet(`${head(title, 'out', w.name)}
@@ -389,6 +449,7 @@ function payForm(id, pay, approval) {
       ${appr ? `<input type="hidden" name="cur" value="${esc(cur)}"><p class="muted">Approved by ${esc(appr.decidedBy)}: ${money(+appr.after.amount, cur)}</p>` : curChips(cur, 'Paid in')}
       ${amountField(suggested, cur)}
       ${rateField(cur)}
+      ${pay === 'advance' ? repayField(w, appr && appr.repay) : ''}
       ${accountChips(S.lastMode || 'Cash', 'Paid from')}
       ${byField()}
       <p class="err"></p>
@@ -400,8 +461,8 @@ function payForm(id, pay, approval) {
 function refreshPay(f, t) {
   $('.payinfo', f).innerHTML = payInfo(f);
   if (t && (t.name === 'month' || t.name === 'offDate') && !f.dataset.typed) { // keep the suggested amount in step until they type their own
-    const w = workerOf(f.dataset.id), l = owedFor(w, f.elements.month.value);
-    f.elements.amount.value = Math.max(0, l.balance) || '';
+    const w = workerOf(f.dataset.id);
+    f.elements.amount.value = dueFor(w, f.elements.month.value).pay || '';
     refreshAmount(f.elements.amount);
   }
 }
@@ -421,6 +482,8 @@ function savePay(f) {
   const amount = parseAmount(v.amount), cur = formCur(f), rate = rateFrom(f, cur);
   if (amount === null) return formErr(f, 'amount', 'Type the amount paid, like 250');
   if (rate === null) return formErr(f, 'rate', RATE_ERR);
+  const repay = pay === 'advance' ? repayFrom(f) : 0;
+  if (repay === null) return formErr(f, 'repay', REPAY_ERR);
   const by = clean(v.by);
   if (!by) return formErr(f, 'by', 'Type your name');
   const appr = f.dataset.approval && approvedAdvances(w.id).find(c => c.id === f.dataset.approval);
@@ -428,25 +491,25 @@ function savePay(f) {
     const used = advancesUsd(live(S.expenses).filter(e => e.worker === w.id), today().slice(0, 7));
     const usd = cur === 'USD' ? amount : amount / rate;
     if (cents(used + usd) > cents(ADVANCE_LIMIT_USD)) {
-      if (!can('edit')) return askAdvance(w, amount, cur, by);
+      if (!can('edit')) return askAdvance(w, amount, cur, by, repay);
       if (!confirm(`This is more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit (${money(used, 'USD')} given this month already).\n\nGive it anyway?`)) return;
     }
   }
   if (appr && (cur !== appr.after.cur || amount > +appr.after.amount)) return formErr(f, 'amount', `The admin approved ${money(+appr.after.amount, appr.after.cur)} — not more.`);
   const month = pay === 'salary' ? v.month : '';
   const rec = { cur, amount, rate, paidTo: w.name, reason: PAY_REASON[pay](month), location: '', project: '', mode: v.mode || 'Cash', ...dateFrom({}),
-    worker: w.id, pay, ...(month ? { month } : {}), ...(appr ? { approval: appr.id } : {}) };
+    worker: w.id, pay, ...(month ? { month } : {}), ...(appr ? { approval: appr.id } : {}), ...(repay ? { repay } : {}) };
   const [[id], seq] = nextIds('E', 1, S.seq);
   update({ expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq, lastBy: by, lastMode: rec.mode, ...(rate ? { lastRate: rate } : {}) });
   render(); toast(`Saved ✓ ${money(amount, cur)} to ${w.name}`);
   slipSheet('E', id);
 }
 // above the monthly limit, the office manager asks an admin first
-function askAdvance(w, amount, cur, by) {
+function askAdvance(w, amount, cur, by, repay = 0) {
   const [[id], seq] = nextIds('C', 1, S.seq);
-  const text = `Advance of ${money(amount, cur)} to ${w.name} — more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit`;
-  update({
-    changes: [...S.changes, { id, kind: 'W', target: w.id, action: 'advance', before: {}, after: { amount, cur }, text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
+  const text = `Advance of ${money(amount, cur)} to ${w.name} — more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit${repay ? ` · taken back at ${money(repay, w.cur)} a month` : ''}`;
+  update({ // the plan rides beside the request (after holds only the amount: what the sheet checks)
+    changes: [...S.changes, { id, kind: 'W', target: w.id, action: 'advance', before: {}, after: { amount, cur }, ...(repay ? { repay } : {}), text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
     log: logWith([['Advance asked', w.id, `${text} — waiting for an admin`]], by), lastBy: by,
   });
   closeSheet(); render(); toast('Sent to an admin ✓ You can give it once they approve.');
@@ -468,12 +531,19 @@ function payslipSpec(r) {
     const offs = dayList(absencesOf(w.id, r.month));
     if (m.daysOff) lines.push({ t: `Less ${m.daysOff} day${m.daysOff === 1 ? '' : 's'} not worked${offs ? `: ${offs}` : ''}`, v: `−${M(round2(w.wage * m.days / 30) - m.earned)}` });
     lines.push({ t: `Earned for ${monthName(r.month)}`, v: M(m.earned), strong: true });
-    const other = due === null ? 0 : round2(due - m.earned);
+    // an advance taken back a little each month: what was due before this payment, and what came off the advance
+    const plan = due === null ? null : dueFor(w, r.month, r.id);
+    const owing = plan && plan.repay && plan.debt ? { due: plan.pay, back: plan.back } : null;
+    if (owing) lines.push({ t: `Less advance taken back (${M(plan.repay)} a month)`, v: `−${M(owing.back)}` });
+    const shown = owing ? owing.due : due, other = shown === null ? 0 : round2(shown - m.earned + (owing ? owing.back : 0));
     if (other) lines.push({ t: other > 0 ? 'Earlier months still unpaid' : 'Less advances and earlier payments', v: `${other > 0 ? '+' : '−'}${M(Math.abs(other))}` });
-    if (due !== null) lines.push({ t: `Total due to end of ${MON[+r.month.slice(5, 7) - 1]} ${r.month.slice(0, 4)}`, v: M(due), strong: true });
-  } else if (r.pay === 'advance') lines.push({ t: 'Advance on salary', v: slipMoney(r.amount, r.cur) });
+    if (shown !== null) lines.push({ t: `Total due to end of ${MON[+r.month.slice(5, 7) - 1]} ${r.month.slice(0, 4)}`, v: M(shown), strong: true });
+  } else if (r.pay === 'advance') {
+    lines.push({ t: 'Advance on salary', v: slipMoney(r.amount, r.cur) });
+    if (r.repay > 0) lines.push({ t: 'Taken back from salary', v: `${M(r.repay)} a month` });
+  }
   else if (due !== null) lines.push({ t: `Total due up to the last day of work${w.left ? `, ${fmtDate(w.left)}` : ''}`, v: M(due), strong: true });
-  lines.push(after);
+  lines.push(r.pay === 'salary' && upTo.balance < 0 && repayOf(w.id) ? { ...after, t: 'Advance still to repay after this payment' } : after); // a month's salary settled: what is left is the advance
   const salary = r.pay === 'salary';
   return { title: SLIP_TITLE[r.pay] || SLIP_TITLE.voucher, party: ['Employee', `${w.name}${w.job ? ` · ${w.job}` : ''}`], when: [salary ? 'Pay period' : 'Date', salary ? monthName(r.month) : slipDay(r)],
     forLabel: salary ? 'Pay details' : 'Being payment for', lines,
