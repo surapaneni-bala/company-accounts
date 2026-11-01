@@ -313,6 +313,16 @@ document.addEventListener('visibilitychange', () => {
   if (leftAt && !mine) lockApp();
 });
 setInterval(() => { if (!document.hidden) syncNow(); }, SYNC_EVERY_MS);
+// iPhone (and Chrome on Android): the on-screen keyboard covers the bottom of the screen without making the page shorter, so a
+// sheet standing on the bottom edge was slid up and its title went out of sight. While the keyboard is up, the open sheet stands
+// on the keyboard and is no taller than what is seen (not when the page is only zoomed in).
+function fitSheet() {
+  const v = window.visualViewport, d = $('#sheet');
+  const up = d.open && v.scale < 1.01 && innerHeight - v.height > 120;
+  d.style.marginBottom = up ? `${Math.max(0, innerHeight - v.height - v.offsetTop)}px` : '';
+  d.style.maxHeight = up ? `${v.height - 8}px` : '';
+}
+if (window.visualViewport) { visualViewport.addEventListener('resize', fitSheet); visualViewport.addEventListener('scroll', fitSheet); }
 setInterval(renderLock, 10000);
 
 if (S) { S = migrate(S); save(); repairImportedMoves(); }

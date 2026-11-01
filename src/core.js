@@ -190,7 +190,7 @@ function openSheet(html) {
   if (!d.open) { back = null; d.showModal(); }
   here = null;
   d.scrollTop = 0;
-  ($('[autofocus]', d) || $('.close', d))?.focus();
+  ($('[autofocus]', d) || d).focus(); // the sheet itself (a ring round × looked like a mistake on iPhones); keyboard users go on from there
 }
 // a sheet others can return to: call right after drawing it
 function comeBack(fn) { here = back = fn; }
@@ -223,7 +223,7 @@ function suggestions(field) {
 const datalists = () => ['paidTo', 'reason', 'location', 'by'].map(f => `<datalist id="dl-${f}">${suggestions(f).map(v => `<option value="${esc(v)}">`).join('')}</datalist>`).join('');
 const textField = (name, label, ph, val, req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><input name="${name}" placeholder="${ph}" value="${esc(val)}" ${['paidTo', 'reason', 'location'].includes(name) ? `list="dl-${name}"` : ''} autocomplete="off" maxlength="160" ${req ? 'required' : ''}></label>`;
 const curChips = (cur, label = 'Money type') => `<div class="fld"><span>${label}</span><div class="curseg">${CURS.map(c => `<label><input type="radio" name="cur" value="${esc(c)}" ${c === cur ? 'checked' : ''}><span><b>${c}</b><small>${CUR_NAME[c]}</small></span></label>`).join('')}</div></div>`;
-const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${esc(val || '')}" autocomplete="off" ${req ? 'required autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
+const amountField = (val, cur, name = 'amount', label = 'Amount', req = true) => `<label class="fld"><span>${label}${req ? '' : ' <em>(optional)</em>'}</span><div class="amt-in"><b class="cur-sym">${SYM[cur].trim()}</b><input name="${name}" inputmode="decimal" placeholder="0" value="${esc(val || '')}" autocomplete="off" ${req ? 'required' : ''} ${req && !val ? 'autofocus' : ''}></div><small class="amt-preview">${val ? money(+val, cur) : ''}</small></label>`;
 // Every SSP entry states that day's rate (SSP for 1 US dollar), so its dollar value is known later.
 const rateField = (cur, rate) => `<label class="fld ratef" ${cur === 'SSP' ? '' : 'hidden'}><span>SSP for 1 USD <em>(today's rate)</em></span><input name="rate" inputmode="decimal" placeholder="e.g. 4500" value="${esc(rate || S.lastRate || '')}" autocomplete="off" ${cur === 'SSP' ? 'required' : ''}><small class="amt-preview rate-usd"></small></label>`;
 // the rate typed in a form: undefined for USD, null when SSP and missing or wrong
