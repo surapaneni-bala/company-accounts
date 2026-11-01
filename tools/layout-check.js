@@ -60,6 +60,9 @@ const SETUP = () => {
     ['ship', () => shipForm('N-1')], ['trip text', () => tripTextSheet('J-1')], ['account', () => { session = { user: { id: 'u1', name: 'Bala', role: 'admin', username: 'bala' } }; accountSheet(); }], ['alerts', () => alertsSheet()], ['approvals', () => approvalsSheet()],
     ['connect', () => connectForm()], ['import', () => importSheet()], ['invite', () => inviteSheet()], ['letterhead', () => letterheadSheet()], ['my signature', () => mySigSheet()], ['stamp', () => stampSheet()],
     ['sign in', () => signInSheet()], ['logins', () => setupLoginsSheet()], ['users', () => usersSheet()], ['user form', () => userForm()], ['sheet script', () => howUpdateSheet()],
+    ['manager login', () => { usersCache = [{ id: 'U-1', name: 'Agnes', username: 'agnes', role: 'manager', active: true, sees: { all: false, p: ['P-1'], l: [], u: [] } }, { id: 'U-2', name: 'Babu', username: 'babu', role: 'store', active: true }]; userForm('U-1'); }],
+    ['advance plan', () => { S = { ...S, expenses: [...S.expenses, { id: 'E-ADV', worker: 'W-1', pay: 'advance', repay: 100, cur: 'USD', amount: 1000, paidTo: 'Henry Carpenter', reason: 'Salary advance', location: '', project: '', mode: 'Cash', at: '2026-10-05T09:00', by: 'Bala', createdAt: '2026-10-05T09:00:00' }] }; workerDetail('W-1'); }],
+    ['advance form', () => payForm('W-1', 'advance')], ['salary with plan', () => payForm('W-1', 'salary')], ['repay form', () => repayForm('W-1')],
   ];
   window.__show = i => { screens[i][1](); const d = document.querySelector('#sheet[open]'); if (d) d.scrollTop = 0; };
   return screens.map(s => s[0]);

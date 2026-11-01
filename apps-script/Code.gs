@@ -67,6 +67,7 @@ const SHAPES = {
     && ['waiting', 'approved', 'rejected'].indexOf(d.status) >= 0
     && (d.action === 'delete' ? !Object.keys(d.after).length
       : d.action === 'advance' ? d.kind === 'W' && num_(d.after.amount) && d.after.amount > 0 && CURS.indexOf(d.after.cur) >= 0 && Object.keys(d.after).length === 2
+        && (d.repay === undefined || (num_(d.repay) && d.repay > 0))
       : d.action === undefined && Object.keys(d.after).every(f => EDITABLE[d.kind].indexOf(f) >= 0)),
   A: d => SAFE_ID.test(d.worker) && DATE_RE.test(d.date) && (d.note === undefined || str_(d.note)),
   W: d => str_(d.name) && num_(d.wage) && d.wage >= 0 && CURS.indexOf(d.cur) >= 0 && DATE_RE.test(d.start)
@@ -113,7 +114,8 @@ const extras_ = d => (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (
   && (d.periods === undefined || (num_(d.periods) && d.periods >= 1 && d.periods <= 24 && d.periods % 1 === 0)) // a regular payment, several periods at once
   && (d.advance === undefined || typeof d.advance === 'boolean') && (d.advanceTotal === undefined || (num_(d.advanceTotal) && d.advanceTotal > 0)) // an advance to a supplier
   && (d.from === undefined || SAFE_ID.test(d.from)) && (d.received === undefined || DATE_RE.test(d.received)) // goods taken from an advance
-  && (d.trip === undefined || SAFE_ID.test(d.trip)) && (d.need === undefined || SAFE_ID.test(d.need)); // a buying trip's cost, an item bought
+  && (d.trip === undefined || SAFE_ID.test(d.trip)) && (d.need === undefined || SAFE_ID.test(d.need)) // a buying trip's cost, an item bought
+  && (d.repay === undefined || (num_(d.repay) && d.repay > 0)); // an employee's advance, taken back this much a month
 const str_ = v => typeof v === 'string';
 const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
@@ -121,7 +123,7 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const LOCK_WAIT_MS = 25000;
-const VERSION = 21; // shown when the web app link is opened in a browser
+const VERSION = 22; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -255,7 +257,8 @@ function view_(user, rec, hidden) {
 // (the log names amounts received). Without money in and moves, no balance can be worked out from what she holds.
 const MONEY_KINDS = ['R', 'T', 'X'];
 // Her expenses are her own (owner, 12 Oct 2026): she gets the ones she entered, and an admin's only when it pays an employee
-// or a regular payment (rent…), for the Employees and Regular payments screens. Personal documents in the vault (IDs,
+// or a regular payment (rent…), for the Employees and Regular payments screens — and what an admin lets her see besides
+// (owner, 1 Nov 2026): every payment, or those of some projects, places or people (seesE_). Personal documents in the vault (IDs,
 // passports) are admins' only, with their scans. Ids map to true; null for other logins.
 function hiddenFor_(rows, user) {
   if (!user || user.role !== 'manager') return null;
@@ -264,10 +267,26 @@ function hiddenFor_(rows, user) {
     if (r[1] !== 'E' && r[1] !== 'V') return;
     let d = null;
     try { d = JSON.parse(r[4]); } catch (err) { out[r[0]] = true; return; } // a damaged record: admins only
-    if (r[1] === 'V' ? d.kind === 'personal' : d.uid !== user.id && !d.worker && !d.regular) out[r[0]] = true;
+    if (r[1] === 'V' ? d.kind === 'personal' : d.uid !== user.id && !d.worker && !d.regular && !seesE_(user.sees, d)) out[r[0]] = true;
   });
   return out;
 }
+// What else an office manager may see: sees = { all, p: [project ids], l: [places, as placeKey_ makes them], u: [login ids] }
+// (the app's seesEntry in calc.js is the same rule). Money received, moves and balances stay hidden whatever is given.
+const placeKey_ = v => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+function seesE_(s, d) {
+  if (!s) return false;
+  const has = (list, v) => !!v && list.indexOf(v) >= 0;
+  return s.all === true || has(s.p, d.project) || has(s.l, placeKey_(d.location)) || has(s.u, d.uid);
+}
+// a grant as an admin sent it, made safe to store: only ids that look like ids, places of up to 60 letters; null when it gives nothing
+function cleanSees_(x) {
+  if (!isObj_(x)) return null;
+  const list = (v, ok) => (Array.isArray(v) ? v : []).filter(i => typeof i === 'string' && ok(i)).slice(0, 100);
+  const s = { all: x.all === true, p: list(x.p, i => SAFE_ID.test(i)), l: list(x.l, i => i.length <= 60).map(placeKey_).filter(Boolean), u: list(x.u, i => SAFE_ID.test(i)) };
+  return s.all || s.p.length || s.l.length || s.u.length ? s : null;
+}
+function seesOf_(raw) { try { return raw ? cleanSees_(JSON.parse(String(raw))) : null; } catch (err) { return null; } }
 function managerView_(user, rec) {
   if (MONEY_KINDS.indexOf(rec.k) >= 0 || SALES_KINDS.indexOf(rec.k) >= 0 || BUY_KINDS.indexOf(rec.k) >= 0) return null;
   if (rec.k === 'F' && /^[IKNUJ]-/.test(String(rec.d.for))) return null; // invoice and quotation PDFs, the buying list's photos and reports
@@ -351,9 +370,9 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
 /* ---------- logins ---------- */
 const USERS_TAB = '_users';
 const SESSIONS_TAB = '_sessions';
-const USER_COLS = ['id', 'username', 'name', 'role', 'salt', 'hash', 'active', 'fails', 'lockUntil', 'createdAt', 'createdBy', 'lastLogin'];
+const USER_COLS = ['id', 'username', 'name', 'role', 'salt', 'hash', 'active', 'fails', 'lockUntil', 'createdAt', 'createdBy', 'lastLogin', 'sees'];
 const SESSION_COLS = ['token', 'uid', 'createdAt', 'seen', 'device'];
-const ROLES = ['admin', 'manager', 'store']; // admin = everything · manager = sees all, adds and edits · store = own entries
+const ROLES = ['admin', 'manager', 'store']; // admin = everything · manager = staff, her own payments (and what she is given), asks for edits · store = own entries
 const PW_MIN = 8;
 const PW_ROUNDS = 1000; // ponytail: repeated SHA-256 (Apps Script has no PBKDF2) slows down guessing; raise it if signing in stays quick
 const MAX_FAILS = 5;
@@ -690,6 +709,8 @@ function saveUser_(me, input) {
   if (input.username !== undefined) u.username = cleanUsername_(input.username);
   if (input.role !== undefined) u.role = String(input.role);
   if (input.active !== undefined) u.active = !!input.active;
+  if (input.sees !== undefined) u.sees = cleanSees_(input.sees);
+  if (u.role !== 'manager') u.sees = null; // only an office manager is given more to see
   const pw = input.password === undefined || input.password === '' ? null : String(input.password);
   if (!old && pw === null) return { ok: false, error: 'Give the new login a password.' };
   if (!/^[a-z0-9._-]{2,30}$/.test(u.username)) return { ok: false, error: 'Username: 2 to 30 letters or numbers, no spaces.' };
@@ -701,8 +722,9 @@ function saveUser_(me, input) {
   if (!admins) return { ok: false, error: 'There must always be at least one admin.' };
   if (pw !== null) { u.salt = newSecret_().slice(0, 32); u.hash = pwHash_(u.salt, pw); u.fails = 0; u.lockUntil = 0; }
   saveUsers_(old ? list.map(x => (x.id === u.id ? u : x)) : list.concat([u]));
-  // a new password, a new role or a disabled login: signed out everywhere, so the phone reloads what it may see
-  if (old && (pw !== null || !u.active || u.role !== old.role)) endSessions_(u.id, '', false);
+  // a new password, a new role, a change in what she may see or a disabled login: signed out everywhere, so the phone drops what it
+  // held and reloads what it may see
+  if (old && (pw !== null || !u.active || u.role !== old.role || JSON.stringify(u.sees || null) !== JSON.stringify(old.sees || null))) endSessions_(u.id, '', false);
   return { ok: true, users: users_().map(public_) };
 }
 
@@ -756,10 +778,11 @@ function users_() {
   return rowsOf_(USERS_TAB, USER_COLS).map(u => Object.assign(u, {
     id: String(u.id), username: String(u.username), name: String(u.name), role: String(u.role), salt: String(u.salt), hash: String(u.hash),
     active: String(u.active) === 'true', fails: Number(u.fails) || 0, lockUntil: Number(u.lockUntil) || 0, lastLogin: Number(u.lastLogin) || 0,
+    sees: String(u.role) === 'manager' ? seesOf_(u.sees) : null,
   }));
 }
-const saveUsers_ = list => saveRows_(USERS_TAB, USER_COLS, list.map(u => Object.assign({}, u, { active: u.active ? 'true' : 'false' })));
-const public_ = u => ({ id: u.id, username: u.username, name: u.name, role: u.role, active: u.active, lastLogin: u.lastLogin || 0 });
+const saveUsers_ = list => saveRows_(USERS_TAB, USER_COLS, list.map(u => Object.assign({}, u, { active: u.active ? 'true' : 'false', sees: u.sees ? JSON.stringify(u.sees) : '' })));
+const public_ = u => ({ id: u.id, username: u.username, name: u.name, role: u.role, active: u.active, lastLogin: u.lastLogin || 0, sees: u.sees || null });
 const cleanUsername_ = s => String(s || '').trim().toLowerCase();
 
 // small hidden tables: a header row, then one object per row; stored as plain text so nothing is reformatted

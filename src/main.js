@@ -254,6 +254,7 @@ document.addEventListener('change', e => {
   if (t.dataset.replace !== undefined) replaceFile(t);
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
+  if (t.name === 'role' && t.form && t.form.dataset.form === 'user') $('.sees', t.form).hidden = t.value !== 'manager';
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'kind' && t.form && t.form.dataset.form === 'doc') refreshDocKind(t.form);
   if (t.name === 'periods' && t.form && t.form.dataset.form === 'expense') refreshPeriods(t.form);

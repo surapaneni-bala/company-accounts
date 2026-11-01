@@ -25,7 +25,7 @@ let res = post({ key, since: 0, push: [settings, old, income] });
 assert.ok(res.ok, res.error);
 
 /* ---------- before logins: everything works exactly as before ---------- */
-assert.deepStrictEqual([get().version, get().logins, get().required], [21, false, false]);
+assert.deepStrictEqual([get().version, get().logins, get().required], [22, false, false]);
 res = post({ key, since: 0, push: [] });
 assert.strictEqual(res.pull.length, 3, 'company code still gives everything');
 assert.deepStrictEqual([res.logins, res.me, res.refused], [false, null, []]);
@@ -99,7 +99,7 @@ assert.deepStrictEqual([res.ok, res.error], [false, WRONG], 'locked after 5 wron
 const maryId = post({ op: 'users', token: ownerTok }).users.find(u => u.username === 'mary').id;
 assert.ok(saveUser(ownerTok, { id: maryId, password: 'mary-new1' }).ok);
 assert.strictEqual(post({ token: maryTok, since: 0, push: [] }).code, 'LOGIN', 'a reset signs the person out everywhere');
-const mary2 = login('mary', 'mary-new1').token;
+let mary2 = login('mary', 'mary-new1').token;
 assert.ok(mary2);
 
 /* ---------- store keeper: own entries only, no company money ---------- */
@@ -204,6 +204,41 @@ assert.deepStrictEqual(['E-OW1-0700', 'F-OW1-0700', 'E-OW1-0701', 'E-SK1-0700', 
 assert.strictEqual(post({ op: 'file', token: mary2, id: 'F-OW1-0700' }).ok, false, "nor can she fetch the admin's voucher");
 assert.strictEqual(post({ op: 'file', token: ownerTok, id: 'F-OW1-0700' }).ok, true, 'an admin can');
 assert.ok(post({ token: mdTok, since: 0, push: [] }).pull.some(p => p.id === 'E-SK1-0700'), 'admins still see everything');
+
+/* ---------- what else an office manager may see (owner, 1 Nov 2026): projects, places, people, or every payment ---------- */
+const forP = exp('E-OW1-0710', 50, { uid: ownerId, project: 'P-OW1-0001' }), atJuba = exp('E-OW1-0711', 50, { uid: ownerId, location: '  juba   TOWN ' });
+const vUp2 = post({ op: 'upload', token: ownerTok, name: 'PV2.pdf', mime: 'application/pdf', data: Buffer.from('%PDF-1.4 w').toString('base64') });
+const voucher2 = { id: 'F-OW1-0710', k: 'F', u: 50, d: { id: 'F-OW1-0710', for: 'E-OW1-0710', type: 'voucher', fileId: vUp2.fileId, name: 'PV2.pdf', mime: 'application/pdf', uid: ownerId } };
+assert.deepStrictEqual(post({ token: ownerTok, since: 0, push: [forP, atJuba, voucher2] }).refused, []);
+let maryTok3 = login('mary', 'mary-new1').token;
+const sees = (tok, ids) => { const got = post({ token: tok, since: 0, push: [] }).pull.map(p => p.id); return ids.map(id => got.includes(id)); };
+const IDS = ['E-OW1-0710', 'F-OW1-0710', 'E-OW1-0711', 'E-SK1-0700', 'E-OW1-0700', 'R-OLD-0001'];
+assert.deepStrictEqual(sees(maryTok3, IDS), [false, false, false, false, false, false], 'nothing given yet: only her own');
+res = saveUser(ownerTok, { id: maryId, sees: { p: ['P-OW1-0001'] } });
+assert.deepStrictEqual(res.users.find(u => u.id === maryId).sees, { all: false, p: ['P-OW1-0001'], l: [], u: [] }, 'kept with her login');
+assert.strictEqual(post({ token: maryTok3, since: 0, push: [] }).code, 'LOGIN', 'a change in what she may see signs her out, so her phone reloads');
+maryTok3 = login('mary', 'mary-new1').token;
+assert.deepStrictEqual(sees(maryTok3, IDS), [true, true, false, false, false, false], "a project: its payments and their vouchers; not other places, people, or money received");
+assert.strictEqual(post({ op: 'file', token: maryTok3, id: 'F-OW1-0710' }).ok, true, 'and she can open the voucher');
+assert.deepStrictEqual(login('mary', 'mary-new1').me.sees.p, ['P-OW1-0001'], 'her phone is told what she was given');
+saveUser(ownerTok, { id: maryId, sees: { l: ['Juba Town'], u: [storeId] } }); maryTok3 = login('mary', 'mary-new1').token;
+assert.deepStrictEqual(sees(maryTok3, IDS), [false, false, true, true, false, false], 'a place however it was typed, and what the store keeper entered');
+saveUser(ownerTok, { id: maryId, sees: { all: true } }); maryTok3 = login('mary', 'mary-new1').token;
+assert.deepStrictEqual(sees(maryTok3, IDS), [true, true, true, true, true, false], 'every payment, but never money received');
+assert.ok(!post({ token: maryTok3, since: 0, push: [] }).pull.some(p => ['R', 'T', 'X'].includes(p.k)), 'nor moves or changes: no balance can be worked out');
+assert.strictEqual(post({ token: maryTok3, since: 0, push: [{ ...forP, u: 51, d: { ...forP.d, amount: 1 } }] }).refused[0], 'E-OW1-0710', 'seeing is not changing: her edits still wait for an admin');
+res = saveUser(ownerTok, { id: maryId, sees: { all: 'yes', p: ['<b>x</b>', 7], l: [5, 'x'.repeat(61)], u: [{}] } });
+assert.strictEqual(res.users.find(u => u.id === maryId).sees, null, 'a damaged grant gives nothing');
+assert.strictEqual(saveUser(ownerTok, { id: storeId, sees: { all: true } }).users.find(u => u.id === storeId).sees, null, 'only an office manager is given more');
+maryTok3 = login('mary', 'mary-new1').token;
+assert.deepStrictEqual(sees(maryTok3, IDS), [false, false, false, false, false, false], 'taken back: only her own again');
+assert.strictEqual(saveUser(maryTok3, { id: maryId, sees: { all: true } }).ok, false, 'she cannot give herself more');
+mary2 = maryTok3; // her old sign-ins ended with each change
+
+/* ---------- an advance taken back a little each month: the plan is kept on it ---------- */
+const plan = exp('E-OW1-0720', 52, { uid: ownerId, worker: 'W-OW1-0001', pay: 'advance', repay: 100 });
+assert.deepStrictEqual(post({ token: ownerTok, since: 0, push: [plan, exp('E-OW1-0721', 52, { uid: ownerId, worker: 'W-OW1-0001', pay: 'advance', repay: 'all' }), exp('E-OW1-0722', 52, { uid: ownerId, worker: 'W-OW1-0001', pay: 'advance', repay: -5 })] }).refused.sort(),
+  ['E-OW1-0721', 'E-OW1-0722'], 'a plan is an amount above zero');
 
 /* ---------- admins: everything ---------- */
 res = post({ token: mdTok, since: 0, push: [

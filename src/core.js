@@ -78,10 +78,11 @@ const total = a => a.reduce((t, x) => t + cents(x.amount), 0) / 100;
 const minus = (a, b) => (cents(a) - cents(b)) / 100;
 const byCur = items => Object.fromEntries(CURS.map(c => [c, total(items.filter(x => x.cur === c))]));
 const byAt = (a, b) => a.at.localeCompare(b.at) || (a.createdAt || '').localeCompare(b.createdAt || '') || a.id.localeCompare(b.id);
-// The office manager's Accounts show only the expenses she entered (owner, 12 Oct 2026). An admin's payments to employees
-// (and regular payments) still reach her phone, for the Employees screens only.
+// The office manager's Accounts show only the expenses she entered (owner, 12 Oct 2026), and those an admin lets her see:
+// some projects, places or people, or every payment (1 Nov 2026, seesEntry). An admin's other payments to employees (and
+// regular payments) still reach her phone, for the Employees screens only.
 const ownAccounts = () => signedIn() && !can('money') && can('staff');
-const accountsE = () => (ownAccounts() ? live(S.expenses).filter(e => e.uid === session.user.id) : live(S.expenses));
+const accountsE = () => (ownAccounts() ? live(S.expenses).filter(e => e.uid === session.user.id || seesEntry(session.user.sees, e)) : live(S.expenses));
 const projName = id => id ? (S.projects.find(p => p.id === id)?.name || 'Unknown project') : 'General (no project)';
 const fileSafe = s => s.replace(/[\\/:*?"<>|]+/g, '').trim() || 'Company';
 const randHex = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');

@@ -87,9 +87,10 @@ function workerDetail(id) {
 
 // An advance not yet repaid: how much, and how it comes back (all from the next salary, or a part each month)
 function advanceNote(w) {
-  const d = dueFor(w, payMonth(w));
+  const month = payMonth(w), now = month === today().slice(0, 7), d = dueFor(w, month, '', now);
   if (!d.debt) return '';
-  return `<div class="note">💵 Advance to repay: <b>${money(d.debt, w.cur)}</b> — ${d.repay ? `${money(d.repay, w.cur)} comes off each salary, about ${monthsToRepay(w, d.debt, d.repay)} more month${monthsToRepay(w, d.debt, d.repay) === 1 ? '' : 's'}` : 'all of it comes off the next salary'}.
+  const n = d.repay && monthsToRepay(w, d.debt, d.repay);
+  return `<div class="note">💵 Advance to repay: <b>${money(d.debt, w.cur)}</b> — ${d.repay ? `${money(d.repay, w.cur)} comes off each salary, about ${n} more month${n === 1 ? '' : 's'}` : 'all of it comes off the next salary'}. ${now ? `At the end of ${monthName(month)} pay` : `To pay for ${monthName(month)}:`} <b>${money(d.pay, w.cur)}</b>.
     ${can('edit') && latestAdvance(w.id) ? `<button class="link" data-act="repayForm" data-id="${esc(w.id)}">${d.repay ? 'Change' : 'Take it back a little each month instead'} 🔒</button>` : ''}</div>`;
 }
 async function repayForm(id) {
@@ -402,9 +403,10 @@ function owedFor(w, month) {
 const latestAdvance = id => live(S.expenses).filter(e => e.worker === id && e.pay === 'advance').sort(byAt).pop();
 const repayOf = id => { const a = latestAdvance(id); return a && Number.isFinite(a.repay) && a.repay > 0 ? a.repay : 0; };
 // a month's salary with the plan applied (calc.js salaryDue), in the wage's money: pay, debt (advance owed as the month starts),
-// back (what comes off it now), left (owed after paying `pay`), repay; skip = a payment left out (a slip shows what was due before it)
-function dueFor(w, month, skip = '') {
-  const all = live(S.expenses).filter(e => e.worker === w.id && e.id !== skip), at = [today(), `${month}-31`].sort()[0];
+// back (what comes off it now), left (owed after paying `pay`), repay; skip = a payment left out (a slip shows what was due before it);
+// whole = the whole month, as if worked to its end (what is due when the month in progress ends)
+function dueFor(w, month, skip = '', whole = false) {
+  const all = live(S.expenses).filter(e => e.worker === w.id && e.id !== skip), at = whole ? `${month}-31` : [today(), `${month}-31`].sort()[0];
   const owed = upTo => cents(workerLedger(w, all, upTo, S.absences).balance);
   const paidMonth = all.filter(e => e.pay === 'salary' && e.month === month).reduce((t, e) => t + (inWage(e, w.cur) || 0), 0);
   const repay = repayOf(w.id), d = salaryDue(owed(at), owed(dayBefore(`${month}-01`)), paidMonth, cents(repay));

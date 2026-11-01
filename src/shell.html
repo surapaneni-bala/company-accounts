@@ -191,6 +191,11 @@ details.manual { margin: 4px 0 12px; } details.manual summary { cursor: pointer;
 .fld.check { display: flex; gap: 10px; align-items: center; font-weight: 700; }
 .fld.check input { width: 20px; height: 20px; padding: 0; margin: 0; flex: none; }
 .fld.check > span { display: block; font: inherit; margin: 0; min-width: 0; overflow-wrap: anywhere; } /* the words, with their small line under them (not a field title) */
+/* a login's "what else may they see": a plain group of ticks */
+fieldset.fld { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
+fieldset.fld .fld.check { margin-bottom: 8px; font-weight: 600; }
+.see-h { margin: 12px 0 6px; font-size: 14px; font-weight: 700; }
+fieldset[disabled] .fld.check { opacity: .5; }
 .steps { margin: 0 0 16px; padding-left: 22px; display: grid; gap: 8px; }
 .muted { color: var(--muted); font-size: 15px; }
 .setrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
