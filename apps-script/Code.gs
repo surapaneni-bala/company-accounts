@@ -67,7 +67,7 @@ const SHAPES = {
     && ['waiting', 'approved', 'rejected'].indexOf(d.status) >= 0
     && (d.action === 'delete' ? !Object.keys(d.after).length
       : d.action === 'advance' ? d.kind === 'W' && num_(d.after.amount) && d.after.amount > 0 && CURS.indexOf(d.after.cur) >= 0 && Object.keys(d.after).length === 2
-        && (d.repay === undefined || (num_(d.repay) && d.repay > 0))
+        && (d.repay === undefined || (num_(d.repay) && d.repay >= 0))
       : d.action === undefined && Object.keys(d.after).every(f => EDITABLE[d.kind].indexOf(f) >= 0)),
   A: d => SAFE_ID.test(d.worker) && DATE_RE.test(d.date) && (d.note === undefined || str_(d.note)),
   W: d => str_(d.name) && num_(d.wage) && d.wage >= 0 && CURS.indexOf(d.cur) >= 0 && DATE_RE.test(d.start)
@@ -115,7 +115,7 @@ const extras_ = d => (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (
   && (d.advance === undefined || typeof d.advance === 'boolean') && (d.advanceTotal === undefined || (num_(d.advanceTotal) && d.advanceTotal > 0)) // an advance to a supplier
   && (d.from === undefined || SAFE_ID.test(d.from)) && (d.received === undefined || DATE_RE.test(d.received)) // goods taken from an advance
   && (d.trip === undefined || SAFE_ID.test(d.trip)) && (d.need === undefined || SAFE_ID.test(d.need)) // a buying trip's cost, an item bought
-  && (d.repay === undefined || (num_(d.repay) && d.repay > 0)); // an employee's advance, taken back this much a month
+  && (d.repay === undefined || (num_(d.repay) && d.repay >= 0)); // an employee's advance, taken back this much a month (0: all at once)
 const str_ = v => typeof v === 'string';
 const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
@@ -208,7 +208,10 @@ function sync_(req) {
   const rows = readAll_(sh);
   // once the company has logins, a phone with only the company code (an old invite link) gets no staff records or files
   const codeOnly = !user && users_().length > 0;
-  const result = merge_(rows, req.push, Number(req.since) || 0, user, uploads_(), codeOnly), hidden = hiddenFor_(result.rows, user);
+  // what an office manager was given goes only to an app that knows it (req.sees): an older one would take it for something not
+  // hers, drop everything and fetch again, over and over
+  const viewer = user && user.sees && req.sees !== 1 ? Object.assign({}, user, { sees: null }) : user;
+  const result = merge_(rows, req.push, Number(req.since) || 0, user, uploads_(), codeOnly), hidden = hiddenFor_(result.rows, viewer);
   let warning = '';
   if (result.changed) {
     sh.getRange(2, 1, result.rows.length, 5).setValues(result.rows);
@@ -220,10 +223,13 @@ function sync_(req) {
     else organize_(result.rows, result.touched, result.trash);
   } catch (err) { console.error('Filing in Drive: ' + err.message); }
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
-  const pull = result.pull.map(r => view_(user, r, hidden)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V')));
+  const pull = result.pull.map(r => view_(viewer, r, hidden)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V')));
+  // an entry an office manager had that changed and is no longer hers to see (moved to another project or place, no longer an
+  // employee's pay): only its id, so her phone forgets its old copy
+  const forget = viewer && viewer.role === 'manager' && Number(req.since) > 0 ? result.pull.filter(r => r.k === 'E' && !view_(viewer, r, hidden)).map(r => r.id) : [];
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role !== 'admin' ? '' : ss.getUrl(), kinds: KINDS, // the sheet shows every balance
-    pull: pull, refused: result.refused, older: (result.older || []).filter(id => pull.some(r => r.id === id)), stamps: result.stamps || [], me: user ? public_(user) : null,
+    pull: pull, refused: result.refused, older: (result.older || []).filter(id => pull.some(r => r.id === id)), stamps: result.stamps || [], me: user ? public_(user) : null, forget: forget,
     logins: !!user || users_().length > 0, warning: warning,
   };
 }

@@ -87,7 +87,9 @@ function workerDetail(id) {
 
 // An advance not yet repaid: how much, and how it comes back (all from the next salary, or a part each month)
 function advanceNote(w) {
-  const month = payMonth(w), now = month === today().slice(0, 7), d = dueFor(w, month, '', now);
+  const month = payMonth(w);
+  if (!month) return '';
+  const now = month === today().slice(0, 7), d = dueFor(w, month, '', now);
   if (!d.debt) return '';
   const n = d.repay && monthsToRepay(w, d.debt, d.repay);
   return `<div class="note">💵 Advance to repay: <b>${money(d.debt, w.cur)}</b> — ${d.repay ? `${money(d.repay, w.cur)} comes off each salary, about ${n} more month${n === 1 ? '' : 's'}` : 'all of it comes off the next salary'}. ${now ? `At the end of ${monthName(month)} pay` : `To pay for ${monthName(month)}:`} <b>${money(d.pay, w.cur)}</b>.
@@ -111,8 +113,7 @@ function saveRepay(f) {
   if (!w || !a) return closeSheet();
   if (repay === null) return formErr(f, 'repay', REPAY_ERR);
   const by = myName() || S.lastBy || '';
-  const { repay: _, ...rest } = a;
-  update({ expenses: S.expenses.map(x => (x.id === a.id ? { ...rest, ...(repay ? { repay } : {}), editedAt: stampSec(), editedBy: by } : x)),
+  update({ expenses: S.expenses.map(x => (x.id === a.id ? { ...x, repay, editedAt: stampSec(), editedBy: by } : x)),
     log: logWith([['Edited', a.id, `${w.name}'s advance: ${repay ? `taken back at ${money(repay, w.cur)} a month` : 'all of it from the next salary'}`]], by) });
   toast('Saved ✓');
   workerDetail(w.id);
@@ -399,9 +400,12 @@ function owedFor(w, month) {
   return ledgerOf(w, month ? [today(), `${month}-31`].sort()[0] : today());
 }
 // An advance taken back a little each month (owner, 1 Nov 2026): the most that comes off one month's salary, set when the advance is
-// given. Their latest salary advance decides, for all they still owe (none set: all of it comes off the next salary, as before).
+// given (0: all of it from the next salary, as before). The latest advance that says decides, for all they still owe; a new
+// advance starts with the plan already there, so an advance typed in a hurry never changes it by itself.
 const latestAdvance = id => live(S.expenses).filter(e => e.worker === id && e.pay === 'advance').sort(byAt).pop();
-const repayOf = id => { const a = latestAdvance(id); return a && Number.isFinite(a.repay) && a.repay > 0 ? a.repay : 0; };
+const repayOf = id => { const a = live(S.expenses).filter(e => e.worker === id && e.pay === 'advance' && Number.isFinite(e.repay) && e.repay >= 0).sort(byAt).pop(); return a ? a.repay : 0; };
+// the plan to keep on a new advance: what was typed, or 0 when the box was emptied while there was a plan (nothing when there never was)
+const planFields = (id, repay) => (repay || repayOf(id) ? { repay } : {});
 // a month's salary with the plan applied (calc.js salaryDue), in the wage's money: pay, debt (advance owed as the month starts),
 // back (what comes off it now), left (owed after paying `pay`), repay; skip = a payment left out (a slip shows what was due before it);
 // whole = the whole month, as if worked to its end (what is due when the month in progress ends)
@@ -414,8 +418,9 @@ function dueFor(w, month, skip = '', whole = false) {
 }
 // "about 9 more months": what is owed at what comes off a month (never more than the wage can give)
 const monthsToRepay = (w, owed, repay) => Math.ceil(owed / Math.min(repay, w.wage || repay));
-const repayField = (w, val = '') => `<label class="fld"><span>Taken back from salary <em>(optional — how much a month, in ${w.cur === 'USD' ? 'US dollars' : w.cur}; empty: all of it from the next salary)</em></span>
-  <input name="repay" inputmode="decimal" placeholder="e.g. ${w.cur === 'USD' ? 100 : 100000}" value="${esc(val || '')}" autocomplete="off"><small class="muted repay-note">Their wage: ${money(w.wage, w.cur)} a month.</small></label>`;
+// w = the employee (null: not chosen yet — the amount is then in their wage's money)
+const repayField = (w, val = '') => `<label class="fld"><span>Taken back from salary <em>(optional — how much a month, in ${!w ? "their wage's money" : w.cur === 'USD' ? 'US dollars' : w.cur}; empty: all of it from the next salary)</em></span>
+  <input name="repay" inputmode="decimal" placeholder="e.g. ${!w || w.cur === 'USD' ? 100 : 100000}" value="${esc(val || '')}" autocomplete="off">${w ? `<small class="muted repay-note">Their wage: ${money(w.wage, w.cur)} a month.</small>` : ''}</label>`;
 // the plan typed in a form: 0 for none, null when it is not a number
 const repayFrom = f => { const t = String(f.elements.repay ? f.elements.repay.value : '').trim(); if (!t) return 0; const n = parseAmount(t); return n && n > 0 ? n : null; };
 const REPAY_ERR = 'Type how much comes off each month, like 100 — or leave it empty';
@@ -423,8 +428,8 @@ function payInfo(f) {
   const w = workerOf(f.dataset.id), pay = f.dataset.pay;
   if (pay === 'advance') {
     const used = advancesUsd(live(S.expenses).filter(e => e.worker === w.id), today().slice(0, 7));
-    const amount = parseAmount(f.elements.amount.value), repay = repayFrom(f), same = formCur(f) === w.cur;
-    const plan = amount && repay ? ` <b>${money(repay, w.cur)}</b> comes off each salary${same ? ` — about ${monthsToRepay(w, amount, repay)} months` : ''}.` : '';
+    const amount = parseAmount(f.elements.amount.value), repay = repayFrom(f), same = formCur(f) === w.cur, owed = payMonth(w) ? dueFor(w, payMonth(w)).debt : 0;
+    const plan = amount && repay ? ` <b>${money(repay, w.cur)}</b> comes off each salary${same ? ` — about ${monthsToRepay(w, owed + amount, repay)} months${owed ? `, with the ${money(owed, w.cur)} already owed` : ''}` : ''}.` : '';
     return `Advances given to ${esc(w.name)} this month: <b>${money(used, 'USD')}</b> of the ${money(ADVANCE_LIMIT_USD, 'USD')} limit.${plan}`;
   }
   const month = f.elements.month ? f.elements.month.value : '';
@@ -451,7 +456,7 @@ function payForm(id, pay, approval) {
       ${appr ? `<input type="hidden" name="cur" value="${esc(cur)}"><p class="muted">Approved by ${esc(appr.decidedBy)}: ${money(+appr.after.amount, cur)}</p>` : curChips(cur, 'Paid in')}
       ${amountField(suggested, cur)}
       ${rateField(cur)}
-      ${pay === 'advance' ? repayField(w, appr && appr.repay) : ''}
+      ${pay === 'advance' ? repayField(w, appr && appr.repay !== undefined ? appr.repay : repayOf(w.id)) : ''}
       ${accountChips(S.lastMode || 'Cash', 'Paid from')}
       ${byField()}
       <p class="err"></p>
@@ -500,7 +505,7 @@ function savePay(f) {
   if (appr && (cur !== appr.after.cur || amount > +appr.after.amount)) return formErr(f, 'amount', `The admin approved ${money(+appr.after.amount, appr.after.cur)} — not more.`);
   const month = pay === 'salary' ? v.month : '';
   const rec = { cur, amount, rate, paidTo: w.name, reason: PAY_REASON[pay](month), location: '', project: '', mode: v.mode || 'Cash', ...dateFrom({}),
-    worker: w.id, pay, ...(month ? { month } : {}), ...(appr ? { approval: appr.id } : {}), ...(repay ? { repay } : {}) };
+    worker: w.id, pay, ...(month ? { month } : {}), ...(appr ? { approval: appr.id } : {}), ...(pay === 'advance' ? planFields(w.id, repay) : {}) };
   const [[id], seq] = nextIds('E', 1, S.seq);
   update({ expenses: [...S.expenses, { id, ...rec, by, createdAt: stampSec(), batch: null }], seq, lastBy: by, lastMode: rec.mode, ...(rate ? { lastRate: rate } : {}) });
   render(); toast(`Saved ✓ ${money(amount, cur)} to ${w.name}`);
@@ -511,7 +516,7 @@ function askAdvance(w, amount, cur, by, repay = 0) {
   const [[id], seq] = nextIds('C', 1, S.seq);
   const text = `Advance of ${money(amount, cur)} to ${w.name} — more than the ${money(ADVANCE_LIMIT_USD, 'USD')} a month limit${repay ? ` · taken back at ${money(repay, w.cur)} a month` : ''}`;
   update({ // the plan rides beside the request (after holds only the amount: what the sheet checks)
-    changes: [...S.changes, { id, kind: 'W', target: w.id, action: 'advance', before: {}, after: { amount, cur }, ...(repay ? { repay } : {}), text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
+    changes: [...S.changes, { id, kind: 'W', target: w.id, action: 'advance', before: {}, after: { amount, cur }, ...planFields(w.id, repay), text, by, at: stamp(), createdAt: stampSec(), status: 'waiting' }], seq,
     log: logWith([['Advance asked', w.id, `${text} — waiting for an admin`]], by), lastBy: by,
   });
   closeSheet(); render(); toast('Sent to an admin ✓ You can give it once they approve.');

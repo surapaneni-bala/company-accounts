@@ -122,7 +122,8 @@ function inviteHint(f) {
 // Signing in and setting up logins send their own details instead.
 async function callServer(link, body) {
   const who = body.op === 'login' || body.op === 'setup' ? {} : signedIn() ? { token: session.token } : { key: link.k };
-  const text = JSON.stringify({ ...body, ...who }), ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), SYNC_TIMEOUT_MS + text.length / SLOWEST_BPS * 1000);
+  // sees: 1 = this app knows what an office manager may be given (sheet script v22 sends it only then)
+  const text = JSON.stringify({ ...body, ...who, sees: 1 }), ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), SYNC_TIMEOUT_MS + text.length / SLOWEST_BPS * 1000);
   let res;
   // text/plain body = no CORS preflight, which Apps Script cannot answer
   try { res = await fetch(link.u, { method: 'POST', body: text, signal: ctl.signal }); }
@@ -235,7 +236,7 @@ async function syncNow() {
     // by the sheet's copy — unless they were edited again while this request ran (they go again, and are refused again)
     const before = stampsNow(), lostIds = new Set((res.older || []).filter(id => push.some(p => p.id === id && p.u === before.get(id))));
     const lostNow = [...lostIds].map(id => ({ id, what: recordLabel(id), at: stampSec() }));
-    const changed = applyPull(res.pull || [], new Map([...lostIds].map(id => [id, before.get(id)])));
+    const changed = applyPull(res.pull || [], new Map([...lostIds].map(id => [id, before.get(id)]))) || !!(res.forget || []).length;
     if (changed) repairImportedMoves(); // a device on an old version may have sent mistaken expenses
     // a record edited while the request was running stays queued
     // records the sheet's script cannot store yet stay queued until it is updated
@@ -245,9 +246,12 @@ async function syncNow() {
     const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link;
     S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
     S = { ...S, base: Object.fromEntries(Object.entries(S.base || {}).filter(([id]) => S.dirty.includes(id))) }; // sent: the next edit starts from the new copy
+    // entries an office manager may no longer see (moved to another project or place): her old copies go, unless changed here
+    const forget = new Set((res.forget || []).filter(id => !S.dirty.includes(id)));
+    if (forget.size) S = { ...S, expenses: S.expenses.filter(e => !forget.has(e.id)) };
+    if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once; what she may see, before checking it
     if (dropMoney()) return; // this login may not hold the company's money: fetch again what it may see
     save();
-    if (res.me && signedIn()) saveSession({ ...session, user: res.me }); // a changed name shows at once
     lastRefused = refused;
     if (notAllowed.size) resendRefused(notAllowed);
     // the time the sheet stored each copy at: taken in place of this phone's own stamp (its clock may be wrong), unless

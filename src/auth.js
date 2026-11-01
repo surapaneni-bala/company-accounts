@@ -161,14 +161,17 @@ function seesText(s) {
 // the choice in the login form: every payment, or the projects, places and people ticked
 function seesField(u) {
   const s = (u && u.sees) || {}, on = (list, v) => (list || []).includes(v) ? 'checked' : '';
-  const places = [...new Map(live(S.expenses).filter(e => placeKey(e.location)).map(e => [placeKey(e.location), tidyPlace(e.location)])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  const people = usersCache.filter(x => !u || x.id !== u.id);
+  // what was given stays offered even when nothing uses it now (a deleted project, a place no longer typed): saving the login
+  // for something else never takes it away by itself
+  const places = [...new Map([...(s.l || []).map(k => [k, placeName(k)]), ...live(S.expenses).filter(e => placeKey(e.location)).map(e => [placeKey(e.location), tidyPlace(e.location)])]).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const projects = [...live(S.projects), ...(s.p || []).filter(id => !live(S.projects).some(p => p.id === id)).map(id => ({ id, name: projName(id) }))];
+  const people = [...usersCache.filter(x => !u || x.id !== u.id), ...(s.u || []).filter(id => !usersCache.some(x => x.id === id)).map(id => ({ id, name: 'A login that no longer exists' }))];
   const box = (name, v, label, list) => `<label class="fld check"><input type="checkbox" name="${name}" value="${esc(v)}" ${on(list, v)}><span>${esc(label)}</span></label>`;
   const old = (S.link && S.link.v || 0) < 22;
   return `<fieldset class="fld sees" ${u && u.role === 'manager' ? '' : 'hidden'} ${old ? 'disabled' : ''}><span>What else may they see in Accounts? <em>(their own payments always; never money received or balances)</em></span>
     ${old ? `<p class="note">This needs the Google Sheet script version 22 (the sheet runs ${S.link ? S.link.v || 2 : '—'}). Sheet tab → Show me how.</p>` : ''}
     <label class="fld check"><input type="checkbox" name="seeAll" ${s.all ? 'checked' : ''}><span><b>Every payment</b></span></label>
-    ${live(S.projects).length ? `<p class="muted see-h">Or the payments for these projects</p>${live(S.projects).map(p => box('seeP', p.id, p.name, s.p)).join('')}` : ''}
+    ${projects.length ? `<p class="muted see-h">Or the payments for these projects</p>${projects.map(p => box('seeP', p.id, p.name, s.p)).join('')}` : ''}
     ${places.length ? `<p class="muted see-h">At these places</p>${places.map(([k, label]) => box('seeL', k, label, s.l)).join('')}` : ''}
     ${people.length ? `<p class="muted see-h">Entered by</p>${people.map(x => box('seeU', x.id, x.name, s.u)).join('')}` : ''}
   </fieldset>`;

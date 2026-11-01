@@ -63,7 +63,7 @@ async function empAdvanceSheet(id) {
     <form data-form="empAdvance" data-id="${esc(id)}">
       <label class="fld"><span>Which employee?</span><select name="worker">${guess ? '' : '<option value="">Choose…</option>'}${ws.map(w => `<option value="${esc(w.id)}" ${guess && w.id === guess.id ? 'selected' : ''}>${esc(w.name)}${w.status === 'left' ? ' (has left)' : ''}</option>`).join('')}</select></label>
       <p class="muted">It is taken off their pay, like an advance given from Employees. "Paid to" and the signed voucher stay as they are.</p>
-      ${repayField(guess || ws[0])}
+      ${repayField(null)}
       <p class="err"></p>
       <button class="btn out">Link as a salary advance</button>
     </form>`);
@@ -77,7 +77,7 @@ function saveEmpAdvance(f) {
   const day = r.at.slice(0, 10);
   if (w.clearedTo && day <= w.clearedTo && !confirm(`This was paid on ${fmtDate(day)}, before ${w.name}'s salary was cleared (up to ${fmtDate(w.clearedTo)}).\n\nLinking it takes it off their pay again. Link it anyway?`)) return;
   const by = myName() || S.lastBy || '';
-  update({ expenses: S.expenses.map(x => (x.id === r.id ? { ...x, worker: w.id, pay: 'advance', ...(repay ? { repay } : {}), editedAt: stampSec(), editedBy: by } : x)),
+  update({ expenses: S.expenses.map(x => (x.id === r.id ? { ...x, worker: w.id, pay: 'advance', ...planFields(w.id, repay), editedAt: stampSec(), editedBy: by } : x)),
     log: logWith([['Edited', r.id, `Linked to ${w.name} as a salary advance (${money(r.amount, r.cur)}) — it comes off their pay${repay ? `, ${money(repay, w.cur)} a month` : ''}`]], by) });
   toast(`Linked to ${w.name} ✓ — it comes off their pay`);
   detail('E', r.id);
