@@ -289,6 +289,76 @@ function seesEntry(sees, e) {
   return sees.all === true || has(sees.p, e.project) || has(sees.l, placeKey(e.location)) || has(sees.u, e.uid);
 }
 
+/* ---------- the warehouse (owner, 2 Nov 2026): landed cost of what is imported, stock at average cost, sales ---------- */
+// to US dollars: amt in cur, rate = how many of cur make 1 US dollar that day (as on Accounts' SSP entries); null without a rate
+const toUsd = (amt, cur, rate) => (cur === 'USD' ? amt : rate > 0 ? amt / rate : null);
+// whole cents split over shares in proportion; the cents left over go to the largest remainders, so the parts always add up
+function splitCents(total, shares) {
+  const sum = shares.reduce((a, b) => a + b, 0);
+  if (!(sum > 0)) return null;
+  const raw = shares.map(s => total * s / sum), out = raw.map(Math.floor);
+  let left = total - out.reduce((a, b) => a + b, 0);
+  raw.map((r, i) => [r - out[i], i]).sort((a, b) => b[0] - a[0]).forEach(([, i]) => { if (left > 0) { out[i] += 1; left -= 1; } });
+  return out;
+}
+// One import (goods received, kind Y): the supplier's lines (qty, amt = what that line cost, in gcur at grate; kg = its weight)
+// and every other cost (freight, duty, clearing… each in its own currency at that day's rate), each spread over the lines by
+// weight, value or quantity. → per line { goods, extra, total } in cents and unit = landed cost of one, in dollars (4 places);
+// or { err, cost } (which cost line cannot be spread). Owner's rebars, 2 Nov 2026: the extra costs over the tons, per bar.
+function landedCost(y) {
+  const lines = y.lines || [], costs = y.costs || [];
+  const goods = lines.map(l => { const u = toUsd(l.amt, y.gcur || 'USD', y.grate); return u === null ? null : Math.round(u * 100); });
+  if (goods.includes(null)) return { err: `the rate: how many ${y.gcur} make 1 US dollar` };
+  const extra = lines.map(() => 0), costCents = [];
+  for (let i = 0; i < costs.length; i++) {
+    const c = costs[i], usd = toUsd(c.amt, c.cur, c.rate);
+    if (usd === null) return { err: `the rate of this cost: how many ${c.cur} made 1 US dollar that day`, cost: i };
+    const by = c.split || 'value', share = lines.map((l, j) => (by === 'kg' ? l.kg || 0 : by === 'qty' ? l.qty : goods[j]));
+    if (by === 'kg' && lines.some(l => !(l.kg > 0))) return { err: 'the weight of every line (or spread this cost by value instead)', cost: i };
+    const part = splitCents(Math.round(usd * 100), share);
+    if (!part) return { err: 'something to spread it over: the lines have no value yet', cost: i };
+    costCents.push(Math.round(usd * 100));
+    part.forEach((p, j) => { extra[j] += p; });
+  }
+  const out = lines.map((l, j) => ({ goods: goods[j], extra: extra[j], total: goods[j] + extra[j], unit: Math.round((goods[j] + extra[j]) / l.qty * 100) / 1e4, kg: l.kg || 0 }));
+  const sum = k => out.reduce((t, x) => t + x[k], 0);
+  return { lines: out, costs: costCents, goods: sum('goods'), extra: sum('extra'), total: sum('total'), kg: sum('kg') };
+}
+// the selling price of one: its landed cost plus the markup (10 % unless an admin set another), to the cent
+const sellPrice = (cost, markup = 10) => Math.round(cost * (1 + markup / 100) * 100) / 100;
+// how far below the list price a price is, in % (an office manager may go 1 % below; more waits for an admin)
+const belowList = (price, list) => (list > 0 && price < list ? Math.round((list - price) / list * 1e4) / 100 : 0);
+const MANAGER_OFF = 1;
+// an invoice that takes goods out of stock: an invoice (not a quotation), not cancelled, not waiting for an admin or refused
+const sells = x => x.type === 'invoice' && !x.deleted && !x.cancelled && x.ok !== 'waiting' && x.ok !== 'rejected';
+const OUT_RANK = { in: 0, sale: 1, use: 1, damage: 1, return: 1, count: 2 };
+// Every item's stock, replayed in date order (Odoo's and Zoho's "average cost"): a receipt makes the average
+// (on hand × average + received × its landed cost) ÷ (on hand + received); whatever goes out (sold, used, damaged, returned)
+// leaves at the average of that moment, so it never changes it; a stock count's difference goes in or out at the average.
+// receipts: lc = landed cost of one, per line (the admin's phone works it out when saving: landedCost); outs: kind use |
+// damage | return | count (count: qty is the difference found, + or −); invoices: lines naming an item (m), in USD or SSP at rate.
+// → { [item id]: { qty, avg, value (cents), sold, revenue, cogs (cents), used, usedValue, lost, lostValue, moves: [...] } }
+function stockBook(receipts, outs, invoices) {
+  const moves = [];
+  receipts.filter(y => !y.deleted).forEach(y => y.lines.forEach((l, i) => moves.push({ m: l.m, date: y.date, kind: 'in', qty: l.qty, cost: (y.lc || [])[i] || 0, ref: y.id, at: y.createdAt })));
+  outs.filter(o => !o.deleted).forEach(o => o.lines.forEach(l => moves.push({ m: l.m, date: o.date, kind: o.kind, qty: o.kind === 'count' ? l.qty : -l.qty, ref: o.id, project: o.project, at: o.createdAt })));
+  invoices.filter(sells).forEach(x => x.items.forEach(it => { if (it.m) { const usd = toUsd(it.qty * it.price, x.cur, x.rate); moves.push({ m: it.m, date: x.date, kind: 'sale', qty: -it.qty, ref: x.id, usd: usd === null ? null : Math.round(usd * 100), at: x.createdAt }); } }));
+  moves.sort((a, b) => a.date.localeCompare(b.date) || OUT_RANK[a.kind] - OUT_RANK[b.kind] || String(a.at || '').localeCompare(String(b.at || '')) || a.ref.localeCompare(b.ref));
+  const book = {};
+  moves.forEach(mv => {
+    const s = book[mv.m] || (book[mv.m] = { qty: 0, avg: 0, sold: 0, revenue: 0, cogs: 0, used: 0, usedValue: 0, lost: 0, lostValue: 0, moves: [] });
+    if (mv.kind === 'in') s.avg = s.qty > 0 ? Math.round((s.qty * s.avg + mv.qty * mv.cost) / (s.qty + mv.qty) * 1e4) / 1e4 : mv.cost;
+    const val = Math.round(mv.qty * (mv.kind === 'in' ? mv.cost : s.avg) * 100); // cents, + in, − out
+    s.qty = Math.round((s.qty + mv.qty) * 1e6) / 1e6;
+    if (mv.kind === 'sale') { s.sold += -mv.qty; s.cogs += -val; if (mv.usd !== null) s.revenue += mv.usd; }
+    if (mv.kind === 'use') { s.used += -mv.qty; s.usedValue += -val; }
+    if (mv.kind === 'damage' || mv.kind === 'return' || mv.kind === 'count') { s.lost += -mv.qty; s.lostValue += -val; }
+    s.moves.push({ ...mv, val, bal: s.qty, avg: s.avg });
+  });
+  Object.values(book).forEach(s => { s.value = Math.round(s.qty * s.avg * 100); s.short = s.qty < 0; });
+  return book;
+}
+
 // Advances given in a month, in US dollars (the monthly limit is in dollars).
 function advancesUsd(pays, month) {
   const cents = pays.filter(p => p.pay === 'advance' && !p.deleted && p.at.slice(0, 7) === month)

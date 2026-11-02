@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ TextEncoder });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry };', ctx);
-const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry } = ctx.api;
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry, landedCost, splitCents, sellPrice, belowList, stockBook };', ctx);
+const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry, landedCost, splitCents, sellPrice, belowList, stockBook } = ctx.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 
 /* ---------- days on a 30-day month: joining and leaving days both count, day 31 counts as day 30 ---------- */
@@ -240,6 +240,47 @@ const t0 = Date.now(); findDoubles(many); assert.ok(Date.now() - t0 < 500, `6,00
   assert.deepStrictEqual([seesEntry({ u: ['U-2'] }, e), seesEntry({ u: ['U-3'] }, e)], [true, false], 'what one person entered');
   assert.strictEqual(seesEntry({ p: 'P-1', l: 5, u: null }, e), false, 'a damaged grant gives nothing');
   assert.strictEqual(seesEntry({ l: [''] }, { id: 'E-2', location: '' }), false, 'an empty place matches nothing');
+}
+
+/* ---------- the warehouse: landed cost (the owner's rebars, 2 Nov 2026) ---------- */
+{
+  const rebars = { gcur: 'USD', lines: [{ m: 'R10', qty: 280, amt: 1617.03, kg: 2073 }, { m: 'R12', qty: 470, amt: 3906.49, kg: 5008 }, { m: 'R16', qty: 792, amt: 11712.73, kg: 15016 }, { m: 'R20', qty: 338, amt: 7814.29, kg: 10018 }],
+    costs: [300, 2458, 1000, 5837, 2340].map(amt => ({ t: 'other', amt, cur: 'USD', split: 'kg' })) };
+  const r = plain(landedCost(rebars));
+  assert.deepStrictEqual([r.goods, r.extra, r.total, r.kg], [2505054, 1193500, 3698554, 32115], 'invoice $25,050.54 (the lines added up, not typed) + $11,935 = $36,985.54 over 32.115 tons');
+  assert.deepStrictEqual(r.lines.map(l => Math.round(l.unit * 100) / 100), [8.53, 12.27, 21.83, 34.13], 'landed cost of one bar: 10, 12, 16 and 20 mm, as the owner worked out');
+  assert.deepStrictEqual(r.lines.map(l => sellPrice(l.unit)), [9.38, 13.5, 24.02, 37.55], 'and with 10 % on top, what one sells for');
+  assert.strictEqual(r.lines.reduce((t, l) => t + l.extra, 0), 1193500, 'the extra costs are spread to the cent: nothing lost or made up');
+  assert.deepStrictEqual(plain(landedCost({ ...rebars, costs: rebars.costs.map(c => ({ ...c, split: 'value' })) })).lines.map(l => Math.round(l.unit * 100) / 100), [8.53, 12.27, 21.83, 34.13], 'by value: the same here (every size cost $780 a ton)');
+  // a cost paid in SSP at that day's rate; goods bought in yuan
+  const mixed = plain(landedCost({ gcur: 'CNY', grate: 7.1, lines: [{ m: 'A', qty: 10, amt: 710 }, { m: 'B', qty: 30, amt: 2130 }], costs: [{ t: 'duty', amt: 450000, cur: 'SSP', rate: 4500, split: 'value' }, { t: 'transport', amt: 40, cur: 'USD', split: 'qty' }] }));
+  assert.deepStrictEqual([mixed.goods, mixed.costs, mixed.lines.map(l => l.unit)], [40000, [10000, 4000], [13.5, 13.5]], '¥710 = $100, ¥2,130 = $300; SSP 450,000 at 4,500 = $100 by value (25/75), $40 by quantity (10/30): $135 ÷ 10 and $405 ÷ 30');
+  assert.ok(/rate/.test(landedCost({ gcur: 'CNY', lines: [{ m: 'A', qty: 1, amt: 5 }], costs: [] }).err), 'goods in yuan need a rate');
+  assert.deepStrictEqual([/rate/.test(landedCost({ lines: [{ m: 'A', qty: 1, amt: 5 }], costs: [{ amt: 9, cur: 'SSP' }] }).err), landedCost({ lines: [{ m: 'A', qty: 1, amt: 5 }], costs: [{ amt: 9, cur: 'SSP' }] }).cost], [true, 0], 'a cost in SSP needs that day\'s rate, and says which cost');
+  assert.ok(/weight/.test(landedCost({ lines: [{ m: 'A', qty: 1, amt: 5, kg: 2 }, { m: 'B', qty: 1, amt: 5 }], costs: [{ amt: 9, cur: 'USD', split: 'kg' }] }).err), 'by weight needs every line\'s weight');
+  assert.deepStrictEqual(plain(splitCents(100, [1, 1, 1])), [34, 33, 33], 'a cent left over goes somewhere, never lost');
+  assert.deepStrictEqual([belowList(99, 100), belowList(98.5, 100), belowList(101, 100)], [1, 1.5, 0], '% below the list price');
+}
+
+/* ---------- the warehouse: stock at moving average cost ---------- */
+{
+  const Y = (id, date, lines, extra = {}) => ({ id, date, lines: lines.map(([m, qty]) => ({ m, qty })), lc: lines.map(l => l[2]), createdAt: date + 'T08:00:00', ...extra });
+  const O = (id, date, kind, lines, extra = {}) => ({ id, date, kind, lines: lines.map(([m, qty]) => ({ m, qty })), createdAt: date + 'T09:00:00', ...extra });
+  const I = (id, date, lines, extra = {}) => ({ id, type: 'invoice', date, cur: 'USD', items: lines.map(([m, qty, price]) => ({ t: 'x', m, qty, price })), createdAt: date + 'T10:00:00', ...extra });
+  const book = plain(stockBook(
+    [Y('Y1', '2026-11-01', [['bar', 100, 10]]), Y('Y2', '2026-11-05', [['bar', 50, 13]]), Y('Y3', '2026-11-06', [['bar', 999, 1]], { deleted: 'x' })],
+    [O('O1', '2026-11-06', 'use', [['bar', 20]], { project: 'P-1' }), O('O2', '2026-11-07', 'count', [['bar', -2]]), O('O3', '2026-11-07', 'damage', [['bar', 1]])],
+    [I('I1', '2026-11-03', [['bar', 30, 11]]), I('I2', '2026-11-08', [['bar', 10, 49500]], { cur: 'SSP', rate: 4500 }), I('I3', '2026-11-08', [['bar', 5, 11]], { ok: 'waiting' }),
+      I('I4', '2026-11-08', [['bar', 5, 11]], { cancelled: 'x' }), I('I5', '2026-11-08', [['bar', 5, 11]], { type: 'quote' }), I('I6', '2026-11-08', [['bar', 5, 11]], { ok: 'rejected' })]));
+  const b = book.bar;
+  assert.strictEqual(b.moves.length, 7, 'counted: 2 receipts, 1 sale before, use, count, damage, 1 sale in SSP; not deleted, waiting, cancelled, quoted or refused');
+  assert.deepStrictEqual(b.moves.map(m => [m.kind, m.bal, m.avg]), [['in', 100, 10], ['sale', 70, 10], ['in', 120, 11.25], ['use', 100, 11.25], ['damage', 99, 11.25], ['count', 97, 11.25], ['sale', 87, 11.25]],
+    '100 at $10, 30 sold, 50 more at $13 → (70 × 10 + 50 × 13) ÷ 120 = $11.25; going out never changes the average; a count comes last in its day');
+  assert.deepStrictEqual([b.qty, b.avg, b.value], [87, 11.25, 97875], '87 left, worth $978.75 at cost');
+  assert.deepStrictEqual([b.sold, b.revenue, b.cogs], [40, 44000, 41250], 'sold 40: $330 + SSP 495,000 at 4,500 ($110) = $440; they cost $300 + $112.50');
+  assert.deepStrictEqual([b.used, b.usedValue, b.lost, b.lostValue], [20, 22500, 3, 3375], 'used on the project 20 ($225); 2 missing at the count and 1 damaged ($33.75)');
+  assert.strictEqual(plain(stockBook([], [O('O9', '2026-11-01', 'use', [['nut', 3]])], [])).nut.short, true, 'more out than ever came in: flagged, not hidden');
+  assert.deepStrictEqual(plain(stockBook([Y('Y1', '2026-11-01', [['a', 5, 2]])], [], [I('I1', '2026-11-01', [['a', 5, 3]])])).a.moves.map(m => m.kind), ['in', 'sale'], 'received and sold the same day: in first');
 }
 
 console.log('Pay maths, words and PDF: all checks passed');
