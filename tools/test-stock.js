@@ -20,6 +20,7 @@ post({ op: 'saveUser', token: owner, user: { name: 'Store One', username: 'store
 const m = post({ op: 'login', username: 'mary', password: 'mary-pass1' }), s = post({ op: 'login', username: 'store1', password: 'store-pass1' });
 const ownerId = post({ op: 'users', token: owner }).users.find(u => u.username === 'owner').id;
 const sync = (tok, push = [], since = 0) => post({ token: tok, since, push, sees: 1 });
+const ago = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10); // sales a few days back (the morning email counts days)
 
 /* ---------- an admin brings in the rebars: four stock items and one import with its costs ---------- */
 const item = (id, name, price, extra = {}) => ({ id, k: 'M', u: 10, d: { id, name, unit: 'pcs', cat: 'Steel', markup: 10, price, uid: ownerId, ...extra } });
@@ -48,7 +49,7 @@ assert.deepStrictEqual(sync(m.token, [out('O-AG1-0001', 20), out('O-AG1-0002', 2
 assert.deepStrictEqual(sync(m.token, [out('O-AG1-0004', 21, { kind: 'count', lines: [{ m: 'M-OW1-0001', qty: -3, counted: 277 }] })]).refused, [], 'a stock count may find fewer (or more)');
 assert.deepStrictEqual(sync(m.token, [{ ...imp, id: 'Y-AG1-0001', d: { ...imp.d, id: 'Y-AG1-0001', uid: m.me.id } }, item('M-AG1-0001', 'Sand', 1, { uid: m.me.id })]).refused.sort(), ['M-AG1-0001', 'Y-AG1-0001'], 'she cannot bring goods in or make items (costs are for admins)');
 const client = { id: 'K-AG1-0001', k: 'K', u: 22, d: { id: 'K-AG1-0001', name: 'Builder Ltd', uid: m.me.id } };
-const sale = (id, u, lines, extra = {}) => ({ id, k: 'I', u, d: { id, type: 'invoice', no: post({ op: 'number', token: m.token }).no || 'X', client: 'K-AG1-0001', date: '2026-10-30', cur: 'USD', items: lines.map(([mm, qty, price, list]) => ({ t: 'Rebar', m: mm, qty, price, list, unit: 'pcs' })), tax: 0, uid: m.me.id, createdAt: '2026-10-30T09:00:00', ...extra } });
+const sale = (id, u, lines, extra = {}) => ({ id, k: 'I', u, d: { id, type: 'invoice', no: post({ op: 'number', token: m.token }).no || 'X', client: 'K-AG1-0001', date: ago(4), cur: 'USD', items: lines.map(([mm, qty, price, list]) => ({ t: 'Rebar', m: mm, qty, price, list, unit: 'pcs' })), tax: 0, uid: m.me.id, createdAt: '2026-10-30T09:00:00', ...extra } });
 res = sync(m.token, [client, sale('I-AG1-0001', 23, [['M-OW1-0002', 100, 13.5, 13.5]]), sale('I-AG1-0002', 23, [['M-OW1-0002', 10, 13.37, 13.5]]), sale('I-AG1-0003', 23, [['M-OW1-0002', 10, 13.3, 13.5]]),
   sale('I-AG1-0004', 23, [['M-OW1-0002', 10, 13.3, 13.3]]), sale('I-AG1-0005', 23, [['M-OW1-0004', 5, 37.55, 37.55]], { ok: 'approved' }), sale('I-AG1-0006', 23, [['M-OW1-0003', 10, 60750, 24.02 * 2500]], { cur: 'SSP', rate: 2500 })]);
 assert.deepStrictEqual(res.refused.sort(), ['I-AG1-0003', 'I-AG1-0004', 'I-AG1-0005'], 'the list price, or 0.96 % below; not 1.5 % below — even claiming a lower list price — and she cannot approve her own price; an SSP sale at its rate is checked in dollars');
@@ -76,6 +77,20 @@ assert.deepStrictEqual([stub.d.stub, stub.d.items, 'client' in stub.d, 'no' in s
 assert.ok(!pull.some(p => p.id === 'I-OW1-0002'), 'an invoice with nothing from stock: not at all');
 assert.ok(pull.some(p => p.id === 'I-AG1-0001') && pull.find(p => p.id === 'I-AG1-0001').d.items[0].price === 13.5, 'her own invoices in full');
 
+/* ---------- delivery notes: made when the goods leave, completed by who received what; never changed after ---------- */
+const dn = (id, u, extra = {}) => ({ id, k: 'D', u, d: { id, no: 'DN-AG1-0001', date: '2026-10-30', inv: 'I-AG1-0001', to: 'Builder Ltd', addr: 'Gudele block 3', how: 'deliver', driver: 'Juma (driver)', phone: '+211 900 000 001', vehicle: 'SSD 123 A',
+  charge: 25, cost: 15, cur: 'USD', lines: [{ m: 'M-OW1-0002', qty: 100 }], status: 'out', check: 'AB12CD', uid: m.me.id, createdAt: '2026-10-30T11:00:00', ...extra } });
+assert.deepStrictEqual(sync(m.token, [dn('D-AG1-0001', 60), dn('D-AG1-0002', 60, { status: 'done', recv: { name: 'X', at: '2026-10-30T12:00', lines: [] } }), dn('D-AG1-0003', 60, { no: 'INV-1' }), dn('D-AG1-0004', 60, { lines: [] })]).refused.sort(),
+  ['D-AG1-0002', 'D-AG1-0003', 'D-AG1-0004'], 'a delivery note starts "on the way", with its number and its goods; it cannot be born received');
+const todayAt = new Date().toISOString().slice(0, 10) + 'T15:40'; // received today: the morning email names it
+const sent = dn('D-AG1-0001', 61, { status: 'done', recv: { name: 'Peter (site engineer)', phone: '+211 900 000 002', at: todayAt, lines: [{ m: 'M-OW1-0002', qty: 95 }], note: '5 bars fell off', geo: { lat: 4.85, lng: 31.58, acc: 20 } } });
+assert.deepStrictEqual(sync(m.token, [{ ...sent, d: { ...sent.d, lines: [{ m: 'M-OW1-0002', qty: 95 }] } }]).refused, ['D-AG1-0001'], 'completing it, the goods sent cannot be made to match what arrived');
+assert.deepStrictEqual(sync(m.token, [{ ...sent, d: { ...sent.d, charge: 0 } }]).refused, ['D-AG1-0001'], 'nor the delivery charge changed');
+assert.deepStrictEqual(sync(m.token, [sent]).refused, [], 'only who received what is added');
+assert.deepStrictEqual(sync(m.token, [{ ...sent, u: 62, d: { ...sent.d, recv: { ...sent.d.recv, lines: [{ m: 'M-OW1-0002', qty: 100 }] } } }]).refused, ['D-AG1-0001'], 'and once received it stays as it was signed');
+assert.deepStrictEqual(sync(s.token, [dn('D-SK1-0001', 63, { uid: s.me.id })]).refused, ['D-SK1-0001'], 'a store keeper does not make them');
+assert.ok(sync(m.token).pull.some(p => p.id === 'D-AG1-0001' && p.d.recv.name === 'Peter (site engineer)'), 'the office manager has them');
+
 /* ---------- the readable tabs (admins have the sheet): stock, every move, each import and its costs ---------- */
 const st = rowOf('Stock', 'M-OW1-0002'), st10 = rowOf('Stock', 'M-OW1-0001');
 assert.deepStrictEqual([st[5], st[6], st[7], st[10]], [470, 120, 350, 12.2716], '12 mm: 470 in, 100 + 10 + 10 sold, 350 on hand, at the landed cost');
@@ -85,6 +100,17 @@ const lines = tab('Imports').filter(r => r[15] === 'Y-OW1-0001');
 assert.deepStrictEqual(lines.map(r => r[13]), [8.5265, 12.2716, 21.8348, 34.134], 'each line with the landed cost of one');
 assert.deepStrictEqual(tab('Import costs').filter(r => r[10] === 'Y-OW1-0001').map(r => [r[2], r[5], r[7], r[9]]), [['Freight / shipping', 'USD', 5837, ''], ['Customs duty', 'SSP', 2458, ''], ['Clearing agent', 'USD', 1000, 'E-OW1-0090']],
   'every cost as typed, in its currency, with its dollars at that day\'s rate and the payment it was');
+
+const dRow = rowOf('Deliveries', 'D-AG1-0001');
+assert.deepStrictEqual([dRow[2], dRow[5], dRow[6], dRow[8], dRow[10], dRow[11], dRow[13], dRow[14], dRow[16], dRow[17], /maps\.google\.com\/\?q=4\.85,31\.58/.test(dRow[18])],
+  [sync(owner).pull.find(p => p.id === 'I-AG1-0001').d.no, 'Delivered by us', 'Juma (driver)', 'SSD 123 A', 25, 15, 'Received', 'Peter (site engineer)', '95 × Rebar 12 mm × 12 m', 'SHORT', true],
+  'every delivery: for which invoice, who took it in which vehicle, the charge and the cost, who received what, short, where it was signed');
+gas.mails.length = 0;
+post({ op: 'alerts', token: owner, email: 'owner@example.com' });
+gas.morningEmail(true);
+const mail = gas.mails.length ? gas.mails[0].body : '';
+assert.ok(/SHORT DELIVERY: DN-AG1-0001 to Builder Ltd — received by Peter/.test(mail), 'a short delivery is in the morning email');
+assert.ok(/NOT DELIVERED: INV-\d+ of \d{4}-\d\d-\d\d — 10 of 10 still in the warehouse/.test(mail), 'an invoice whose goods have no delivery note after 3 days is named (I-AG1-0002: 10 bars, none sent)');
 
 /* ---------- papers: an import's papers are filed under the warehouse, and are admins' only ---------- */
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC', 'base64').toString('base64');

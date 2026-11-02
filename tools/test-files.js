@@ -276,7 +276,7 @@ assert.strictEqual(gas.mails.length, 0, 'no address: no email');
 
 /* ---------- invoices and quotations: admins only; the sheet numbers invoices in one series ---------- */
 assert.deepStrictEqual([post({ op: 'number', token: owner }).no, post({ op: 'number', token: owner }).no], ['INV-0001', 'INV-0002'], 'one unbroken series');
-assert.strictEqual(post({ op: 'number', token: m.token }).ok, false, 'only admins take a number');
+assert.deepStrictEqual([post({ op: 'number', token: m.token }).no, post({ op: 'number', token: s.token }).ok], ['INV-0003', false], 'office managers invoice from stock too (2 Nov 2026); store keepers take no number');
 const client = (id, u, extra = {}) => ({ id, k: 'K', u, d: { id, name: 'Test Client Ltd', phone: '+000 111', ...extra } });
 const invoice = (id, u, extra = {}) => ({ id, k: 'I', u, d: { id, type: 'invoice', no: 'INV-0001', client: 'K-OW1-0001', date: '2026-10-11', due: '2099-10-25', cur: 'USD', items: [{ t: 'Cement 42.5', qty: 20, unit: 'bags', price: 15 }], tax: 0, ...extra } });
 const invPdf = upload('INV-0001.pdf', 'application/pdf', pdf), qtPdf = upload('QT-OW1-0001.pdf', 'application/pdf', pdf);
@@ -284,9 +284,12 @@ assert.deepStrictEqual(post({ token: owner, since: 0, push: [client('K-OW1-0001'
   invoice('I-OW1-0003', 130, { items: [] }), invoice('I-OW1-0004', 130, { items: [{ t: 'x', qty: 0, price: 1 }] }), invoice('I-OW1-0005', 130, { type: 'bill' }),
   file('F-OW1-0500', 130, 'x', { for: 'I-OW1-0001', type: 'invoice', fileId: invPdf, no: 'INV-0001', mime: 'application/pdf', name: 'INV-0001.pdf' }), file('F-OW1-0501', 130, 'x', { for: 'I-OW1-0002', type: 'quote', fileId: qtPdf, no: 'QT-OW1-0001', mime: 'application/pdf', name: 'QT.pdf' })] }).refused.sort(),
   ['I-OW1-0003', 'I-OW1-0004', 'I-OW1-0005'], 'an invoice has lines, each with a quantity; invoice or quotation');
-assert.ok(!post({ token: m.token, since: 0, push: [] }).pull.some(p => ['K', 'I'].includes(p.k) || p.id === 'F-OW1-0500'), 'the office manager sees no clients, invoices or their PDFs');
+{ const got = post({ token: m.token, since: 0, push: [], sees: 1 }).pull;
+  assert.ok(!got.some(p => p.k === 'I' || p.id === 'F-OW1-0500'), "the office manager gets none of an admin's invoices (nothing from stock in them) or their PDFs");
+  assert.ok(got.some(p => p.id === 'K-OW1-0001'), 'but the clients, to invoice them herself (2 Nov 2026)'); }
 assert.ok(!post({ token: s.token, since: 0, push: [] }).pull.some(p => ['K', 'I'].includes(p.k)), 'nor the store keeper');
-assert.deepStrictEqual(post({ token: m.token, since: 0, push: [client('K-AG1-0001', 131, { uid: m.me.id })] }).refused, ['K-AG1-0001'], 'nor adds them');
+assert.deepStrictEqual(post({ token: m.token, since: 0, push: [client('K-AG1-0001', 131, { uid: m.me.id })] }).refused, [], 'she adds a client for her invoice');
+assert.deepStrictEqual(post({ token: s.token, since: 0, push: [client('K-SK1-0001', 131, { uid: s.me.id })] }).refused, ['K-SK1-0001'], 'a store keeper does not');
 assert.deepStrictEqual([pathOf(invPdf), drv().files[invPdf].name, pathOf(qtPdf)], [`${TOP} / 06 INVOICES / 2026 / 2026-10 OCTOBER`, 'INV-0001 TEST CLIENT LTD.pdf', `${TOP} / 07 QUOTATIONS / 2026 / 2026-10 OCTOBER`], 'by year and month, named by number and client');
 // a payment names the invoice; the tab shows what is paid and still owed
 post({ token: owner, since: 0, push: [{ id: 'R-OW1-0100', k: 'R', u: 132, d: { id: 'R-OW1-0100', cur: 'USD', amount: 120, at: '2026-10-12T10:00', project: '', mode: 'Bank', invoice: 'I-OW1-0001' } }] });
