@@ -8,10 +8,10 @@ const SYNC_TIMEOUT_MS = 45000, SLOWEST_BPS = 4000; // a request gets 45 s plus t
 const APP_URL = 'https://app.b-e-p-l.com/';
 // the order is the order records are sent in: an employee before a change request about them, files last
 // (the sheet only takes a file record whose entry it already has)
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', I: 'invoices', U: 'suppliers', J: 'trips', N: 'needs', X: 'exchanges', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', M: 'stock', Y: 'receipts', O: 'stockOut', I: 'invoices', D: 'deliveries', U: 'suppliers', J: 'trips', N: 'needs', X: 'exchanges', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
-const KINDS_SEEN = 7; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I), 6 = the buying list (N), suppliers (U), trips (J), 7 = dollars changed into SSP (X)
+const KINDS_SEEN = 8; // 8 = the warehouse: stock items (M), goods received (Y), goods out (O), delivery notes (D) · 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I), 6 = the buying list (N), suppliers (U), trips (J), 7 = dollars changed into SSP (X)
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string' && okRate(d),
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && okRate(d),
@@ -25,7 +25,17 @@ const VALID = {
   B: d => typeof d.id === 'string' && typeof d.bank === 'string' && typeof d.number === 'string',
   V: d => typeof d.id === 'string' && typeof d.title === 'string' && ['company', 'vehicle', 'personal'].includes(d.kind),
   K: d => typeof d.id === 'string' && typeof d.name === 'string',
-  I: d => typeof d.id === 'string' && ['invoice', 'quote'].includes(d.type) && typeof d.no === 'string' && CURS.includes(d.cur) && DATE_RE.test(d.date) && Array.isArray(d.items) && d.items.every(it => it && typeof it.t === 'string' && Number.isFinite(it.qty) && Number.isFinite(it.price)),
+  // someone else's sale reaches an office manager as a stub: only the stock it took (stub: true; sheet script v23)
+  I: d => typeof d.id === 'string' && ['invoice', 'quote'].includes(d.type) && DATE_RE.test(d.date) && Array.isArray(d.items) && (d.stub === true
+    ? d.items.every(it => it && SAFE_ID.test(it.m) && Number.isFinite(it.qty))
+    : typeof d.no === 'string' && CURS.includes(d.cur) && d.items.every(it => it && typeof it.t === 'string' && Number.isFinite(it.qty) && Number.isFinite(it.price) && (it.m === undefined || SAFE_ID.test(it.m)))),
+  M: d => typeof d.id === 'string' && typeof d.name === 'string' && typeof d.unit === 'string' && (d.price === undefined || Number.isFinite(d.price)),
+  // an import reaches an office manager as a stub too: its items and how many, no cost
+  Y: d => typeof d.id === 'string' && DATE_RE.test(d.date) && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty) && l.qty > 0)
+    && (d.stub === true || (Array.isArray(d.costs) && Array.isArray(d.lc) && d.lc.length === d.lines.length && d.lines.every(l => Number.isFinite(l.amt)))),
+  O: d => typeof d.id === 'string' && DATE_RE.test(d.date) && ['use', 'damage', 'return', 'count'].includes(d.kind) && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty)),
+  D: d => typeof d.id === 'string' && typeof d.no === 'string' && DATE_RE.test(d.date) && (SAFE_ID.test(d.inv || '') || SAFE_ID.test(d.out || '')) && ['deliver', 'collect'].includes(d.how)
+    && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty)) && ['out', 'done'].includes(d.status) && (d.status === 'out' || (!!d.recv && Array.isArray(d.recv.lines))),
   N: d => typeof d.id === 'string' && typeof d.t === 'string' && BUY_STATES.includes(d.status) && (d.specs === undefined || (Array.isArray(d.specs) && d.specs.every(x => Array.isArray(x) && (x.length === 2 || x.length === 3) && x.every(v => typeof v === 'string'))))
     && (d.quotes === undefined || (Array.isArray(d.quotes) && d.quotes.every(q => q && SAFE_ID.test(q.id) && SAFE_ID.test(q.sup) && Number.isFinite(q.price)))) && (d.order === undefined || (!!d.order && SAFE_ID.test(d.order.sup) && Number.isFinite(d.order.price) && Number.isFinite(d.order.qty))),
   U: d => typeof d.id === 'string' && typeof d.name === 'string',
@@ -40,12 +50,12 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 22; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 23; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // What an older script still keeps on the phones: the version that first stores it. From NEEDED_SCRIPT on, everything goes
 // up and a newer script only improves things — said quietly, never as a warning (owner, 23 Oct 2026: the message showed
 // "needed" while everything worked).
-const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [22, 'you can choose what else an office manager may see']];
-const NEEDED_SCRIPT = 20, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines']];
+const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry']];
+const NEEDED_SCRIPT = 23, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines'], [22, 'what you let an office manager see'], [23, 'the warehouse — stock, goods received, goods out and delivery notes']];
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';

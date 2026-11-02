@@ -75,6 +75,41 @@ const ACTIONS = {
   addWorker: () => workerForm(),
   openWorker: b => workerDetail(b.dataset.id),
   profilePhoto: b => profileSheet(b.dataset.id),
+  // the warehouse (stock.js, delivery.js)
+  stock: () => stockSheet(),
+  stockIn: () => receivedList(),
+  stockOutList: () => outList(),
+  stockReport: () => stockReport(),
+  receiveForm: b => receiveForm(b.dataset.id),
+  openReceipt: b => receiptDetail(b.dataset.id),
+  deleteReceipt: b => deleteReceipt(b.dataset.id),
+  landedPdf: b => landedPdf(b.dataset.id),
+  addRecvLine: () => { $('.rlines').insertAdjacentHTML('beforeend', recvLine()); refreshReceive($('#sheet form')); },
+  delRecvLine: b => { if ($$('.rline').length > 1) b.closest('.rline').remove(); refreshReceive($('#sheet form')); },
+  addCostLine: () => { $('.clines').insertAdjacentHTML('beforeend', costLine({ t: 'duty', split: 'value' })); refreshReceive($('#sheet form')); },
+  delCostLine: b => { b.closest('.cline').remove(); refreshReceive($('#sheet form')); },
+  itemForm: b => itemForm(b.dataset.id),
+  openItem: b => itemDetail(b.dataset.id),
+  openMove: b => openMove(b),
+  outForm: b => outForm(b.dataset.id),
+  addOutLine: () => { $('.olines').insertAdjacentHTML('beforeend', outLine()); refreshOut($('#sheet form')); },
+  delOutLine: b => { if ($$('.oline').length > 1) b.closest('.oline').remove(); refreshOut($('#sheet form')); },
+  openOut: b => outDetail(b.dataset.id),
+  deleteOut: b => deleteOut(b.dataset.id),
+  countSheet: () => countSheet(),
+  stockPdf: () => stockPdf(),
+  countPdf: () => countPdf(),
+  sellStock: b => { if (b.dataset.id && itemOf(b.dataset.id)) shopQ = itemOf(b.dataset.id).name; shopSheet(); },
+  cartStep: b => cartSet(b.dataset.id, (cart[b.dataset.id] || 0) + Number(b.dataset.d)),
+  checkout: () => checkout(),
+  deliveryForm: b => deliveryForm(b),
+  openDelivery: b => deliveryDetail(b.dataset.id),
+  receiveDelivery: b => receiveDelivery(b.dataset.id),
+  remakeDelivery: b => remakeDelivery(b.dataset.id),
+  deleteDelivery: b => deleteDelivery(b.dataset.id),
+  addGeo: b => addGeo(b),
+  approvePrice: b => approvePrice(b.dataset.id),
+  refusePrice: b => refusePrice(b.dataset.id),
   repayForm: b => repayForm(b.dataset.id),
   editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
   markLeft: async b => { if (await unlock('Enter the password to record that this employee has left.')) leftForm(b.dataset.id); },
@@ -189,7 +224,8 @@ const ACTIONS = {
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, repay: saveRepay, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, repay: saveRepay, item: saveItem, receive: saveReceive, stockOut: saveStockOut, count: saveCount, delivery: saveDelivery, dnReceipt: saveDnReceipt,
+  stockFilter: filterStock, shopFind: f => { shopQ = f.elements.q.value; $('#shopList').innerHTML = shopRows(); }, stockMonth: f => stockReport(f.elements.month.value), left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
   idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList, subIdea: saveSubIdea, budgets: saveBudgets, exchange: saveExchange };
 
 function refreshAmount(input) {
@@ -238,6 +274,15 @@ document.addEventListener('input', e => {
   if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form, t);
   if (t.name === 'list' && t.form && t.form.dataset.form === 'pasteList') countPasted(t.form);
   if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form, t);
+  // the warehouse
+  if (t.form && t.form.dataset.form === 'receive') refreshReceive(t.form);
+  if (t.form && t.form.dataset.form === 'stockFilter') filterStock(t.form);
+  if (t.form && t.form.dataset.form === 'shopFind') { shopQ = t.value; $('#shopList').innerHTML = shopRows(); }
+  if (t.dataset.cart !== undefined) cartSet(t.dataset.cart, parseNum(t.value) || 0);
+  if (t.form && t.form.dataset.form === 'count') refreshCount(t.form);
+  if (t.form && t.form.dataset.form === 'stockOut') refreshOut(t.form);
+  if (t.form && t.form.dataset.form === 'invoice' && t.name === 'price') t.dataset.typed = '1'; // a price typed by hand stays when the money or rate changes
+  if (t.form && t.form.dataset.form === 'invoice' && t.name === 'rate') { $$('.iline', t.form).forEach(r => pickStockLine(r, false)); refreshInvoice(t.form); }
 });
 document.addEventListener('change', e => {
   const t = e.target;
@@ -254,6 +299,14 @@ document.addEventListener('change', e => {
   if (t.dataset.replace !== undefined) replaceFile(t);
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
+  if (t.name === 'm' && t.closest('.iline')) pickStockLine(t.closest('.iline'), true);
+  if (t.name === 'cur' && t.form && t.form.dataset.form === 'invoice') $$('.iline', t.form).forEach(r => pickStockLine(r, false));
+  if (t.form && t.form.dataset.form === 'receive') refreshReceive(t.form);
+  if (t.form && t.form.dataset.form === 'stockOut') refreshOut(t.form);
+  if (t.name === 'fixed' && t.form && t.form.dataset.form === 'item') $('.fixed-price', t.form).hidden = !t.checked;
+  if (t.name === 'how' && t.form && t.form.dataset.form === 'delivery') refreshDelivery(t.form);
+  if (t.name === 'sigby' && t.form && t.form.dataset.form === 'dnReceipt') refreshDnReceipt(t.form);
+  if (t.form && t.form.dataset.form === 'stockMonth') stockReport(t.value);
   if (t.name === 'role' && t.form && t.form.dataset.form === 'user') $('.sees', t.form).hidden = t.value !== 'manager';
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'kind' && t.form && t.form.dataset.form === 'doc') refreshDocKind(t.form);

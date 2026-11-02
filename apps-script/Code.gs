@@ -31,7 +31,7 @@ const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 
 // delivery note (D) every load leaves with: who takes it, the vehicle, and once there who received what, signed, with a photo
 const STOCK_KINDS = ['M', 'Y', 'O', 'D'];
 const OUT_KINDS = ['use', 'damage', 'return', 'count'];
-const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement', 'document', 'invoice', 'quote'];
+const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement', 'document', 'invoice', 'quote', 'delivery'];
 // buying: the list of what to buy (N), suppliers and factories (U) and buying trips (J): admins only (owner, 16 Oct 2026)
 const BUY_KINDS = ['N', 'U', 'J'];
 const BUY_STATES = ['idea', 'tobuy', 'ordered', 'inspected', 'shipped', 'received', 'dropped'];
@@ -88,6 +88,7 @@ const SHAPES = {
     && d.items.every(it => isObj_(it) && str_(it.t) && num_(it.qty) && it.qty > 0 && num_(it.price) && it.price >= 0 && (it.unit === undefined || str_(it.unit))
       && (it.m === undefined || SAFE_ID.test(it.m)) && (it.list === undefined || (num_(it.list) && it.list >= 0))) // from stock: the item and its list price then
     && (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (d.ok === undefined || ['waiting', 'approved', 'rejected'].indexOf(d.ok) >= 0) // SSP for 1 USD; a price below the list waiting for an admin
+    && (d.dl === undefined || ['deliver', 'collect'].indexOf(d.dl) >= 0) && strs_(d, ['addr', 'okBy', 'why']) && d.items.every(it => it.dlv === undefined || typeof it.dlv === 'boolean') // delivered or collected; the delivery charge line
     && (d.tax === undefined || (num_(d.tax) && d.tax >= 0 && d.tax <= 100)) && ['bank', 'from'].every(k => !d[k] || SAFE_ID.test(d[k])) && ['notes', 'project'].every(k => d[k] === undefined || str_(d[k])),
   // an item to buy: what, its category, every detail as spec lines (label, value), suppliers' quotes, the order, the inspection
   N: d => str_(d.t) && d.t.length > 0 && BUY_STATES.indexOf(d.status) >= 0 && strs_(d, ['cat', 'sub', 'area', 'unit', 'notes', 'link', 'where', 'ship', 'project'])
@@ -144,7 +145,7 @@ const extras_ = d => (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (
   && (d.from === undefined || SAFE_ID.test(d.from)) && (d.received === undefined || DATE_RE.test(d.received)) // goods taken from an advance
   && (d.trip === undefined || SAFE_ID.test(d.trip)) && (d.need === undefined || SAFE_ID.test(d.need)) // a buying trip's cost, an item bought
   && (d.repay === undefined || (num_(d.repay) && d.repay >= 0)) // an employee's advance, taken back this much a month (0: all at once)
-  && (d.imp === undefined || SAFE_ID.test(d.imp)); // a cost of an import (goods received)
+  && (d.imp === undefined || SAFE_ID.test(d.imp)) && (d.dn === undefined || SAFE_ID.test(d.dn)); // a cost of an import (goods received), of a delivery
 const str_ = v => typeof v === 'string';
 const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
@@ -364,7 +365,7 @@ function allowed_(user, p, before) {
 // the delivery note as it was made, now with who received what: status out → done and recv added, every other field the same
 function receiptOnly_(was, now, user) {
   if (was.uid !== user.id || was.status !== 'out' || now.status !== 'done' || !now.recv) return false;
-  const rest = x => JSON.stringify(Object.keys(x).filter(k => ['status', 'recv', 'by'].indexOf(k) < 0).sort().map(k => [k, x[k]]));
+  const rest = x => JSON.stringify(Object.keys(x).filter(k => ['status', 'recv', 'by', 'u'].indexOf(k) < 0).sort().map(k => [k, x[k]])); // u: the phone's own stamp, sent inside the record
   return rest(was) === rest(now);
 }
 // An office manager may sell from stock at most 1 % below the list price (owner, 2 Nov 2026); lower waits for an admin (ok:
@@ -1112,7 +1113,7 @@ function received_(ss, c) {
     ['', 'date', '', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 190, 75, 120, 140, 110, 200, 120, 150, 260, 110], [6, 7]);
 }
 // Every uploaded file: what it is, what it belongs to, its status and the Drive folder it is filed in.
-const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document', invoice: 'Invoice', quote: 'Quotation' };
+const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document', invoice: 'Invoice', quote: 'Quotation' , delivery: 'Delivery note'};
 function filesTab_(ss, c, recs) {
   const byId = Object.create(null);
   recs.forEach(r => { byId[r.id] = r; });

@@ -359,6 +359,29 @@ function stockBook(receipts, outs, invoices) {
   return book;
 }
 
+// A sale's goods leave the warehouse on delivery notes (kind D), maybe in several loads. What an invoice still has to send:
+// [{ m, qty }] — never less than nothing (a note cannot carry more than was sold). And for the stock count: how many of each
+// item are sold but still on the shelf, waiting for their delivery note.
+function toSend(inv, deliveries) {
+  const sent = {};
+  deliveries.filter(d => !d.deleted && d.inv === inv.id).forEach(d => d.lines.forEach(l => { sent[l.m] = (sent[l.m] || 0) + l.qty; }));
+  const want = {};
+  inv.items.filter(it => it.m).forEach(it => { want[it.m] = (want[it.m] || 0) + it.qty; });
+  return Object.entries(want).map(([m, q]) => ({ m, qty: Math.max(0, Math.round((q - (sent[m] || 0)) * 1e6) / 1e6) })).filter(l => l.qty > 0);
+}
+function awaitingDelivery(invoices, deliveries) {
+  const out = {};
+  invoices.filter(sells).forEach(x => toSend(x, deliveries).forEach(l => { out[l.m] = (out[l.m] || 0) + l.qty; }));
+  return out;
+}
+// what a delivery note's receiver signed for, against what left: [{ m, sent, got }], and whether any arrived short
+function receivedOf(d) {
+  const got = {};
+  ((d.recv && d.recv.lines) || []).forEach(l => { got[l.m] = (got[l.m] || 0) + l.qty; });
+  const lines = d.lines.map(l => ({ m: l.m, sent: l.qty, got: d.recv ? got[l.m] || 0 : null }));
+  return { lines, short: !!d.recv && lines.some(l => l.got < l.sent) };
+}
+
 // Advances given in a month, in US dollars (the monthly limit is in dollars).
 function advancesUsd(pays, month) {
   const cents = pays.filter(p => p.pay === 'advance' && !p.deleted && p.at.slice(0, 7) === month)

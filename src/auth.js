@@ -296,7 +296,8 @@ const EDITABLE = {
 const editPart = c => (c.action ? {} : Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f))));
 // (records without a date and amount are named by what they are: a sync error must never fail on them)
 const NAMED = { G: r => `Regular payment: ${r.name}`, B: r => `Bank account: ${r.bank}`, V: r => `Document: ${r.title}`, K: r => `Client: ${r.name}`, I: r => `${r.type === 'quote' ? 'Quotation' : 'Invoice'} ${r.no}`,
-  N: r => `Buying list: ${r.t}`, U: r => `Supplier: ${r.name}`, J: r => `Trip: ${r.to}`, X: r => `Change to SSP: ${money(r.usd, 'USD')} → ${money(r.ssp, 'SSP')}` };
+  N: r => `Buying list: ${r.t}`, U: r => `Supplier: ${r.name}`, J: r => `Trip: ${r.to}`, X: r => `Change to SSP: ${money(r.usd, 'USD')} → ${money(r.ssp, 'SSP')}`,
+  M: r => `Stock item: ${r.name}`, Y: r => `Goods received ${r.date}${r.ref ? ' · ' + r.ref : ''}`, O: r => `Goods out ${r.date} · ${(OUT_KIND[r.kind] || [r.kind])[0]}`, D: r => `Delivery note ${r.no}` };
 const whatIs = (kind, r) => (kind === 'P' ? `Project "${r.name}"` : kind === 'W' ? `Employee ${r.name}`
   : kind === 'A' ? `Day not worked: ${(workerOf(r.worker) || {}).name || r.worker}, ${fmtDate(r.date)}${r.note ? ` (${r.note})` : ''}` : NAMED[kind] ? NAMED[kind](r) : describe(kind, r));
 // what approving would really change, worked out from the entry itself — never from the text sent with the request
@@ -322,16 +323,18 @@ function requestChange(kind, old, rec, changes, by) {
   closeSheet(); render(); toast('Sent for approval ✓ It changes when an admin approves it.');
 }
 function approvalsBanner() {
-  const n = waiting().length;
+  const n = waiting().length + priceWaits().length;
   if (!n) return '';
-  if (can('edit')) return `<div class="banner"><span>✏️ ${n} change${n === 1 ? '' : 's'} waiting for your approval.</span><button class="btn small" data-act="approvals">Review</button></div>`;
-  const mine = waiting().filter(c => c.by === myName()).length;
-  return mine ? `<div class="banner new"><span>✏️ ${mine} of your changes ${mine === 1 ? 'is' : 'are'} waiting for an admin to approve.</span></div>` : '';
+  if (can('edit')) return `<div class="banner"><span>✏️ ${n} change${n === 1 ? '' : 's'} or price${n === 1 ? '' : 's'} waiting for your approval.</span><button class="btn small" data-act="approvals">Review</button></div>`;
+  const mine = waiting().filter(c => c.by === myName()).length + priceWaits().filter(x => x.by === myName()).length;
+  return mine ? `<div class="banner new"><span>✏️ ${mine} of your changes or prices ${mine === 1 ? 'is' : 'are'} waiting for an admin to approve.</span></div>` : '';
 }
 function approvalsSheet() {
-  const list = waiting().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
-  openSheet(`${head('Changes to approve', '', `${list.length} waiting`)}
-    ${list.length ? list.map(changeCard).join('') : '<p class="muted">Nothing is waiting. ✓</p>'}`);
+  const list = waiting().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))), prices = can('edit') ? priceWaits() : [];
+  openSheet(`${head('Changes to approve', '', `${list.length + prices.length} waiting`)}
+    ${prices.length ? `<h3 class="subh" style="margin-top:0">Prices below the list (${prices.length})</h3>${prices.map(priceCard).join('')}` : ''}
+    ${list.length ? `${prices.length ? `<h3 class="subh">Changes (${list.length})</h3>` : ''}${list.map(changeCard).join('')}` : prices.length ? '' : '<p class="muted">Nothing is waiting. ✓</p>'}`);
+  comeBack(approvalsSheet);
 }
 function changeCard(c) {
   const r = targetOf(c);

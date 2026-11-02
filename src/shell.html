@@ -389,6 +389,13 @@ a.btn { display: flex; align-items: center; justify-content: center; text-align:
 .mrow:first-child { border-top: 0; }
 .mrow b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mrow .muted { font-size: 13px; text-align: right; }
+/* a name, a detail and an amount: when the detail is long (a warehouse line's cost, a delivery's "sent 60 bars") the detail goes
+   under the name instead of squeezing it, in a list narrower than 460px; a wider list keeps one line per thing */
+@container (max-width: 460px) {
+  .mrow:has(> .muted) { grid-template-columns: minmax(0, 1fr) auto; }
+  .mrow:has(> .muted) > .muted { grid-column: 1; grid-row: 2; text-align: left; margin-top: -6px; }
+  .mrow:has(> .muted) > b, .mrow:has(> .muted) > :last-child:not(.muted) { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+}
 .ilines { display: grid; gap: 10px; margin-bottom: 10px; }
 .iline { display: grid; gap: 8px; padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
 .iline input { width: 100%; min-width: 0; font: inherit; font-size: 16px; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); }
@@ -426,6 +433,44 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .ssp-big b { font-size: 32px; color: var(--in); font-variant-numeric: tabular-nums; }
 .ssp-big span { color: var(--muted); font-size: 14px; font-weight: 700; }
 .app-tile.buy { background: #6d28d9; background-image: radial-gradient(circle at 110% -10%, rgba(255,255,255,.2), transparent 50%); }
+.app-tile.stock { background: #b45309; background-image: linear-gradient(160deg, rgba(255,255,255,.14), transparent 55%); }
+/* the warehouse: goods received (a line per supplier line, a line per cost), goods out, counts, the shop */
+.rlines, .clines, .olines { display: grid; gap: 10px; margin-bottom: 10px; }
+.rline, .cline { display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: var(--paper); }
+.rline select, .rline input, .cline select, .cline input, .oline select, .oline input, .iline select.ipick { width: 100%; min-width: 0; font: inherit; font-size: 16px; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); }
+.rline :focus, .cline :focus, .oline :focus { outline: none; border-color: var(--ink); }
+.rnew { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
+.rnums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 44px; gap: 8px; align-items: end; }
+.rnums label span { display: block; font-size: 13px; font-weight: 800; color: var(--muted); margin: 0 0 4px 2px; }
+.cnums { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px; }
+.cnums:nth-child(2) { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) 44px; }
+.cnums:nth-child(2) [hidden] + .x { grid-column: 4; }
+.rline .x, .cline .x, .oline .x { border: 0; background: var(--card); border-radius: 10px; height: 46px; font-size: 22px; cursor: pointer; color: var(--muted); }
+.rhint, .chint, .ohint, .ihint { font-size: 13px; }
+.oline { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 44px; gap: 8px; }
+.oline .ohint { grid-column: 1 / -1; }
+.lc-table { display: grid; gap: 10px; }
+.lc-row { display: grid; gap: 2px; padding-bottom: 10px; border-bottom: 1px dashed var(--line); font-size: 15px; }
+.lc-row .muted { font-size: 13px; }
+.lc-each { color: var(--in); }
+.count-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.count-row:first-child { border-top: 0; }
+.count-row small { display: block; }
+.count-row input { width: 100%; font: inherit; font-size: 18px; font-weight: 700; text-align: right; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); }
+.shop-q { width: 100%; font: inherit; font-size: 18px; padding: 15px 16px; border: 2px solid var(--ink); border-radius: 16px; background: var(--card); color: var(--ink); margin-bottom: 12px; }
+.shop-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px; border-top: 1px solid var(--line); }
+.shop-row:first-child { border-top: 0; }
+.shop-row.in-cart { background: var(--in-soft); }
+.shop-what b { font-size: 16px; } .shop-what small { display: block; color: var(--muted); font-size: 14px; margin-top: 3px; }
+.shop-price { color: var(--ink); }
+.stepper-q { display: grid; grid-template-columns: 40px 56px 40px; gap: 4px; align-items: center; }
+.stepper-q button { height: 40px; border: 0; border-radius: 12px; background: var(--ink); color: #fff; font-size: 22px; font-weight: 800; cursor: pointer; }
+.stepper-q button:disabled { background: var(--line); color: var(--muted); cursor: default; }
+.stepper-q input { width: 100%; height: 40px; text-align: center; font: inherit; font-size: 16px; font-weight: 800; border: 2px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); padding: 0 2px; }
+.cart-bar { position: sticky; bottom: 0; margin: 14px -4px 0; padding: 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--card); border-top: 2px solid var(--line); }
+.cart-bar .btn { width: auto; flex: none; padding: 12px 18px; }
+.nw { white-space: nowrap; }
+@media (max-width: 340px) { .rnums { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rnums .x { grid-column: 2; justify-self: end; width: 44px; } .cnums:nth-child(2) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .stepper-q { grid-template-columns: 36px 48px 36px; } }
 /* buying: the idea box, the filters, an item's detail lines, inspection ticks, photo strips */
 .idea-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 6px; }
 .idea-box input { font: inherit; font-size: 17px; padding: 14px; border: 2px solid var(--ink); border-radius: var(--r-sm); background: var(--card); min-width: 0; }

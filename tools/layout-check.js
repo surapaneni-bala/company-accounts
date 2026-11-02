@@ -39,7 +39,16 @@ const SETUP = () => {
       order: { sup: 'U-1', price: 6800, cur: 'CNY', rate: 7.1, qty: 3, date: '2026-10-21', alloc: [{ p: 'P-1', q: 2 }] }, steps: { tobuy: '2026-10-19', ordered: '2026-10-21' } },
       { id: 'N-2', t: long, cat: 'Doors & windows', status: 'tobuy', qty: 40, unit: 'm²', under: 'N-1', steps: { tobuy: '2026-10-19' } },
       { id: 'N-3', t: 'Ceiling fans', cat: 'Electronics & appliances', status: 'idea', steps: { idea: '2026-10-19' } }],
+    stock: [{ id: 'M-1', name: 'Rebar 12 mm × 12 m', unit: 'bars', cat: 'Steel', code: 'RB12', bin: 'Yard A', min: 400, markup: 10, price: 13.5 }, { id: 'M-2', name: 'Rebar 16 mm × 12 m', unit: 'bars', cat: 'Steel', code: 'RB16', markup: 10, price: 24.02 },
+      { id: 'M-3', name: long, unit: 'pcs', cat: 'Hardware & tools', markup: 10, price: 3.25 }],
+    receipts: [{ id: 'Y-1', date: '2026-10-28', ref: 'PI-2026-118', from: 'Steel mill', origin: 'Uganda', gcur: 'USD', lines: [{ m: 'M-1', qty: 470, amt: 3906.49, kg: 5008 }, { m: 'M-2', qty: 792, amt: 11712.73, kg: 15016 }, { m: 'M-3', qty: 1000, amt: 2000, kg: 500 }],
+      costs: [{ t: 'freight', what: 'Truck Kampala → Juba', amt: 5837, cur: 'USD', split: 'kg' }, { t: 'duty', amt: 10530000, cur: 'SSP', rate: 4500, split: 'value' }], lc: [12.2716, 21.8348, 2.9], by, createdAt: '2026-10-28T09:00:00' }],
+    stockOut: [{ id: 'O-1', date: '2026-10-29', kind: 'use', project: 'P-1', to: 'Site foreman Juma', lines: [{ m: 'M-2', qty: 40 }], by, createdAt: '2026-10-29T08:00:00' }],
+    deliveries: [{ id: 'D-1', no: 'DN-TST-0001', date: '2026-10-30', inv: 'I-2', to: 'Sample Client Ltd', addr: 'Gudele block 3, near the church', how: 'deliver', driver: 'Juma', phone: '+211 900 000 009', vehicle: 'SSD 123 A', charge: 25, cost: 15, cur: 'USD',
+      lines: [{ m: 'M-1', qty: 60 }], status: 'done', recv: { name: 'Peter', at: '2026-10-30T15:40', lines: [{ m: 'M-1', qty: 55 }], how: 'paper', note: '5 bars bent' }, check: 'AB12-CD34', by, createdAt: '2026-10-30T11:00:00' }],
   };
+  S.invoices = [...S.invoices, { id: 'I-2', type: 'invoice', no: 'INV-0002', client: 'K-1', date: '2026-10-30', cur: 'USD', items: [{ t: 'Rebar 12 mm × 12 m', m: 'M-1', qty: 100, unit: 'bars', price: 13.5, list: 13.5 }, { t: 'Delivery to Gudele', qty: 1, unit: 'trip', price: 25, dlv: true }], tax: 0, dl: 'deliver', addr: 'Gudele block 3', check: 'X', by, createdAt: '2026-10-30T10:00:00' },
+    { id: 'I-3', type: 'invoice', no: 'REQ-TST-0001', client: 'K-1', date: '2026-11-01', cur: 'USD', items: [{ t: 'Rebar 16 mm × 12 m', m: 'M-2', qty: 10, unit: 'bars', price: 22, list: 24.02 }], tax: 0, ok: 'waiting', by: 'Agnes', createdAt: '2026-11-01T10:00:00' }];
   const main = t => () => { closeAll(); tab = t; render(); scrollTo(0, 0); };
   const screens = [
     ['menu', main('menu')], ['accounts', main('home')], ['history', main('hist')], ['projects', main('proj')], ['employees', main('staff')], ['sheet tab', main('sheet')],
@@ -66,6 +75,12 @@ const SETUP = () => {
     ['sign in', () => signInSheet()], ['logins', () => setupLoginsSheet()], ['users', () => usersSheet()], ['user form', () => userForm()], ['sheet script', () => howUpdateSheet()],
     ['manager login', () => { usersCache = [{ id: 'U-1', name: 'Agnes', username: 'agnes', role: 'manager', active: true, sees: { all: false, p: ['P-1'], l: [], u: [] } }, { id: 'U-2', name: 'Babu', username: 'babu', role: 'store', active: true }]; userForm('U-1'); }],
     ['advance plan', () => { S = { ...S, expenses: [...S.expenses, { id: 'E-ADV', worker: 'W-1', pay: 'advance', repay: 100, cur: 'USD', amount: 1000, paidTo: 'Henry Carpenter', reason: 'Salary advance', location: '', project: '', mode: 'Cash', at: '2026-10-05T09:00', by: 'Bala', createdAt: '2026-10-05T09:00:00' }] }; workerDetail('W-1'); }],
+    ['warehouse', () => stockSheet()], ['shop', () => { shopQ = ''; cart = {}; shopSheet(); }], ['shop with cart', () => { cart = { 'M-1': 100, 'M-3': 12 }; shopSheet(); }], ['checkout', () => { cart = { 'M-1': 100, 'M-3': 12 }; checkout(); }],
+    ['stock item', () => itemDetail('M-1')], ['stock item form', () => { seesCost() && itemForm('M-1'); }], ['goods received form', () => receiveForm()], ['goods received edit', () => receiveForm('Y-1')],
+    ['goods received', () => receiptDetail('Y-1')], ['received list', () => receivedList()], ['goods out form', () => outForm('M-2')], ['goods out', () => outDetail('O-1')], ['out list', () => outList()],
+    ['stock count', () => countSheet()], ['stock report', () => stockReport('')], ['delivery form', () => deliveryForm({ inv: 'I-2' })], ['delivery note', () => deliveryDetail('D-1')],
+    ['delivery receipt', () => { S = { ...S, deliveries: [...S.deliveries, { ...S.deliveries[0], id: 'D-2', no: 'DN-TST-0002', status: 'out', recv: undefined }] }; receiveDelivery('D-2'); }],
+    ['price waiting', () => invoiceDetail('I-3')], ['approvals with price', () => approvalsSheet()], ['invoice from stock', () => invoiceDetail('I-2')],
     ['advance form', () => payForm('W-1', 'advance')], ['salary with plan', () => payForm('W-1', 'salary')], ['repay form', () => repayForm('W-1')],
   ];
   window.__show = i => { screens[i][1](); const d = document.querySelector('#sheet[open]'); if (d) d.scrollTop = 0; };

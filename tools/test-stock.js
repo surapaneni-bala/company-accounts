@@ -78,7 +78,7 @@ assert.ok(!pull.some(p => p.id === 'I-OW1-0002'), 'an invoice with nothing from 
 assert.ok(pull.some(p => p.id === 'I-AG1-0001') && pull.find(p => p.id === 'I-AG1-0001').d.items[0].price === 13.5, 'her own invoices in full');
 
 /* ---------- delivery notes: made when the goods leave, completed by who received what; never changed after ---------- */
-const dn = (id, u, extra = {}) => ({ id, k: 'D', u, d: { id, no: 'DN-AG1-0001', date: '2026-10-30', inv: 'I-AG1-0001', to: 'Builder Ltd', addr: 'Gudele block 3', how: 'deliver', driver: 'Juma (driver)', phone: '+211 900 000 001', vehicle: 'SSD 123 A',
+const dn = (id, u, extra = {}) => ({ id, k: 'D', u, d: { id, u, no: 'DN-AG1-0001', date: '2026-10-30', inv: 'I-AG1-0001', to: 'Builder Ltd', addr: 'Gudele block 3', how: 'deliver', driver: 'Juma (driver)', phone: '+211 900 000 001', vehicle: 'SSD 123 A',
   charge: 25, cost: 15, cur: 'USD', lines: [{ m: 'M-OW1-0002', qty: 100 }], status: 'out', check: 'AB12CD', uid: m.me.id, createdAt: '2026-10-30T11:00:00', ...extra } });
 assert.deepStrictEqual(sync(m.token, [dn('D-AG1-0001', 60), dn('D-AG1-0002', 60, { status: 'done', recv: { name: 'X', at: '2026-10-30T12:00', lines: [] } }), dn('D-AG1-0003', 60, { no: 'INV-1' }), dn('D-AG1-0004', 60, { lines: [] })]).refused.sort(),
   ['D-AG1-0002', 'D-AG1-0003', 'D-AG1-0004'], 'a delivery note starts "on the way", with its number and its goods; it cannot be born received');

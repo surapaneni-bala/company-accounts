@@ -33,7 +33,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I', needs: 'N', suppliers: 'U', trips: 'J', exchanges: 'X' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I', needs: 'N', suppliers: 'U', trips: 'J', exchanges: 'X', stock: 'M', receipts: 'Y', stockOut: 'O', deliveries: 'D' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // an empty list of every kind of record (a new company, a new phone, a sign-in that starts again)
 const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
@@ -100,6 +100,13 @@ function sumText(items) {
 function parseAmount(v) {
   const n = Number(String(v ?? '').replace(/[,\s$]/g, '').replace(/^SSP/i, ''));
   return Number.isFinite(n) && n > 0 && n < 1e12 ? Math.round(n * 100) / 100 : null;
+}
+// a count, a weight or a rate as typed: 0 or more, every decimal kept (parseAmount is for money: above 0, to the cent)
+function parseNum(v) {
+  const t = String(v ?? '').replace(/[,\s]/g, '');
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 && n < 1e12 ? n : null;
 }
 function fmtTime(at) { const [h, m] = at.slice(11, 16).split(':').map(Number); return `${h % 12 || 12}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`; }
 function fmtDate(date) { const [y, m, d] = date.split('-').map(Number); return `${d} ${MON[m - 1]} ${y}`; }
@@ -334,7 +341,8 @@ function viewMenu() {
         <button class="app-tile acc" data-act="tab" data-tab="home"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><span><b>Accounts</b><small>Cash, bank and projects</small></span></button>
         <button class="app-tile emp" data-act="tab" data-tab="staff">${staffWaiting ? `<span class="badge">${staffWaiting} waiting</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg></span><span><b>Employees</b><small>Salaries, advances and slips</small></span></button>
         <button class="app-tile doc" data-act="docs">${live(S.docs).some(v => docState(v).soon) ? `<span class="badge">${live(S.docs).filter(v => docState(v).soon).length} to renew</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><span><b>Documents</b><small>Licences, vehicles, IDs</small></span></button>
-        ${can('settings') ? `<button class="app-tile inv" data-act="sales">${live(S.invoices).some(x => x.type === 'invoice' && invState(x).state === 'overdue') ? `<span class="badge">${live(S.invoices).filter(x => x.type === 'invoice' && invState(x).state === 'overdue').length} overdue</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span><span><b>Invoices</b><small>Quotations, clients, what is owed</small></span></button>` : ''}
+        ${can('staff') ? `<button class="app-tile inv" data-act="sales">${seesPaid() && invs().some(x => x.type === 'invoice' && invState(x).state === 'overdue') ? `<span class="badge">${invs().filter(x => x.type === 'invoice' && invState(x).state === 'overdue').length} overdue</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span><span><b>Invoices</b><small>${seesPaid() ? 'Quotations, clients, what is owed' : 'Quotations and clients'}</small></span></button>` : ''}
+        ${can('staff') ? `<button class="app-tile stock" data-act="stock">${stockBadge()}<span class="ai"><svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5v11H3z"/><path d="M7 20v-7h10v7M7 16h10"/></svg></span><span><b>Warehouse</b><small>Stock, imports, deliveries</small></span></button>` : ''}
         ${can('money') ? `<button class="app-tile ssp" data-act="ssp"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg></span><span><b>SSP</b><small>Dollars changed, SSP spent and left</small></span></button>` : ''}
         ${can('settings') ? `<button class="app-tile buy" data-act="buying">${live(S.needs).some(n => n.pri === 1 && ['idea', 'tobuy'].includes(n.status)) ? `<span class="badge">${live(S.needs).filter(n => n.pri === 1 && ['idea', 'tobuy'].includes(n.status)).length} urgent</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg></span><span><b>Buying</b><small>Ideas, factories, trips, inspection</small></span></button>` : ''}
       </div>
