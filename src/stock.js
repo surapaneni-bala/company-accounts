@@ -53,7 +53,7 @@ function shopRows() {
   if (!list.length) return '<p class="muted">Nothing matches. Try fewer words.</p>';
   return `<div class="card list inset">${list.slice(0, 60).map(m => { const have = b[m.id] ? b[m.id].qty : 0, n = cart[m.id] || 0;
     return `<div class="shop-row${n ? ' in-cart' : ''}"><div class="shop-what"><b>${esc(m.name)}</b>${m.code ? ` <i class="tag">${esc(m.code)}</i>` : ''}
-      <small>${m.price > 0 ? `<b class="shop-price">${money(m.price, 'USD')}</b> / ${esc(m.unit)}${S.lastRate ? ` · ≈ ${nw(money(Math.round(m.price * S.lastRate), 'SSP'))}` : ''}` : 'no price yet'} · <span class="nw ${have > 0 ? '' : 'out-c'}">${plain(have)} in stock</span></small></div>
+      <small>${m.price > 0 ? `<b class="shop-price">${money(m.price, 'USD')}</b> / ${esc(m.unit)}${S.lastRate ? ` · ${nw(`≈ ${money(Math.round(m.price * S.lastRate), 'SSP')}`)}` : ''}` : 'no price yet'} · <span class="nw ${have > 0 ? '' : 'out-c'}">${plain(have)} in stock</span></small></div>
       <div class="stepper-q"><button type="button" data-act="cartStep" data-id="${esc(m.id)}" data-d="-1" aria-label="One less" ${n ? '' : 'disabled'}>−</button><input data-cart="${esc(m.id)}" inputmode="decimal" value="${n || ''}" placeholder="0" aria-label="How many ${esc(m.name)}"><button type="button" data-act="cartStep" data-id="${esc(m.id)}" data-d="1" aria-label="One more" ${m.price > 0 ? '' : 'disabled'}>＋</button></div></div>`; }).join('')}</div>`;
 }
 const cartBar = () => { const n = cartLines().length; return n ? `<span>🛒 <b>${n}</b> item${n === 1 ? '' : 's'} · <b>${money(cartTotal(), 'USD')}</b></span><button class="btn in" data-act="checkout">Check out →</button>` : '<span class="muted">🛒 Add something to sell</span>'; };
