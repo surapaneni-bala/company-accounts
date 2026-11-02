@@ -254,7 +254,7 @@ async function syncNow() {
     const accepted = new Set(res.kinds || OLD_SERVER_KINDS), notAllowed = new Set(res.refused || []);
     const refused = new Set([...push.filter(p => !accepted.has(p.k)).map(p => p.id), ...notAllowed]);
     const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link;
-    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
+    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins), ...(res.rate > 0 ? { rate: res.rate } : {}) }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
     S = { ...S, base: Object.fromEntries(Object.entries(S.base || {}).filter(([id]) => S.dirty.includes(id))) }; // sent: the next edit starts from the new copy
     // entries an office manager may no longer see (moved to another project or place): her old copies go, unless changed here
     const forget = new Set((res.forget || []).filter(id => !S.dirty.includes(id)));

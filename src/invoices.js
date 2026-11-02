@@ -129,7 +129,7 @@ const stockPick = it => (live(S.stock).length ? `<select name="m" class="ipick" 
 const listFor = (m, cur, rate) => (!m || !(m.price > 0) ? 0 : cur === 'USD' ? m.price : rate > 0 ? Math.round(m.price * rate) : 0);
 const lineRow = (it = {}) => `<div class="iline">${stockPick(it)}<input name="t" placeholder="What — e.g. Cement 42.5, 50 kg bags" value="${esc(it.t)}" maxlength="200" autocomplete="off" aria-label="Description">
   <div class="iline-n"><input name="qty" inputmode="decimal" placeholder="Qty" value="${esc(it.qty ?? '')}" autocomplete="off" aria-label="Quantity"><input name="unit" placeholder="Unit" value="${esc(it.unit)}" maxlength="20" autocomplete="off" aria-label="Unit, e.g. bags">
-  <input name="price" inputmode="decimal" placeholder="Unit price" value="${esc(it.price ?? '')}" autocomplete="off" aria-label="Unit price" ${it.price !== undefined && it.m ? 'data-typed="1"' : ''}><button type="button" class="x" data-act="delLine" aria-label="Remove line">×</button></div><small class="muted ihint"></small></div>`;
+  <input name="price" inputmode="decimal" placeholder="Unit price" value="${esc(it.price ?? '')}" autocomplete="off" aria-label="Unit price" ${it.keep ? 'data-typed="1"' : ''}><button type="button" class="x" data-act="delLine" aria-label="Remove line">×</button></div><small class="muted ihint"></small></div>`;
 // a line picked from stock: its name, unit and list price; again whenever the money or the rate changes (unless a price was typed)
 function pickStockLine(row, fresh) {
   const f = row.closest('form'), m = itemOf($('[name=m]', row).value), cur = formCur(f), rate = cur === 'SSP' ? parseAmount(f.elements.rate && f.elements.rate.value) : null;
@@ -144,7 +144,8 @@ function invoiceForm(type, src, client, pre) {
   const last = invs().filter(x => x.type === type).pop() || {}, ks = live(S.clients).sort((a, b) => a.name.localeCompare(b.name)), one = typeof pre === 'string' && itemOf(pre);
   const preLines = Array.isArray(pre) ? pre : one ? [{ m: one.id, t: one.name, unit: one.unit, price: one.price }] : null;
   const d = src ? { ...src } : { client: client || '', cur: 'USD', items: preLines || [{}], tax: last.tax || 0, notes: last.notes || '', bank: last.bank || '', project: '' };
-  const dline = (d.items || []).find(it => it.dlv), lines = (d.items || []).filter(it => !it.dlv); // the delivery charge is asked on its own
+  const dline = (d.items || []).find(it => it.dlv), lines = (d.items || []).filter(it => !it.dlv).map(it => (src ? { ...it, keep: true } : it)); // the delivery charge is asked on its own
+  if (!src && !can('edit') && S.link && S.link.rate) d.rate = S.link.rate; // an office manager sells in SSP at the company's rate
   const fromQuote = src && src.type === 'quote' && type === 'invoice';
   openSheet(`${head(type === 'quote' ? 'New quotation' : 'New invoice', 'in')}
     ${fromQuote ? `<p class="note">From quotation ${esc(src.no)}. Check the lines, then make the invoice.</p>` : ''}
@@ -217,9 +218,12 @@ async function saveInvoice(f) {
   stockLines.forEach(it => { it.list = listFor(itemOf(it.m), cur, rate); });
   const noPrice = stockLines.find(it => !(it.list > 0));
   if (noPrice) return formErr(f, null, `${itemOf(noPrice.m).name} has no selling price yet — an admin sets it in the Warehouse.`);
-  const src = f.dataset.from && invOf(f.dataset.from), approvedQuote = src && src.ok === 'approved' ? src : null;
-  const offOk = it => belowList(it.price, it.list) <= MANAGER_OFF + 1e-9 || (approvedQuote && approvedQuote.items.some(q => q.m === it.m && it.price >= q.price - 1e-9));
-  const needsApproval = !can('edit') && stockLines.some(it => !offOk(it));
+  const src = f.dataset.from && invOf(f.dataset.from), mine = signedIn() ? session.user.id : '';
+  const usedQuote = src && invs().some(x => x.from === src.id && !x.cancelled), approvedQuote = src && src.type === 'quote' && src.ok === 'approved' && src.uid === mine && src.cur === cur && !usedQuote ? src : null;
+  const quotedQty = m => (approvedQuote ? approvedQuote.items.filter(q => q.m === m).reduce((t, q) => t + q.qty, 0) : 0), soldQty = m => stockLines.filter(it => it.m === m).reduce((t, it) => t + it.qty, 0);
+  const offOk = it => belowList(it.price, it.list) <= MANAGER_OFF + 1e-9 || (approvedQuote && soldQty(it.m) <= quotedQty(it.m) + 1e-9 && approvedQuote.items.some(q => q.m === it.m && it.price >= q.price - 1e-9));
+  const typedLines = items.filter(it => !it.m), lowRate = cur === 'SSP' && stockLines.length && S.link && S.link.rate > 0 && rate < S.link.rate * (1 - MANAGER_OFF / 100) - 1e-9;
+  const needsApproval = !can('edit') && (stockLines.some(it => !offOk(it)) || typedLines.length > 0 || lowRate);
   if (type === 'invoice') {
     const b = book(), want = {};
     stockLines.forEach(it => { want[it.m] = (want[it.m] || 0) + it.qty; });
@@ -230,7 +234,9 @@ async function saveInvoice(f) {
     const b = book(), under = stockLines.find(it => b[it.m] && b[it.m].avg > 0 && toUsd(it.price, cur, rate) < b[it.m].avg - 0.005);
     if (under && !confirm(`${itemOf(under.m).name} sells here for less than it cost (${usd4(b[under.m].avg)} landed). Make it anyway?`)) return;
   }
-  if (needsApproval && !confirm(`Some prices are more than ${MANAGER_OFF} % below the list price:\n${stockLines.filter(it => !offOk(it)).map(it => `${itemOf(it.m).name}: ${money(it.price, cur)} (list ${money(it.list, cur)}, ${plain(belowList(it.price, it.list))} % below)`).join('\n')}\n\nSend it to an admin to approve? It is made only when they do.`)) return;
+  const why = [...stockLines.filter(it => !offOk(it)).map(it => `${itemOf(it.m).name}: ${money(it.price, cur)} (list ${money(it.list, cur)}, ${plain(belowList(it.price, it.list))} % below)`),
+    ...typedLines.map(it => `"${it.t}" is typed, not from stock`), ...(lowRate ? [`The rate ${plain(rate)} is below the company's ${plain(S.link.rate)}`] : [])];
+  if (needsApproval && !confirm(`An admin must approve this first:\n${why.join('\n')}\n\nSend it to an admin? It is made only when they approve.`)) return;
   let no;
   $('.err', f).textContent = 'Making it…';
   if (needsApproval) { const [[q], seq] = nextIds(type === 'quote' ? 'QT' : 'REQ', 1, S.seq); update({ seq }); no = q; } // numbered when approved
@@ -280,7 +286,9 @@ function priceCard(x) {
   const k = clientOf(x.client), t = invoiceTotals(x);
   return `<section class="card pad" style="margin-bottom:12px">
     <p style="margin:0 0 6px"><b>${x.type === 'quote' ? 'Quotation' : 'Invoice'} for ${esc(k ? k.name : '—')}: ${money(t.total, x.cur)}</b></p>
-    <ul style="margin:0 0 8px;padding-left:20px">${x.items.filter(it => it.m).map(it => `<li>${esc(it.t)}: ${plain(it.qty)} × ${money(it.price, x.cur)} — list ${money(it.list || 0, x.cur)}${belowList(it.price, it.list) ? `, <b>${plain(belowList(it.price, it.list))} % below</b>` : ''}</li>`).join('')}</ul>
+    <ul style="margin:0 0 8px;padding-left:20px">${x.items.filter(it => !it.dlv).map(it => { const list = it.m ? listFor(itemOf(it.m), x.cur, x.rate) : 0, off = belowList(it.price, list);
+      return `<li>${esc(it.t)}: ${plain(it.qty)} × ${money(it.price, x.cur)} — ${it.m ? `list ${list ? money(list, x.cur) : '?'}${off ? `, <b>${plain(off)} % below</b>` : ''}` : '<b>typed, not from stock</b>'}</li>`; }).join('')}</ul>
+    ${x.cur === 'SSP' && x.rate ? `<p class="muted" style="margin:0 0 6px">At ${plain(x.rate)} SSP for 1 USD${S.link && S.link.rate ? ` (the company's newest: ${plain(S.link.rate)})` : ''}.</p>` : ''}
     <p class="muted" style="margin:0 0 10px">Asked by ${esc(x.by)} · ${esc(fmtAbs(String(x.createdAt).slice(0, 16)))}</p>
     <div class="two"><button class="btn in" data-act="approvePrice" data-id="${esc(x.id)}">✓ Approve</button><button class="btn danger" data-act="refusePrice" data-id="${esc(x.id)}">✗ Refuse</button></div></section>`;
 }

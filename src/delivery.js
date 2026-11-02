@@ -33,7 +33,7 @@ function deliveryForm(b) {
       <div class="fld"><span>How does it go?</span><div class="curseg"><label><input type="radio" name="how" value="deliver" ${src.how === 'deliver' ? 'checked' : ''}><span><b>🚚 We deliver</b><small>our driver or a hired truck</small></span></label>
         <label><input type="radio" name="how" value="collect" ${src.how === 'collect' ? 'checked' : ''}><span><b>🙋 They collect</b><small>from the warehouse</small></span></label></div></div>
       <h3 class="subh">What goes <small class="muted">— less if it goes in several loads</small></h3>
-      <div class="card pad">${src.lines.map(l => { const m = itemOf(l.m) || { name: l.m, unit: '' }; return `<label class="count-row"><span><b>${esc(m.name)}</b><small class="muted">up to ${plain(l.qty)} ${esc(m.unit)}</small></span><input name="q-${esc(l.m)}" data-max="${l.qty}" inputmode="decimal" value="${plain(l.qty).replace(/,/g, '')}" autocomplete="off" aria-label="How many ${esc(m.name)}"></label>`; }).join('')}</div>
+      <div class="card pad">${src.lines.map(l => { const m = itemOf(l.m) || { name: l.m, unit: '' }; return `<label class="count-row"><span><b>${esc(m.name)}</b><small class="muted">up to ${plain(l.qty)} ${esc(m.unit)}</small></span><input name="q-${esc(l.m)}" data-max="${l.qty}" inputmode="decimal" value="${l.qty}" autocomplete="off" aria-label="How many ${esc(m.name)}"></label>`; }).join('')}</div>
       ${textField('to', 'To', 'Client or site', src.to)}
       ${textField('addr', 'Address / site', 'e.g. Gudele block 3, near the church', src.addr, false)}
       <label class="fld"><span class="who-label">Driver / who takes it</span><input name="driver" required maxlength="80" placeholder="Name" autocomplete="off"></label>
@@ -43,7 +43,7 @@ function deliveryForm(b) {
         <label class="fld"><span>In Accounts</span><select name="pay"><option value="">Not in Accounts</option><option value="cash">＋ Add it: paid in cash</option><option value="bank">＋ Add it: paid from the bank</option></select></label></div>
         ${curChips(defCur(), 'Delivery cost in')}${rateField(defCur())}</div>
       <label class="fld"><span>Photo of the loaded goods <em>(optional — on the vehicle, before it leaves)</em></span><input type="file" name="loadphoto" accept="image/*"></label>
-      <label class="fld"><span>Leaves on</span><input type="date" name="date" value="${today()}" max="${today()}" required></label>
+      <label class="fld"><span>Leaves on</span><input type="date" name="date" value="${today()}" min="${plusDays(today(), -7)}" max="${today()}" required></label>
       ${textField('note', 'Note', '', '', false)}
       <p class="err"></p>
       <button class="btn out">Make the delivery note (PDF)</button>
@@ -66,7 +66,7 @@ async function saveDelivery(f) {
   const driver = clean(v.driver), how = v.how === 'collect' ? 'collect' : 'deliver';
   if (!driver) return formErr(f, 'driver', how === 'deliver' ? 'Who delivers it?' : 'Who collects it?');
   if (!clean(v.to)) return formErr(f, 'to', 'Who or where is it for?');
-  if (!DATE_RE.test(v.date) || v.date > today()) return formErr(f, 'date', 'Choose the day it leaves');
+  if (!DATE_RE.test(v.date) || v.date > today() || v.date < plusDays(today(), -7)) return formErr(f, 'date', 'The day it leaves: today, or up to a week back');
   const costCur = formCur(f), costAmt = how === 'deliver' && String(v.cost || '').trim() ? parseAmount(v.cost) : null, rate = costAmt ? rateFrom(f, costCur) : undefined;
   if (how === 'deliver' && String(v.cost || '').trim() && costAmt === null) return formErr(f, 'cost', 'Type what the delivery costs, like 15 — or leave it empty');
   if (costAmt && rate === null) return formErr(f, 'rate', RATE_ERR);
@@ -149,7 +149,7 @@ function receiveDelivery(id) {
       <label class="fld"><span>Their phone <em>(optional)</em></span><input name="rphone" type="tel" maxlength="30" autocomplete="off"></label>
       <div class="two"><label class="fld"><span>Received on</span><input type="date" name="rdate" value="${today()}" min="${esc(d.date)}" max="${today()}" required></label><label class="fld"><span>At</span><input type="time" name="rtime" value="${stamp().slice(11, 16)}" required></label></div>
       <h3 class="subh">How many arrived</h3>
-      <div class="card pad">${d.lines.map(l => { const m = itemOf(l.m) || { name: l.m, unit: '' }; return `<label class="count-row"><span><b>${esc(m.name)}</b><small class="muted">sent ${plain(l.qty)} ${esc(m.unit)}</small></span><input name="g-${esc(l.m)}" data-sent="${l.qty}" inputmode="decimal" value="${plain(l.qty).replace(/,/g, '')}" autocomplete="off" aria-label="How many ${esc(m.name)} arrived"></label>`; }).join('')}</div>
+      <div class="card pad">${d.lines.map(l => { const m = itemOf(l.m) || { name: l.m, unit: '' }; return `<label class="count-row"><span><b>${esc(m.name)}</b><small class="muted">sent ${plain(l.qty)} ${esc(m.unit)}</small></span><input name="g-${esc(l.m)}" data-sent="${l.qty}" inputmode="decimal" value="${l.qty}" autocomplete="off" aria-label="How many ${esc(m.name)} arrived"></label>`; }).join('')}</div>
       <div class="fld"><span>The receiver's signature</span><div class="curseg"><label><input type="radio" name="sigby" value="paper" checked><span><b>📄 On the paper</b><small>a photo of the signed slip</small></span></label><label><input type="radio" name="sigby" value="phone"><span><b>✍️ Here, on this phone</b><small>the receiver is with you</small></span></label></div></div>
       <label class="fld sig-paper"><span>Photo of the signed delivery note</span><input type="file" name="slip" accept="image/*,application/pdf"></label>
       <div class="sig-phone" hidden>${sigField('the receiver')}</div>
@@ -200,10 +200,10 @@ async function saveDnReceipt(f) {
         notes: [['Received', [`By ${name}${recv.phone ? ` (${recv.phone})` : ''} on ${fmtAbs(recv.at)}${geo ? ` · at ${geo.lat}, ${geo.lng} (±${geo.acc} m)` : ''}.`, ...(recv.note ? [recv.note] : [])]]],
         sign: { label: 'Received by', sig: cv, name } };
       const blob = await renderStatement(spec);
-      await keepFile({ for: d.id, type: 'delivery', no: d.no, name: `${d.no} received ${fileSafe(name)}.pdf`, mime: 'application/pdf', check: d.check }, await blob.arrayBuffer());
+      await keepFile({ for: d.id, type: 'delivery', proof: true, no: d.no, name: `${d.no} received ${fileSafe(name)}.pdf`, mime: 'application/pdf', check: d.check }, await blob.arrayBuffer());
     } else {
       const p = await prepareFile(slip);
-      await keepFile({ for: d.id, type: 'delivery', no: d.no, name: `${d.no} signed slip${p.mime === 'application/pdf' ? '.pdf' : '.jpg'}`, mime: p.mime }, p.data);
+      await keepFile({ for: d.id, type: 'delivery', proof: true, no: d.no, name: `${d.no} signed slip${p.mime === 'application/pdf' ? '.pdf' : '.jpg'}`, mime: p.mime }, p.data);
     }
     if (goods) { const p = await prepareFile(goods); await keepFile({ for: d.id, type: 'photo', name: `${d.no} delivered.jpg`, mime: p.mime }, p.data); }
   } catch (e) { btn.disabled = false; return formErr(f, null, e.message); }

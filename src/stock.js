@@ -173,8 +173,8 @@ function saveItem(f) {
   const by = myName() || S.lastBy || '', s = book()[old ? old.id : ''], auto = s && s.avg ? sellPrice(s.avg, rec.markup) : undefined;
   const full = { ...rec, ...(rec.fixed ? { price } : auto ? { price: auto } : old && old.price && !old.fixed ? { price: old.price } : {}) };
   if (old) {
-    const { price: _p, ...rest } = old;
-    update({ stock: S.stock.map(x => (x.id === old.id ? { ...rest, ...full, editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', old.id, `Stock item ${rec.name}${(full.price || 0) !== (old.price || 0) ? `: sells for ${money(full.price || 0, 'USD')} (was ${money(old.price || 0, 'USD')})` : ''}`]], by) });
+    const { price: _p, ...rest } = old, moved = old.price > 0 && Math.abs((full.price || 0) - old.price) >= 0.005;
+    update({ stock: S.stock.map(x => (x.id === old.id ? { ...rest, ...full, ...(moved ? { prev: { price: old.price, until: today() } } : {}), editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', old.id, `Stock item ${rec.name}${(full.price || 0) !== (old.price || 0) ? `: sells for ${money(full.price || 0, 'USD')} (was ${money(old.price || 0, 'USD')})` : ''}`]], by) });
     toast('Saved ✓'); return itemDetail(old.id);
   }
   const id = newItem(full, by);
@@ -194,7 +194,7 @@ function followCosts(ids, by) {
     const price = sellPrice(s.avg, m.markup === undefined ? DEFAULT_MARKUP : m.markup);
     if (Math.abs(price - (m.price || 0)) < 0.005) return m;
     changed.push(`${m.name}: ${money(price, 'USD')}`);
-    return { ...m, price, editedAt: stampSec(), editedBy: by };
+    return { ...m, price, ...(m.price > 0 ? { prev: { price: m.price, until: today() } } : {}), editedAt: stampSec(), editedBy: by };
   });
   if (changed.length) update({ stock, log: logWith([['Prices', '—', `Selling prices follow the landed cost: ${changed.join('; ')}`]], by) });
 }
@@ -220,7 +220,8 @@ const costLine = (c = {}) => `<div class="cline">
   <small class="muted chint"></small></div>`;
 // a cost's payment in Accounts: not there, add it now (cash or bank), or one already entered (so nothing is typed twice)
 function payOptions(sel) {
-  const recent = live(S.expenses).filter(e => !e.worker && !e.regular && e.at >= plusDays(today(), -150)).sort((a, b) => byAt(b, a)).slice(0, 60);
+  const recent = live(S.expenses).filter(e => !e.worker && !e.regular && e.at >= plusDays(today(), -150)).sort((a, b) => byAt(b, a)).slice(0, 60), kept = sel && S.expenses.find(e => e.id === sel && !e.deleted);
+  if (kept && !recent.includes(kept)) recent.unshift(kept);
   return `<option value="">Not in Accounts</option><option value="cash" ${sel === 'cash' ? 'selected' : ''}>＋ Add to Accounts: paid in cash</option><option value="bank" ${sel === 'bank' ? 'selected' : ''}>＋ Add to Accounts: paid from the bank</option>
     ${recent.length ? `<optgroup label="Already in Accounts">${recent.map(e => `<option value="${esc(e.id)}" ${e.id === sel ? 'selected' : ''}>${esc(`${fmtDate(e.at.slice(0, 10))} · ${money(e.amount, e.cur)} · ${e.paidTo}`)}</option>`).join('')}</optgroup>` : ''}`;
 }
@@ -319,7 +320,9 @@ async function saveReceive(f) {
   const rec = { date: v.date, ref: clean(v.ref), ...(sup ? { sup: sup.id } : { from: clean(v.from) }), origin: clean(v.origin), gcur: y.gcur, ...(y.gcur !== 'USD' ? { grate: y.grate } : {}),
     lines: rows.map(row => ({ m: row.m, qty: row.qty, amt: row.amt, ...(row.kg ? { kg: row.kg } : {}) })), costs: outCosts, lc: r.lines.map(l => l.unit), note: clean(v.note) };
   const text = `${rows.length} line${rows.length === 1 ? '' : 's'} · landed ${money(r.total / 100, 'USD')}${payIds.length ? ` · ${payIds.length} cost${payIds.length === 1 ? '' : 's'} added to Accounts` : ''}`;
-  if (old) update({ receipts: S.receipts.map(x => (x.id === old.id ? { ...x, ...rec, editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', id, `Goods received ${rec.ref || rec.date}: ${text}`]], by) });
+  const differ = outCosts.filter(c => c.pay).map(c => ({ c, e: S.expenses.find(e => e.id === c.pay && !e.deleted) })).filter(({ c, e }) => e && (e.cur !== c.cur || Math.abs(e.amount - c.amt) > 0.004));
+  if (differ.length) alert(`In Accounts these payments are not what the costs now say:\n${differ.map(({ c, e }) => `${COST_NAME[c.t]}: ${cost(c.amt, c.cur)} here, ${money(e.amount, e.cur)} in Accounts`).join('\n')}\n\nCorrect the payment in Accounts too (open it from History).`);
+  if (old) update({ receipts: S.receipts.map(x => { if (x.id !== old.id) return x; const { sup: _s, from: _f, ...base } = x; return { ...base, ...rec, editedAt: stampSec(), editedBy: by }; }), log: logWith([['Edited', id, `Goods received ${rec.ref || rec.date}: ${text}`]], by) });
   else update({ receipts: [...S.receipts, { id, ...rec, by, createdAt: stampSec() }], log: logWith([['Received', id, `Goods received ${rec.ref || rec.date}: ${text}`]], by) });
   followCosts([...new Set([...rec.lines.map(l => l.m), ...(old ? old.lines.map(l => l.m) : [])])], by);
   toast(old ? 'Saved ✓' : 'In stock ✓');
@@ -447,14 +450,14 @@ function outList() {
 /* ---------- the stock count: what should be on the shelves, what is ---------- */
 // should be there = on hand + sold but not yet sent (still on the shelf); the differences found go in or out at the average cost
 function countSheet() {
-  const b = book(), wait = awaitingDelivery(S.invoices, S.deliveries), list = items();
+  const b = book(), wait = awaitingDelivery(S.invoices, S.deliveries), list = items(), blind = !can('edit');
   if (!list.length) return toast('Nothing is in the warehouse yet');
   openSheet(`${head('Count the stock', 'stock', fmtDate(today()))}
-    <p class="hint">Count what is on the shelves and type it. Leave an item empty if you did not count it. Sold goods not yet sent are still here: they are in "should be".</p>
+    <p class="hint">Count what is on the shelves and type it. Leave an item empty if you did not count it.${blind ? ' Count every item: what the records say is shown to the admins with your count.' : ' Sold goods not yet sent are still here: they are in "should be".'}</p>
     <form data-form="count">
       ${[...new Set(list.map(m => m.cat || 'Other'))].map(g => `<h3 class="subh">${esc(g)}</h3><div class="card pad">${list.filter(m => (m.cat || 'Other') === g).map(m => {
         const should = Math.round(((b[m.id] ? b[m.id].qty : 0) + (wait[m.id] || 0)) * 1e6) / 1e6;
-        return `<label class="count-row"><span><b>${esc(m.name)}</b><small class="muted">should be ${plain(should)} ${esc(m.unit)}${m.bin ? ` · ${esc(m.bin)}` : ''}</small></span><input name="c-${esc(m.id)}" data-should="${should}" inputmode="decimal" placeholder="${plain(should)}" autocomplete="off" aria-label="Counted ${esc(m.name)}"></label>`;
+        return `<label class="count-row"><span><b>${esc(m.name)}</b><small class="muted">${blind ? esc(m.unit) : `should be ${plain(should)} ${esc(m.unit)}`}${m.bin ? ` · ${esc(m.bin)}` : ''}</small></span><input name="c-${esc(m.id)}" data-should="${should}" inputmode="decimal" placeholder="${blind ? '' : plain(should)}" autocomplete="off" aria-label="Counted ${esc(m.name)}"></label>`;
       }).join('')}</div>`).join('')}
       ${textField('to', 'Counted by', 'Who counted', myName() || S.lastBy || '', true)}
       <p class="note count-sum">Type what you counted.</p>
@@ -465,8 +468,10 @@ function countSheet() {
 function countDiffs(f) {
   return $$('input[data-should]', f).filter(i => i.value.trim()).map(i => ({ m: i.name.slice(2), counted: parseNum(i.value), should: +i.dataset.should, el: i }));
 }
+const COUNT_EPS = 1e-6; // a difference smaller than this is the same count
 function refreshCount(f) {
-  const rows = countDiffs(f), diff = rows.filter(r => r.counted !== null && Math.abs(r.counted - r.should) > 1e-9);
+  const rows = countDiffs(f), diff = rows.filter(r => r.counted !== null && Math.abs(r.counted - r.should) > COUNT_EPS);
+  if (!can('edit')) { $('.count-sum', f).textContent = rows.length ? `${rows.length} item${rows.length === 1 ? '' : 's'} counted.` : 'Type what you counted.'; return; }
   $('.count-sum', f).innerHTML = !rows.length ? 'Type what you counted.' : diff.length ? `${rows.length} counted · <b>${diff.length} different</b>: ${diff.map(r => `${esc((itemOf(r.m) || {}).name)} ${r.counted > r.should ? '+' : '−'}${plain(Math.abs(Math.round((r.counted - r.should) * 1e6) / 1e6))}`).join(', ')}` : `${rows.length} counted · everything matches ✓`;
 }
 function saveCount(f) {
@@ -474,14 +479,14 @@ function saveCount(f) {
   if (!rows.length) return formErr(f, null, 'Type what you counted of at least one item.');
   if (bad) { bad.el.focus(); return formErr(f, null, 'Type each count as a number (0 or more).'); }
   if (!who) return formErr(f, 'to', 'Who counted?');
-  const diff = rows.filter(r => Math.abs(r.counted - r.should) > 1e-9), by = myName() || S.lastBy || '';
-  if (!diff.length) { update({ log: logWith([['Counted', '—', `Stock count by ${who}: ${rows.length} item${rows.length === 1 ? '' : 's'}, all as expected`]], by) }); toast('Everything matches ✓'); return stockSheet(); }
-  if (!confirm(`${diff.length} item${diff.length === 1 ? '' : 's'} differ:\n${diff.map(r => `${(itemOf(r.m) || {}).name}: should be ${plain(r.should)}, counted ${plain(r.counted)}`).join('\n')}\n\nThe stock is corrected to what was counted, and admins see who counted.`)) return;
+  const diff = rows.filter(r => Math.abs(r.counted - r.should) > COUNT_EPS), by = myName() || S.lastBy || '';
+  if (!diff.length) { update({ log: logWith([['Counted', '—', `Stock count by ${who}: ${rows.length} item${rows.length === 1 ? '' : 's'}, all as expected`]], by) }); toast(can('edit') ? 'Everything matches ✓' : 'Count saved ✓'); return stockSheet(); }
+  if (!confirm(can('edit') ? `${diff.length} item${diff.length === 1 ? '' : 's'} differ:\n${diff.map(r => `${(itemOf(r.m) || {}).name}: should be ${plain(r.should)}, counted ${plain(r.counted)}`).join('\n')}\n\nThe stock is corrected to what was counted.` : `Save your count of ${rows.length} item${rows.length === 1 ? '' : 's'}? The admins see it with what the records say.`)) return;
   const [[id], seq] = nextIds('O', 1, S.seq);
   const rec = { id, date: today(), kind: 'count', lines: diff.map(r => ({ m: r.m, qty: Math.round((r.counted - r.should) * 1e6) / 1e6, counted: r.counted })), to: who, note: `${rows.length} counted, ${diff.length} different`, by, createdAt: stampSec() };
   update({ stockOut: [...S.stockOut, rec], seq, log: logWith([['Counted', id, `Stock count by ${who}: ${diff.map(r => `${(itemOf(r.m) || {}).name} ${r.counted > r.should ? '+' : '−'}${plain(Math.abs(Math.round((r.counted - r.should) * 1e6) / 1e6))}`).join(', ')}`]], by) });
   toast('Count saved ✓');
-  outDetail(id);
+  if (can('edit')) outDetail(id); else stockSheet();
 }
 
 /* ---------- the report (admins): what was sold and earned, used on projects, lost; what the stock is worth ---------- */
@@ -532,7 +537,7 @@ function countPdf() {
   shareDoc(stockDoc('STOCK COUNT SHEET', `COUNT ${today()}`, {
     info: [['Company', S.company || ''], ['Date', fmtDate(today())], ['Counted by', ''], ['Checked by', '']],
     sections: [...new Set(list.map(m => m.cat || 'Other'))].map(g => ({ title: g, cols: [{ h: 'Item', w: 420, wrap: true }, { h: 'Shelf', w: 160 }, { h: 'Should be', w: 160, right: true }, { h: 'Counted', w: 160, right: true }, { h: 'Diff.', w: 160, right: true }],
-      rows: list.filter(m => (m.cat || 'Other') === g).map(m => [`${m.name}${m.code ? ` (${m.code})` : ''}`, m.bin || '', `${plain(Math.round(((b[m.id] ? b[m.id].qty : 0) + (wait[m.id] || 0)) * 1e6) / 1e6)} ${m.unit}`, '', '']) })),
+      rows: list.filter(m => (m.cat || 'Other') === g).map(m => [`${m.name}${m.code ? ` (${m.code})` : ''}`, m.bin || '', can('edit') ? `${plain(Math.round(((b[m.id] ? b[m.id].qty : 0) + (wait[m.id] || 0)) * 1e6) / 1e6)} ${m.unit}` : m.unit, '', '']) })),
     approvals: true, signLabels: ['Counted by', 'Checked by', 'Approved by'] }), `Stock count sheet ${today()}.pdf`);
 }
 function landedPdf(id) {
