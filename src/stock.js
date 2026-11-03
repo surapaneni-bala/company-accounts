@@ -19,8 +19,6 @@ const usd4 = n => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDi
 const priceText = m => (m.price > 0 ? `${money(m.price, 'USD')}${S.lastRate ? ` ≈ ${money(Math.round(m.price * S.lastRate), 'SSP')}` : ''}` : 'no price yet');
 const nw = t => `<span class="nw">${t}</span>`; // a price stays on one line
 const seesCost = () => can('money');
-const stockNav = active => `<nav class="subnav" aria-label="Warehouse">${[['stock', '📦', 'Stock'], ['stockIn', '🚢', 'Received'], ['stockOutList', '🚚', 'Out'], ...(seesCost() ? [['stockReport', '📈', 'Report']] : [])]
-  .map(([a, i, t]) => `<button type="button" data-act="${a}"${a === active ? ' aria-current="page"' : ''}><span aria-hidden="true">${i}</span>${t}</button>`).join('')}</nav>`;
 const itemOptions = (sel, extra = '') => `<option value="">Choose…</option>${items().map(m => `<option value="${esc(m.id)}" ${m.id === sel ? 'selected' : ''}>${esc(m.name)}${m.code ? ` (${esc(m.code)})` : ''}</option>`).join('')}${extra}`;
 // the sheet script must be new enough to keep these records (they stay on this phone until then)
 const stockScriptNote = () => (S.link && (S.link.v || 2) < 23 ? `<p class="note">The warehouse needs the Google Sheet script version 23 (this sheet runs ${S.link.v || 2}). Until then what you enter stays on this phone. ${can('settings') ? '<button class="link" data-act="howUpdate">Show me how</button>' : 'Tell the owner.'}</p>` : '');
@@ -75,38 +73,73 @@ function checkout(type = 'invoice') {
   invoiceForm(type, null, '', lines);
 }
 
-/* ---------- the stock list ---------- */
-let stockQ = '';
-function stockSheet() {
-  const b = book(), list = items(), admin = seesCost(), wait = awaitingDelivery(S.invoices, S.deliveries);
-  const low = list.filter(m => m.min > 0 && (b[m.id] ? b[m.id].qty : 0) <= m.min);
+/* ---------- the Warehouse window (owner, 3 Nov 2026: "its own window, like Accounts"): numbers, sections, category tiles ---------- */
+let stockQ = '', stockCat = '', stockTab = 'stock', stockMonth = today().slice(0, 7);
+// an item's category: the one an admin gave it, else the one its name says (rebar → Structure & civil), like the buying list
+const catOfItem = m => m.cat || guessCat(m.name);
+const CAT_ICON = { 'Structure & civil': '🧱', Finishes: '🟫', 'Doors & windows': '🚪', Lighting: '💡', 'Electrical & solar': '⚡', 'Home automation & security': '📡', 'Plumbing & sanitary': '🚿',
+  Kitchen: '🍳', 'Electronics & appliances': '📺', 'Furniture & décor': '🛋️', 'Machinery & vehicles': '🚜', 'Tools & hardware': '🔧', 'Office & IT': '💻', 'Goods for trading': '🏷️', Steel: '🏗️', Other: '📦' };
+const catIcon = c => CAT_ICON[c] || '📦';
+function goStock(section, cat) {
+  closeAll(); tab = 'stock';
+  if (section) stockTab = section;
+  if (cat !== undefined) stockCat = cat;
+  render(); scrollTo(0, 0);
+}
+const stockSheet = () => goStock('stock');
+function viewStock() {
+  const admin = seesCost(), b = book(), list = items(), wait = awaitingDelivery(S.invoices, S.deliveries);
+  const low = list.filter(m => m.min > 0 && (b[m.id] ? b[m.id].qty : 0) <= m.min).length, toSendN = Object.keys(wait).length, onWay = live(S.deliveries).filter(d => d.status === 'out').length;
   const atCost = list.reduce((t, m) => t + Math.max(0, b[m.id] ? b[m.id].value : 0), 0), atPrice = list.reduce((t, m) => t + Math.round(Math.max(0, b[m.id] ? b[m.id].qty : 0) * (m.price || 0) * 100), 0);
-  openSheet(`${head('Warehouse', 'stock')}${stockNav('stock')}${stockScriptNote()}
-    ${admin ? `<div class="ssp-big"><small>STOCK WORTH</small><b>${money(atCost / 100, 'USD')}</b><span>at landed cost · ${money(atPrice / 100, 'USD')} at selling prices · ${list.length} item${list.length === 1 ? '' : 's'}</span></div>` : ''}
-    <div class="two">${admin ? '<button class="btn primary" data-act="receiveForm">🚢 Goods received</button>' : ''}<button class="btn ghost" data-act="outForm">➖ Goods out</button>
-      <button class="btn in" data-act="sellStock">🧾 Sell from stock</button><button class="btn ghost" data-act="countSheet">📋 Count the stock</button></div>
-    ${admin && pricesToCheck().length ? `<p class="note" style="margin-top:12px">💲 ${pricesToCheck().length} price${pricesToCheck().length === 1 ? ' is' : 's are'} below the landed cost + markup. <button class="link" data-act="prices">Check the prices</button></p>` : ''}
-    ${low.length ? `<p class="note" style="margin-top:12px">⚠️ Running low: ${low.map(m => `<b>${esc(m.name)}</b> (${plain(b[m.id] ? b[m.id].qty : 0)})`).join(', ')}</p>` : ''}
-    <form data-form="stockFilter" class="qadd" style="margin-top:12px"><input name="q" placeholder="Find an item, a code or a shelf" value="${esc(stockQ)}" autocomplete="off" aria-label="Find an item"></form>
-    <div id="stockList">${stockRows(list, b, wait)}</div>
-    ${admin ? '<div class="two" style="margin-top:12px"><button class="btn ghost" data-act="itemForm">＋ New stock item</button><button class="btn ghost" data-act="prices">💲 Selling prices</button></div>' : ''}
-    <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="stockPdf">📄 Stock list (PDF)</button><button class="btn ghost" data-act="countPdf">🖨 Count sheet to print</button></div>`);
-  comeBack(stockSheet);
+  const tile = (n, label, tone = '', act = '') => `<${act ? `button type="button" data-act="${act}"` : 'div'} class="wh-stat ${tone}"><b>${n}</b><small>${label}</small></${act ? 'button' : 'div'}>`;
+  if (stockTab === 'report' && !admin) stockTab = 'stock';
+  return `${approvalsBanner()}${stockScriptNote()}
+    <section class="wh-hero">
+      ${admin ? `<div class="wh-worth"><small>Stock worth</small><b>${money(atCost / 100, 'USD')}</b><span>at landed cost · ${money(atPrice / 100, 'USD')} at selling prices</span></div>` : ''}
+      <div class="wh-stats">${tile(list.length, `item${list.length === 1 ? '' : 's'}`)}${tile(low, 'running low', low ? 'warn' : '')}${tile(toSendN, 'sold, to send', toSendN ? 'warn' : '', toSendN ? 'stockOutList' : '')}${tile(onWay, 'on the way', onWay ? 'warn' : '', onWay ? 'stockOutList' : '')}${admin && pricesToCheck().length ? tile(pricesToCheck().length, 'prices to check', 'bad', 'prices') : ''}</div>
+    </section>
+    <div class="wh-actions">${admin ? '<button class="btn primary" data-act="receiveForm">🚢 Goods received</button>' : ''}<button class="btn in" data-act="sellStock">🧾 Sell</button>
+      <button class="btn ghost" data-act="outForm">➖ Goods out</button><button class="btn ghost" data-act="countSheet">📋 Count</button></div>
+    <div class="seg wh-seg" role="tablist">${[['stock', '📦', 'Stock'], ['in', '🚢', 'Received'], ['out', '🚚', 'Out'], ...(admin ? [['report', '📈', 'Report']] : [])]
+      .map(([v, i, t]) => `<button type="button" role="tab" data-act="stockTab" data-v="${v}" class="${stockTab === v ? 'on' : ''}" aria-selected="${stockTab === v}"><span aria-hidden="true">${i}</span>${t}</button>`).join('')}</div>
+    ${{ stock: stockBody, in: receivedBody, out: outBody, report: reportBody }[stockTab]()}`;
 }
-function stockRows(list, b, wait) {
-  const q = stockQ.trim().toLowerCase(), shown = q ? list.filter(m => [m.name, m.code, m.bin, m.cat].some(v => String(v || '').toLowerCase().includes(q))) : list;
-  if (!list.length) return empty('Nothing in the warehouse yet', seesCost() ? 'Tap <b>Goods received</b> when an import arrives: its items are made as you type them.' : 'An admin enters goods as they arrive.');
-  if (!shown.length) return '<p class="muted">Nothing matches.</p>';
-  const groups = [...new Set(shown.map(m => m.cat || 'Other'))];
-  return groups.map(g => `<h3 class="subh">${esc(g)}</h3><div class="card list inset">${shown.filter(m => (m.cat || 'Other') === g).map(m => {
-    const s = b[m.id] || { qty: 0, avg: 0 }, low = m.min > 0 && s.qty <= m.min;
-    return `<button class="row" data-act="openItem" data-id="${esc(m.id)}"><span class="dot">📦</span>
-      <span class="main"><span class="t"><span class="tt">${esc(m.name)}</span>${m.code ? `<i class="tag">${esc(m.code)}</i>` : ''}${low ? '<i class="tag warn">Low</i>' : ''}${s.short ? '<i class="tag bad">Below zero</i>' : ''}</span>
-      <span class="s">${esc([`${priceText(m)} each`, seesCost() && s.avg ? `cost ${usd4(s.avg)}` : '', wait[m.id] ? `${plain(wait[m.id])} sold, not yet sent` : '', m.bin && `shelf ${m.bin}`].filter(Boolean).join(' · '))}</span></span>
-      <span class="amt">${plain(s.qty)}<small>${esc(m.unit)}</small></span></button>`;
-  }).join('')}</div>`).join('');
+// Stock: the categories as tiles (with a photo of one of their items); a tile opens its items as cards; the search finds any item
+function stockBody() {
+  const list = items(), b = book();
+  if (!list.length) return empty('Nothing in the warehouse yet', seesCost() ? 'Tap <b>Goods received</b> when an import arrives: its items are made as you type them, each put in its category by its name.' : 'An admin enters goods as they arrive.');
+  return `<form data-form="stockFilter" class="qadd wh-search"><input name="q" placeholder="🔍 Find an item, a code or a shelf" value="${esc(stockQ)}" autocomplete="off" aria-label="Find an item"></form>
+    <div id="stockList">${stockResults(list, b)}</div>
+    ${seesCost() ? '<div class="two" style="margin-top:14px"><button class="btn ghost" data-act="itemForm">＋ New stock item</button><button class="btn ghost" data-act="prices">💲 Selling prices</button></div>' : ''}
+    <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="stockPdf">📄 Stock list (PDF)</button><button class="btn ghost" data-act="countPdf">🖨 Count sheet</button></div>`;
 }
-function filterStock(f) { stockQ = f.elements.q.value; $('#stockList').innerHTML = stockRows(items(), book(), awaitingDelivery(S.invoices, S.deliveries)); }
+function stockResults(list, b) {
+  const q = stockQ.trim().toLowerCase(), words = q.split(/\s+/).filter(Boolean);
+  if (words.length) {
+    const found = list.filter(m => words.every(w => [m.name, m.code, m.bin, catOfItem(m)].some(v => String(v || '').toLowerCase().includes(w))));
+    return found.length ? `<p class="muted wh-crumb">${found.length} found</p>${itemCards(found, b)}` : '<p class="muted">Nothing matches. Try fewer words.</p>';
+  }
+  const cats = [...new Set(list.map(catOfItem))].sort((x, y) => (x === 'Other') - (y === 'Other') || x.localeCompare(y));
+  if (stockCat && cats.includes(stockCat)) {
+    const inCat = list.filter(m => catOfItem(m) === stockCat);
+    return `<button type="button" class="chip wh-crumb" data-act="stockCat" data-v="">‹ All categories</button><h2 class="wh-cat-title">${catIcon(stockCat)} ${esc(stockCat)} <small>${inCat.length}</small></h2>${itemCards(inCat, b)}`;
+  }
+  return `<div class="wh-cats">${cats.map(c => {
+    const inCat = list.filter(m => catOfItem(m) === c), pic = inCat.map(m => latestFile(m.id, 'photo')).find(Boolean), low = inCat.filter(m => m.min > 0 && (b[m.id] ? b[m.id].qty : 0) <= m.min).length;
+    return `<button type="button" class="wh-cat" data-act="stockCat" data-v="${esc(c)}"><span class="wh-cat-pic" ${pic ? `data-photo="${esc(pic.id)}"` : ''}>${catIcon(c)}</span>
+      <span class="wh-cat-name">${esc(c)}</span><small>${inCat.length} item${inCat.length === 1 ? '' : 's'}${low ? ` · <b class="out-c">${low} low</b>` : ''}</small></button>`;
+  }).join('')}</div>`;
+}
+function itemCards(list, b) {
+  return `<div class="wh-items">${list.map(m => {
+    const s = b[m.id] || { qty: 0, avg: 0 }, low = m.min > 0 && s.qty <= m.min, pic = latestFile(m.id, 'photo');
+    return `<button type="button" class="wh-item" data-act="openItem" data-id="${esc(m.id)}"><span class="wh-item-pic" ${pic ? `data-photo="${esc(pic.id)}"` : ''}>${catIcon(catOfItem(m))}</span>
+      <span class="wh-item-name">${esc(m.name)}</span>${m.code ? `<small class="muted">${esc(m.code)}</small>` : ''}
+      <span class="wh-item-foot"><b class="${s.short ? 'out-c' : low ? 'warn-c' : ''}">${plain(s.qty)} <small>${esc(m.unit)}</small></b><span>${m.price > 0 ? money(m.price, 'USD') : '—'}</span></span>
+      ${low || s.short ? `<i class="tag ${s.short ? 'bad' : 'warn'}">${s.short ? 'Below zero' : 'Low'}</i>` : ''}</button>`;
+  }).join('')}</div>`;
+}
+function filterStock(f) { stockQ = f.elements.q.value; $('#stockList').innerHTML = stockResults(items(), book()); loadThumbs(); }
 
 /* ---------- one item: how many, its price, its cost (admins), every move ---------- */
 function itemDetail(id) {
@@ -115,7 +148,9 @@ function itemDetail(id) {
   const s = book()[id] || { qty: 0, avg: 0, value: 0, moves: [], sold: 0, revenue: 0, cogs: 0 }, admin = seesCost(), wait = awaitingDelivery(S.invoices, S.deliveries)[id] || 0;
   const markup = m.markup === undefined ? DEFAULT_MARKUP : m.markup, suggest = s.avg ? suggestPrice(s.avg, markup) : 0;
   const what = mv => mv.kind === 'in' ? 'Received' : mv.kind === 'sale' ? `Sold${(invOf(mv.ref) || {}).no ? ' · ' + invOf(mv.ref).no : ''}` : (OUT_KIND[mv.kind] || [mv.kind])[0];
-  openSheet(`${head(m.name, 'stock', [m.code, m.cat].filter(Boolean).join(' · '))}
+  const pic = latestFile(id, 'photo');
+  openSheet(`${head(m.name, 'stock', [m.code, catOfItem(m)].filter(Boolean).join(' · '))}
+    ${pic ? `<div class="wh-hero-pic" data-photo="${esc(pic.id)}"></div>` : ''}
     <div class="dbig${s.short ? ' out' : ''}">${plain(s.qty)} <small style="font-size:.45em">${esc(m.unit)}</small></div>
     <p class="note">Sells for <b>${priceText(m)}</b> each.${admin && s.avg ? `<br>Landed cost <b>${usd4(s.avg)}</b> each (average) · with ${plain(markup)} % on top, rounded up: <b>${money(suggest, 'USD')}</b>.<br>In stock worth ${money(s.value / 100, 'USD')} at cost.` : ''}</p>
     ${admin && suggest && suggest > (m.price || 0) + 0.004 ? `<p class="note">⚠️ The price is below the landed cost + ${plain(markup)} %. <button class="link" data-act="setPrice" data-id="${esc(id)}" data-price="${suggest}">Sell for ${money(suggest, 'USD')} instead 🔒</button></p>` : ''}
@@ -127,9 +162,12 @@ function itemDetail(id) {
     <h3 class="subh">Every move (${s.moves.length})</h3>
     ${s.moves.length ? `<div class="card list inset">${[...s.moves].reverse().slice(0, 80).map(mv => `<button class="mrow" data-act="openMove" data-kind="${mv.kind}" data-id="${esc(mv.ref)}" style="width:100%;border:0;background:none;text-align:left;cursor:pointer;font:inherit">
       <span>${esc(fmtDate(mv.date))} · ${esc(what(mv))}</span><span class="muted">${admin ? usd4(mv.kind === 'in' ? mv.cost : mv.avg) + ' · ' : ''}left ${plain(mv.bal)}</span><b class="${mv.qty < 0 ? 'out-c' : 'in-c'}">${mv.qty > 0 ? '+' : '−'}${plain(Math.abs(mv.qty))}</b></button>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
-    ${attachButton(id, '📷 Add a photo of it', 'photo', 'image/*')}
+    <div class="two" style="margin-top:12px">${attachButton(id, latestFile(id, 'photo') ? '📷 Another photo' : '📷 Add a photo', 'photo', 'image/*')}
+      <a class="btn ghost" href="https://www.google.com/search?tbm=isch&q=${encodeURIComponent(m.name)}" target="_blank" rel="noopener">🔍 Find a photo online</a></div>
+    <p class="muted center">Online: press on a picture you like and save it, then come back and tap Add a photo.</p>
     ${filesBlock(id)}`);
   comeBack(() => itemDetail(id));
+  loadThumbs();
 }
 function openMove(b) {
   const k = b.dataset.kind, id = b.dataset.id;
@@ -231,7 +269,7 @@ const recvLine = (l = {}) => `<div class="rline">
   <select name="m" aria-label="Item">${itemOptions(l.m, `<option value="__new" ${l.m === '__new' ? 'selected' : ''}>＋ A new item…</option>`)}</select>
   <div class="rnew" ${l.m === '__new' ? '' : 'hidden'}><input name="nname" placeholder="New item — e.g. Rebar 12 mm × 12 m" value="${esc(l.nname || '')}" maxlength="160" autocomplete="off" aria-label="New item's name"><input name="nunit" list="dl-unit" placeholder="Unit" value="${esc(l.nunit || 'pcs')}" maxlength="20" autocomplete="off" aria-label="Unit"></div>
   <div class="rnums"><label><span>How many</span><input name="qty" inputmode="decimal" value="${esc(l.qty ?? '')}" autocomplete="off"></label>
-    <label><span>Line total</span><input name="amt" inputmode="decimal" value="${esc(l.amt ?? '')}" autocomplete="off"></label>
+    <label><span>Amount on their invoice</span><input name="amt" inputmode="decimal" value="${esc(l.amt ?? '')}" autocomplete="off"></label>
     <label><span>Weight</span><input name="kg" inputmode="decimal" value="${esc(l.w ?? '')}" autocomplete="off"></label>
     <button type="button" class="x" data-act="delRecvLine" aria-label="Remove this line">×</button></div>
   <small class="muted rhint"></small></div>`;
@@ -271,7 +309,7 @@ async function receiveForm(id) {
       <h3 class="subh">What came in <small class="muted">— each line as on their invoice; the weight only if costs are spread by weight</small></h3>
       <div class="rlines">${lines.map(recvLine).join('')}</div>
       <button type="button" class="btn small ghost" data-act="addRecvLine">＋ Another line</button>
-      <h3 class="subh">Every other cost <small class="muted">— freight, duty, clearing… each in the money it was paid in, at that day's rate</small></h3>
+      <h3 class="subh">Every other cost <small class="muted">— freight, duty, clearing… each in the money it was paid in, at that day's rate. Already in Accounts? Leave "Not in Accounts" and link it afterwards from the goods received page (it searches every payment)</small></h3>
       <div class="clines">${d.costs.map(costLine).join('')}</div>
       <button type="button" class="btn small ghost" data-act="addCostLine">＋ Another cost</button>
       <div class="lc-out card pad" style="margin-top:16px"></div>
@@ -331,7 +369,7 @@ async function saveReceive(f) {
   if (r.err) return formErr(f, null, `To spread the costs, type ${r.err}.`);
   const by = myName() || S.lastBy || '';
   // new items first (each line points at its item), then the import, then the payments it made in Accounts
-  rows.forEach(row => { if (row.m === '__new') { const same = live(S.stock).find(m => m.name.toLowerCase() === row.nname.toLowerCase()); row.m = same ? same.id : newItem({ name: row.nname, unit: row.nunit, markup: DEFAULT_MARKUP }, by); } });
+  rows.forEach(row => { if (row.m === '__new') { const same = live(S.stock).find(m => m.name.toLowerCase() === row.nname.toLowerCase()); row.m = same ? same.id : newItem({ name: row.nname, unit: row.nunit, cat: guessCat(row.nname), markup: DEFAULT_MARKUP }, by); } });
   const sup = live(S.suppliers).find(u => u.name.toLowerCase() === clean(v.from).toLowerCase());
   let id = old && old.id;
   if (!old) { const [[nid], seq] = nextIds('Y', 1, S.seq); update({ seq }); id = nid; }
@@ -367,15 +405,84 @@ function receiptDetail(id) {
     <h3 class="subh">What came in</h3>
     <div class="card list inset">${y.lines.map((l, i) => { const m = itemOf(l.m) || { name: 'An item no longer in the list', unit: '' }; return `<button class="mrow" data-act="openItem" data-id="${esc(l.m)}" style="width:100%;border:0;background:none;text-align:left;cursor:pointer;font:inherit">
       <span>${esc(m.name)}</span><span class="muted">${admin ? `${r && !r.err ? `${money(r.lines[i].total / 100, 'USD')} landed · ` : ''}${usd4(y.lc[i])} each` : esc(m.unit)}</span><b>${plain(l.qty)}</b></button>`; }).join('')}</div>
-    ${admin ? `<h3 class="subh">Costs (${y.costs.length})</h3>${y.costs.length ? `<div class="card list inset">${y.costs.map(c => { const usd = toUsd(c.amt, c.cur, c.rate), e = c.pay && S.expenses.find(x => x.id === c.pay && !x.deleted);
-      return `<div class="mrow"><span>${esc(COST_NAME[c.t] || c.t)}${c.what ? ` — ${esc(c.what)}` : ''}<br><small class="muted">${esc(SPLIT_NAME[c.split])}${e ? ` · in Accounts: ${esc(fmtDate(e.at.slice(0, 10)))} ${esc(money(e.amount, e.cur))}` : ' · not in Accounts'}</small></span>
-        <span class="muted">${c.cur === 'USD' ? '' : `${esc(cost(c.amt, c.cur))} at ${plain(c.rate)}`}</span><b>${money(Math.round(usd * 100) / 100, 'USD')}</b></div>`; }).join('')}</div>` : '<p class="muted">None.</p>'}
+    ${admin ? `<h3 class="subh">Paid for the goods</h3>${goodsPays(y)}
+      <h3 class="subh">Costs (${y.costs.length})</h3>${y.costs.length ? `<div class="card list inset">${y.costs.map((c, i) => { const usd = toUsd(c.amt, c.cur, c.rate), e = c.pay && S.expenses.find(x => x.id === c.pay && !x.deleted);
+      return `<div class="cost-row"><div class="mrow"><span>${esc(COST_NAME[c.t] || c.t)}${c.what ? ` — ${esc(c.what)}` : ''}<br><small class="muted">${esc(SPLIT_NAME[c.split])}${c.cur === 'USD' ? '' : ` · ${esc(cost(c.amt, c.cur))} at ${plain(c.rate)}`}</small></span><span></span><b>${money(Math.round(usd * 100) / 100, 'USD')}</b></div>
+        <div class="pay-link">${e ? `<button type="button" class="link" data-act="open" data-kind="E" data-id="${esc(e.id)}">💵 ${esc(fmtDate(e.at.slice(0, 10)))} · ${esc(money(e.amount, e.cur))} · ${esc(e.paidTo)}</button><button type="button" class="link" data-act="linkPay" data-id="${esc(id)}" data-w="${i}">Change</button><button type="button" class="link" data-act="unlinkPay" data-id="${esc(id)}" data-w="${i}" data-e="${esc(e.id)}">Unlink</button>`
+          : `<span class="muted">Not linked to Accounts</span><button type="button" class="link" data-act="linkPay" data-id="${esc(id)}" data-w="${i}">🔗 Link to a payment in Accounts</button>`}</div></div>`; }).join('')}</div>` : '<p class="muted">None.</p>'}
       ${r && !r.err ? `<p class="note">Goods ${money(r.goods / 100, 'USD')} + costs ${money(r.extra / 100, 'USD')} = <b>${money(r.total / 100, 'USD')}</b> landed${r.kg ? ` · ${usd4(Math.round(r.total / r.kg * 1e4) / 1e6)} a kg` : ''}.</p>` : ''}
       <div class="two"><button class="btn ghost" data-act="landedPdf" data-id="${esc(id)}">📄 Landed cost sheet (PDF)</button><button class="btn ghost" data-act="receiveForm" data-id="${esc(id)}">✏️ Change 🔒</button></div>
       ${attachButton(id, '📎 Add their invoice, packing list, customs papers…')}
       ${filesBlock(id)}
       <button class="btn danger" data-act="deleteReceipt" data-id="${esc(id)}" style="margin-top:16px">🗑 Delete 🔒</button>` : ''}`);
   comeBack(() => receiptDetail(id));
+}
+/* ---------- an import's payments in Accounts: linked (or changed) any time, from every payment, searched (owner, 3 Nov 2026) ---------- */
+// The payments were usually entered in Accounts when they were made: they are linked here, never entered twice. A cost has one
+// payment; the goods may have several (a deposit, then the rest). A linked payment says on its own page what it was for (imp).
+const linkedTo = () => { const m = new Map(); live(S.receipts).forEach(r => { (r.costs || []).forEach(k => k.pay && m.set(k.pay, r)); (r.gpay || []).forEach(e => m.set(e, r)); }); return m; };
+const payLine = e => `${fmtDate(e.at.slice(0, 10))} · ${money(e.amount, e.cur)} · ${e.paidTo}`;
+function goodsPays(y) {
+  const pays = (y.gpay || []).map(id => S.expenses.find(e => e.id === id && !e.deleted)).filter(Boolean), r = landedCost(y);
+  const paid = pays.reduce((t, e) => t + Math.round((toUsd(e.amount, e.cur, e.rate) || 0) * 100), 0);
+  return `${pays.length ? `<div class="card list inset">${pays.map(e => `<div class="mrow"><button type="button" class="link" data-act="open" data-kind="E" data-id="${esc(e.id)}" style="text-align:left">💵 ${esc(payLine(e))}</button><span></span>
+      <button type="button" class="link" data-act="unlinkPay" data-id="${esc(y.id)}" data-w="g" data-e="${esc(e.id)}">Unlink</button></div>`).join('')}</div>
+    <p class="muted">Paid ${money(paid / 100, 'USD')} of ${money(r.err ? 0 : r.goods / 100, 'USD')} invoiced.</p>` : '<p class="muted">No payment linked yet.</p>'}
+    <button type="button" class="btn small ghost" data-act="linkPay" data-id="${esc(y.id)}" data-w="g">🔗 Link a payment for the goods</button>`;
+}
+function payPicker(id, which) {
+  const y = receiptOf(id);
+  if (!y || !seesCost()) return;
+  const c = which === 'g' ? null : y.costs[+which];
+  openSheet(`${head('Link a payment', 'stock', c ? `${COST_NAME[c.t] || c.t} · ${cost(c.amt, c.cur)}` : `Goods · ${y.ref || fmtDate(y.date)}`)}
+    <p class="hint">Every payment in Accounts. The likely ones come first: ${c ? 'the same amount, ' : ''}near ${esc(fmtDate(y.date))}. Search by amount, who was paid, the reason or the date.</p>
+    <form data-form="payFind" data-id="${esc(id)}" data-w="${esc(which)}"><input name="q" class="shop-q" placeholder="🔍 e.g. 2458, clearing, Juma, 28 Oct" autocomplete="off" aria-label="Search the payments"></form>
+    <div id="payList">${payRows(id, which, '')}</div>`);
+  comeBack(() => receiptDetail(id));
+}
+function payRows(id, which, q) {
+  const y = receiptOf(id), c = which === 'g' ? null : y.costs[+which], links = linkedTo(), words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const days = e => Math.abs(Date.parse(e.at.slice(0, 10)) - Date.parse(y.date)) / 864e5;
+  const same = e => c && e.cur === c.cur && Math.abs(e.amount - c.amt) < 0.005, close = e => c && e.cur === c.cur && Math.abs(e.amount - c.amt) <= c.amt * 0.02;
+  const score = e => (same(e) ? 0 : close(e) ? 1 : 2) * 1000 + Math.min(days(e), 999);
+  const hay = e => [e.paidTo, e.reason, e.location, e.note, String(e.amount), plain(e.amount), e.cur, e.at.slice(0, 10), fmtDate(e.at.slice(0, 10)), accountOf(e.mode), e.by].join(' ').toLowerCase();
+  const list = live(S.expenses).filter(e => !e.worker && words.every(w => hay(e).includes(w))).sort((a, b) => (words.length ? byAt(b, a) : score(a) - score(b))).slice(0, 80);
+  if (!list.length) return '<p class="muted">No payment matches. Try fewer words, or only the amount.</p>';
+  return `<div class="card list inset">${list.map(e => { const other = links.get(e.id);
+    return `<button class="row out" data-act="pickPay" data-id="${esc(id)}" data-w="${esc(which)}" data-e="${esc(e.id)}"><span class="dot">💵</span>
+      <span class="main"><span class="t"><span class="tt">${esc(e.paidTo)}</span>${same(e) ? '<i class="tag">Same amount</i>' : ''}${other ? `<i class="tag warn">${other.id === id ? 'Linked here' : `Linked to ${esc(other.ref || other.date)}`}</i>` : ''}</span>
+      <span class="s">${esc([e.reason, fmtDate(e.at.slice(0, 10)), accountOf(e.mode), e.by && 'by ' + e.by].filter(Boolean).join(' · '))}</span></span><span class="amt">${money(e.amount, e.cur)}</span></button>`; }).join('')}</div>`;
+}
+function pickPay(id, which, eid) {
+  const y = receiptOf(id), e = S.expenses.find(x => x.id === eid && !x.deleted);
+  if (!y || !e || !seesCost()) return;
+  const other = linkedTo().get(eid);
+  if (other && other.id !== id && !confirm(`This payment is linked to ${other.ref || other.date} already. Link it here instead?`)) return;
+  const by = myName() || S.lastBy || '', was = which === 'g' ? null : y.costs[+which].pay;
+  const holds = (r, pid) => (r.costs || []).some(k => k.pay === pid) || (r.gpay || []).includes(pid); // only the import that held it changes
+  const strip = (rs, pid) => rs.map(r => (r.id === id || !holds(r, pid) ? r : { ...r, costs: r.costs.map(k => (k.pay === pid ? (({ pay, ...rest }) => rest)(k) : k)), gpay: (r.gpay || []).filter(x => x !== pid), editedAt: stampSec(), editedBy: by }));
+  let receipts = other && other.id !== id ? strip(S.receipts, eid) : S.receipts;
+  receipts = receipts.map(r => (r.id !== id ? r : which === 'g' ? { ...r, gpay: [...new Set([...(r.gpay || []), eid])], editedAt: stampSec(), editedBy: by }
+    : { ...r, costs: r.costs.map((k, j) => (j === +which ? { ...k, pay: eid } : k)), editedAt: stampSec(), editedBy: by }));
+  const freed = was && was !== eid ? was : '';
+  update({ receipts, expenses: S.expenses.map(x => (x.id === eid ? { ...x, imp: id } : x.id === freed ? (({ imp, ...rest }) => rest)(x) : x)),
+    log: logWith([['Linked', id, `${which === 'g' ? 'Goods' : COST_NAME[y.costs[+which].t]} of ${y.ref || y.date} ↔ payment ${payLine(e)}`]], by) });
+  toast('Linked ✓'); receiptDetail(id);
+}
+function unlinkPay(id, which, eid) {
+  const y = receiptOf(id);
+  if (!y || !seesCost()) return;
+  const by = myName() || S.lastBy || '';
+  update({ receipts: S.receipts.map(r => (r.id !== id ? r : which === 'g' ? { ...r, gpay: (r.gpay || []).filter(x => x !== eid), editedAt: stampSec(), editedBy: by }
+    : { ...r, costs: r.costs.map((k, j) => (j === +which ? (({ pay, ...rest }) => rest)(k) : k)), editedAt: stampSec(), editedBy: by })),
+    expenses: S.expenses.map(x => (x.id === eid ? (({ imp, ...rest }) => rest)(x) : x)), log: logWith([['Unlinked', id, `Payment ${eid} from ${y.ref || y.date}`]], by) });
+  toast('Unlinked'); receiptDetail(id);
+}
+// on a payment's own page: what it paid for in the warehouse (admins)
+function stockLinks(r) {
+  if (!seesCost()) return '';
+  const y = r.imp && receiptOf(r.imp), d = r.dn && deliveryOf(r.dn);
+  return `${y ? `<button class="btn ghost" data-act="openReceipt" data-id="${esc(y.id)}" style="margin-bottom:10px">🚢 Paid for goods received ${esc(y.ref || fmtDate(y.date))}</button>` : ''}${d ? `<button class="btn ghost" data-act="openDelivery" data-id="${esc(d.id)}" style="margin-bottom:10px">🚚 Delivery note ${esc(d.no)}</button>` : ''}`;
 }
 async function deleteReceipt(id) {
   const y = receiptOf(id);
@@ -387,14 +494,12 @@ async function deleteReceipt(id) {
 
   toast('Deleted ✓'); closeAll(); stockSheet();
 }
-function receivedList() {
+const receivedList = () => goStock('in');
+function receivedBody() {
   const ys = live(S.receipts).sort((a, b) => b.date.localeCompare(a.date)), admin = seesCost();
-  openSheet(`${head('Goods received', 'stock')}${stockNav('stockIn')}
-    ${admin ? '<button class="btn primary" data-act="receiveForm">🚢 Goods received</button>' : ''}
-    ${ys.length ? `<div class="card list inset" style="margin-top:14px">${ys.map(y => { const r = admin && !y.stub ? landedCost(y) : null; return `<button class="row in" data-act="openReceipt" data-id="${esc(y.id)}"><span class="dot">🚢</span>
+  return ys.length ? `<div class="card list">${ys.map(y => { const r = admin && !y.stub ? landedCost(y) : null; return `<button class="row in" data-act="openReceipt" data-id="${esc(y.id)}"><span class="dot">🚢</span>
       <span class="main"><span class="t"><span class="tt">${esc(y.ref || 'Goods received')}</span></span><span class="s">${esc([fmtDate(y.date), (y.sup && (live(S.suppliers).find(u => u.id === y.sup) || {}).name) || y.from, `${y.lines.length} line${y.lines.length === 1 ? '' : 's'}`].filter(Boolean).join(' · '))}</span></span>
-      ${r && !r.err ? `<span class="amt">${money(r.total / 100, 'USD')}<small>landed</small></span>` : ''}</button>`; }).join('')}</div>` : `<div style="height:12px"></div>${empty('Nothing received yet', 'Each import or delivery from a supplier is entered here, with all its costs.')}`}`);
-  comeBack(receivedList);
+      ${r && !r.err ? `<span class="amt">${money(r.total / 100, 'USD')}<small>landed</small></span>` : ''}</button>`; }).join('')}</div>` : empty('Nothing received yet', 'Each import or delivery from a supplier is entered with <b>Goods received</b>, with all its costs.');
 }
 
 /* ---------- goods out: used, damaged, returned ---------- */
@@ -460,20 +565,18 @@ async function deleteOut(id) {
   update({ stockOut: S.stockOut.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Goods out (${OUT_KIND[o.kind][0]}) ${o.date}`]], by) });
   toast('Deleted ✓'); closeAll(); stockSheet();
 }
-function outList() {
+const outList = () => goStock('out');
+function outBody() {
   const outs = live(S.stockOut).sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 60);
   const dns = live(S.deliveries).sort((a, b) => b.date.localeCompare(a.date)), onWay = dns.filter(d => d.status === 'out');
   const toGo = live(S.invoices).filter(x => !x.stub && sells(x) && toSend(x, S.deliveries).length);
-  openSheet(`${head('Goods out', 'stock')}${stockNav('stockOutList')}
-    <div class="two"><button class="btn ghost" data-act="outForm">➖ Goods out</button><button class="btn in" data-act="sellStock">🧾 Sell from stock</button></div>
-    ${toGo.length ? `<h3 class="subh">Sold, waiting for a delivery note (${toGo.length})</h3><div class="card list inset">${toGo.map(x => `<button class="row" data-act="deliveryForm" data-inv="${esc(x.id)}"><span class="dot">📦</span>
+  return `${toGo.length ? `<h3 class="subh">Sold, waiting for a delivery note (${toGo.length})</h3><div class="card list inset">${toGo.map(x => `<button class="row" data-act="deliveryForm" data-inv="${esc(x.id)}"><span class="dot">📦</span>
       <span class="main"><span class="t"><span class="tt">${esc(x.no)}</span><i class="tag warn">To send</i></span><span class="s">${esc([(clientOf(x.client) || {}).name, fmtDate(x.date), toSend(x, S.deliveries).map(l => `${plain(l.qty)} ${(itemOf(l.m) || {}).name || ''}`).join(', ')].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : ''}
     ${onWay.length ? `<h3 class="subh">On the way — not yet confirmed (${onWay.length})</h3><div class="card list inset">${onWay.map(deliveryRow).join('')}</div>` : ''}
     <h3 class="subh">Delivery notes (${dns.length})</h3>${dns.length ? `<div class="card list inset">${dns.slice(0, 40).map(deliveryRow).join('')}</div>` : '<p class="muted">None yet.</p>'}
     <h3 class="subh">Used, damaged, returned, counted</h3>
     ${outs.length ? `<div class="card list inset">${outs.map(o => `<button class="row out" data-act="openOut" data-id="${esc(o.id)}"><span class="dot">${o.kind === 'count' ? '📋' : '−'}</span>
-      <span class="main"><span class="t"><span class="tt">${esc(OUT_KIND[o.kind][0])}</span></span><span class="s">${esc([fmtDate(o.date), o.project && projName(o.project), o.to, o.lines.map(l => `${plain(Math.abs(l.qty))} ${(itemOf(l.m) || {}).name || ''}`).join(', '), o.by && 'by ' + o.by].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}`);
-  comeBack(outList);
+      <span class="main"><span class="t"><span class="tt">${esc(OUT_KIND[o.kind][0])}</span></span><span class="s">${esc([fmtDate(o.date), o.project && projName(o.project), o.to, o.lines.map(l => `${plain(Math.abs(l.qty))} ${(itemOf(l.m) || {}).name || ''}`).join(', '), o.by && 'by ' + o.by].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}`;
 }
 
 /* ---------- the stock count: what should be on the shelves, what is ---------- */
@@ -519,9 +622,9 @@ function saveCount(f) {
 }
 
 /* ---------- the report (admins): what was sold and earned, used on projects, lost; what the stock is worth ---------- */
-function stockReport(month = today().slice(0, 7)) {
-  if (!seesCost()) return;
-  const b = book(), list = items(), inMonth = mv => !month || mv.date.slice(0, 7) === month;
+function stockReport(month) { if (month !== undefined) stockMonth = month; goStock('report'); }
+function reportBody() {
+  const month = stockMonth, b = book(), list = items(), inMonth = mv => !month || mv.date.slice(0, 7) === month;
   const per = list.map(m => {
     const mv = (b[m.id] ? b[m.id].moves : []).filter(inMonth), sum = (k, f) => mv.filter(x => x.kind === k).reduce((t, x) => t + f(x), 0);
     const sold = -sum('sale', x => x.qty), cogs = -sum('sale', x => x.val), rev = sum('sale', x => x.usd || 0), used = -sum('use', x => x.qty), usedV = -sum('use', x => x.val);
@@ -531,8 +634,7 @@ function stockReport(month = today().slice(0, 7)) {
   const tot = k => per.reduce((t, p) => t + p[k], 0), months = [...new Set(Object.values(b).flatMap(s => s.moves.map(x => x.date.slice(0, 7))))].sort().reverse();
   const byProject = {};
   Object.values(b).forEach(s => s.moves.filter(x => x.kind === 'use' && inMonth(x)).forEach(x => { byProject[x.project || ''] = (byProject[x.project || ''] || 0) - x.val; }));
-  openSheet(`${head('Stock report', 'stock', month ? monthName(month) : 'Since the start')}${stockNav('stockReport')}
-    <form data-form="stockMonth"><label class="fld"><span>Period</span><select name="month"><option value="">Since the start</option>${[...new Set([today().slice(0, 7), ...months])].map(x => `<option value="${x}" ${x === month ? 'selected' : ''}>${monthName(x)}</option>`).join('')}</select></label></form>
+  return `<form data-form="stockMonth"><label class="fld"><span>Period</span><select name="month"><option value="">Since the start</option>${[...new Set([today().slice(0, 7), ...months])].map(x => `<option value="${x}" ${x === month ? 'selected' : ''}>${monthName(x)}</option>`).join('')}</select></label></form>
     <div class="stats"><div><small>Sold for</small><span class="in"><b>${money(tot('rev') / 100, 'USD')}</b></span></div><div><small>They cost</small><span><b>${money(tot('cogs') / 100, 'USD')}</b></span></div><div><small>Profit</small><span class="${tot('rev') >= tot('cogs') ? 'in' : 'out'}"><b>${money((tot('rev') - tot('cogs')) / 100, 'USD')}</b></span></div></div>
     <h3 class="subh">Sold</h3>
     ${per.some(p => p.sold) ? `<div class="card list inset">${per.filter(p => p.sold).map(p => `<button class="mrow" data-act="openItem" data-id="${esc(p.m.id)}" style="width:100%;border:0;background:none;text-align:left;cursor:pointer;font:inherit"><span>${esc(p.m.name)}<br><small class="muted">${plain(p.sold)} ${esc(p.m.unit)} · cost ${money(p.cogs / 100, 'USD')}</small></span><span class="muted">${p.rev ? `${plain(Math.round((p.rev - p.cogs) / p.rev * 1000) / 10)} % margin` : ''}</span><b>${money(p.rev / 100, 'USD')}</b></button>`).join('')}</div>` : '<p class="muted">Nothing sold.</p>'}
@@ -540,8 +642,7 @@ function stockReport(month = today().slice(0, 7)) {
     ${Object.keys(byProject).length ? `<div class="card list inset">${Object.entries(byProject).map(([p, v]) => `<div class="mrow"><span>${esc(projName(p))}</span><span></span><b>${money(v / 100, 'USD')}</b></div>`).join('')}</div>` : '<p class="muted">Nothing used.</p>'}
     <h3 class="subh">Damaged, returned, counted short (at cost)</h3>
     ${per.some(p => p.lost) ? `<div class="card list inset">${per.filter(p => p.lost).map(p => `<div class="mrow"><span>${esc(p.m.name)}</span><span></span><b class="${p.lost > 0 ? 'out-c' : 'in-c'}">${p.lost > 0 ? '−' : '+'}${money(Math.abs(p.lost) / 100, 'USD')}</b></div>`).join('')}</div>` : '<p class="muted">Nothing lost. ✓</p>'}
-    <button class="btn ghost" data-act="stockPdf" style="margin-top:14px">📄 Stock list with costs (PDF)</button>`);
-  comeBack(() => stockReport(month));
+    <button class="btn ghost" data-act="stockPdf" style="margin-top:14px">📄 Stock list with costs (PDF)</button>`;
 }
 
 /* ---------- papers: the stock list, a count sheet to print, an import's landed cost ---------- */

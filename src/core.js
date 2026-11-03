@@ -268,20 +268,20 @@ function render() {
   $('#hdr').hidden = $('#tabs').hidden = !ready;
   if (!ready) { main.innerHTML = viewSetup(); $('[autofocus]', main)?.focus(); return; }
   if (mustSignIn()) { $('#hdr').hidden = $('#tabs').hidden = true; main.innerHTML = viewSignIn(); $('[autofocus]', main)?.focus(); return; }
-  if ((tab === 'proj' && !can('projects')) || ((tab === 'staff' || tab === 'menu') && !can('staff'))) tab = 'home'; // one section only: no menu
+  if ((tab === 'proj' && !can('projects')) || ((tab === 'staff' || tab === 'menu' || tab === 'stock') && !can('staff'))) tab = 'home'; // one section only: no menu
   $('#tabs').hidden = !ACC_TABS.includes(tab);
   $('#menuBtn').hidden = tab === 'menu' || !can('staff');
   $('#tabs [data-tab=proj]').hidden = !can('projects');
   $('#whoChip').hidden = !signedIn();
   $('#whoChip').textContent = signedIn() ? `👤 ${session.user.name.split(' ')[0]}` : '';
   // the company's logo where its name would be; inside a section, the section's name
-  $('#coName').innerHTML = tab === 'menu' || !can('staff') ? `<img class="co-logo" src="logo-wide.png" alt="${esc(S.company)}">` : ({ staff: 'Employees', hist: 'History', proj: 'Projects', sheet: 'Google Sheet' })[tab] || 'Accounts';
+  $('#coName').innerHTML = tab === 'menu' || !can('staff') ? `<img class="co-logo" src="logo-wide.png" alt="${esc(S.company)}">` : ({ staff: 'Employees', hist: 'History', proj: 'Projects', sheet: 'Google Sheet', stock: 'Warehouse' })[tab] || 'Accounts';
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
   const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were
-  main.innerHTML = { menu: viewMenu, home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet }[tab]();
+  main.innerHTML = { menu: viewMenu, home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet, stock: viewStock }[tab]();
   if (y) scrollTo(0, y);
-  if (tab === 'staff') loadThumbs();
+  if (tab === 'staff' || tab === 'stock') loadThumbs();
   if (tab === 'sheet') paintBrandThumbs();
   render.tab = tab;
   renderLock(); paintSync();
@@ -621,7 +621,7 @@ function detail(k, id) {
   openSheet(`${head(look[0], look[1], r.id)}
     <div class="dbig ${look[1]}">${look[2]}${money(r.amount, r.cur)}</div>
     ${waitingNote(id)}
-    ${k === 'E' && !r.deleted ? advanceBlock(r) + buyLinks(r) : ''}
+    ${k === 'E' && !r.deleted ? advanceBlock(r) + buyLinks(r) + stockLinks(r) : ''}
     <dl class="facts">${facts.filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
     ${k === 'T' || r.deleted ? '' : `${cancelledNote(id)}<div class="two" style="margin-bottom:10px"><button class="btn ${k === 'E' ? 'out' : 'in'}" data-act="slip" data-kind="${k}" data-id="${esc(id)}">🧾 ${k === 'E' ? (r.pay ? 'Slip' : 'Voucher') : 'Receipt'}</button>${attachButton(id, '📎 Attach')}</div>`}
     <div class="two">${canChange() ? `<button class="btn ghost" data-act="edit" data-kind="${k}" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}${can('delete') ? `<button class="btn danger" data-act="del" data-kind="${k}" data-id="${esc(id)}">🗑 Delete 🔒</button>` : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="${k}" data-id="${esc(id)}">🗑 Ask to delete 🔒</button>` : ''}</div>

@@ -76,10 +76,15 @@ const ACTIONS = {
   openWorker: b => workerDetail(b.dataset.id),
   profilePhoto: b => profileSheet(b.dataset.id),
   // the warehouse (stock.js, delivery.js)
-  stock: () => stockSheet(),
-  stockIn: () => receivedList(),
-  stockOutList: () => outList(),
-  stockReport: () => stockReport(),
+  stock: () => { stockQ = ''; goStock('stock', ''); }, // from the menu: the categories, fresh
+  stockIn: () => goStock('in'),
+  stockOutList: () => goStock('out'),
+  stockReport: () => goStock('report'),
+  stockTab: b => goStock(b.dataset.v),
+  stockCat: b => { stockQ = ''; goStock('stock', b.dataset.v); },
+  linkPay: b => payPicker(b.dataset.id, b.dataset.w),
+  pickPay: b => pickPay(b.dataset.id, b.dataset.w, b.dataset.e),
+  unlinkPay: b => unlinkPay(b.dataset.id, b.dataset.w, b.dataset.e),
   receiveForm: b => receiveForm(b.dataset.id),
   openReceipt: b => receiptDetail(b.dataset.id),
   deleteReceipt: b => deleteReceipt(b.dataset.id),
@@ -229,7 +234,7 @@ const ACTIONS = {
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
   signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, repay: saveRepay, item: saveItem, receive: saveReceive, stockOut: saveStockOut, count: saveCount, delivery: saveDelivery, dnReceipt: saveDnReceipt,
-  stockFilter: filterStock, shopFind: f => { shopQ = f.elements.q.value; $('#shopList').innerHTML = shopRows(); }, stockMonth: f => stockReport(f.elements.month.value), left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
+  stockFilter: filterStock, payFind: f => { $('#payList').innerHTML = payRows(f.dataset.id, f.dataset.w, f.elements.q.value); }, shopFind: f => { shopQ = f.elements.q.value; $('#shopList').innerHTML = shopRows(); }, stockMonth: f => stockReport(f.elements.month.value), left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
   idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList, subIdea: saveSubIdea, budgets: saveBudgets, exchange: saveExchange };
 
 function refreshAmount(input) {
@@ -281,6 +286,7 @@ document.addEventListener('input', e => {
   // the warehouse
   if (t.form && t.form.dataset.form === 'receive') refreshReceive(t.form);
   if (t.form && t.form.dataset.form === 'stockFilter') filterStock(t.form);
+  if (t.form && t.form.dataset.form === 'payFind') $('#payList').innerHTML = payRows(t.form.dataset.id, t.form.dataset.w, t.value);
   if (t.form && t.form.dataset.form === 'shopFind') { shopQ = t.value; $('#shopList').innerHTML = shopRows(); }
   if (t.dataset.cart !== undefined) cartSet(t.dataset.cart, parseNum(t.value) || 0);
   if (t.form && t.form.dataset.form === 'count') refreshCount(t.form);
