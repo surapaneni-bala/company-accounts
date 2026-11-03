@@ -8,10 +8,10 @@ const SYNC_TIMEOUT_MS = 45000, SLOWEST_BPS = 4000; // a request gets 45 s plus t
 const APP_URL = 'https://app.b-e-p-l.com/';
 // the order is the order records are sent in: an employee before a change request about them, files last
 // (the sheet only takes a file record whose entry it already has)
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', M: 'stock', Y: 'receipts', O: 'stockOut', I: 'invoices', D: 'deliveries', U: 'suppliers', J: 'trips', N: 'needs', X: 'exchanges', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
+const KIND_KEY = { Q: 'questions', E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', M: 'stock', Y: 'receipts', O: 'stockOut', I: 'invoices', D: 'deliveries', U: 'suppliers', J: 'trips', N: 'needs', X: 'exchanges', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
-const KINDS_SEEN = 8; // 8 = the warehouse: stock items (M), goods received (Y), goods out (O), delivery notes (D) · 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I), 6 = the buying list (N), suppliers (U), trips (J), 7 = dollars changed into SSP (X)
+const KINDS_SEEN = 9; // 9 = questions and their answers (Q) · 8 = the warehouse: stock items (M), goods received (Y), goods out (O), delivery notes (D) · 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I), 6 = the buying list (N), suppliers (U), trips (J), 7 = dollars changed into SSP (X)
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string' && okRate(d),
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && okRate(d),
@@ -34,6 +34,7 @@ const VALID = {
   Y: d => typeof d.id === 'string' && DATE_RE.test(d.date) && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty) && l.qty > 0)
     && (d.stub === true || (Array.isArray(d.costs) && Array.isArray(d.lc) && d.lc.length === d.lines.length && d.lines.every(l => Number.isFinite(l.amt)))),
   O: d => typeof d.id === 'string' && DATE_RE.test(d.date) && ['use', 'damage', 'return', 'count'].includes(d.kind) && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty)),
+  Q: d => typeof d.id === 'string' && typeof d.text === 'string' && d.text.trim().length > 0 && typeof (d.re === undefined ? d.to : d.re) === 'string',
   D: d => typeof d.id === 'string' && typeof d.no === 'string' && DATE_RE.test(d.date) && (SAFE_ID.test(d.inv || '') || SAFE_ID.test(d.out || '')) && ['deliver', 'collect'].includes(d.how)
     && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty)) && ['out', 'done'].includes(d.status) && (d.status === 'out' || (!!d.recv && Array.isArray(d.recv.lines))),
   N: d => typeof d.id === 'string' && typeof d.t === 'string' && BUY_STATES.includes(d.status) && (d.specs === undefined || (Array.isArray(d.specs) && d.specs.every(x => Array.isArray(x) && (x.length === 2 || x.length === 3) && x.every(v => typeof v === 'string'))))
@@ -50,11 +51,11 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 23; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 24; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // What an older script still keeps on the phones: the version that first stores it. From NEEDED_SCRIPT on, everything goes
 // up and a newer script only improves things — said quietly, never as a warning (owner, 23 Oct 2026: the message showed
 // "needed" while everything worked).
-const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry']];
+const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [24, 'questions reach your staff and theirs reach you']];
 const NEEDED_SCRIPT = 23, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines'], [22, 'what you let an office manager see'], [23, 'the warehouse — stock, goods received, goods out and delivery notes']];
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {

@@ -50,6 +50,8 @@ const ACTIONS = {
   account: () => accountSheet(),
   signOut: () => signOut(),
   approvals: () => approvalsSheet(),
+  bell: () => bellSheet(), notifyOn: () => notifyOn(), notifyLater: () => notifyLater(), snooze: b => snooze(b.dataset.key), unsnooze: () => unsnooze(), review: () => reviewSheet(), reviewDone: () => reviewDone(),
+  ask: b => askForm(b.dataset.kind, b.dataset.id), askNew: () => askForm('', ''), thread: b => threadSheet(b.dataset.id), qDone: b => qDone(b.dataset.id), messages: () => messagesSheet(),
   moveApp: () => moveApp(),
   decide: b => decide(b.dataset.id, !!b.dataset.ok),
   askDelete: b => askDelete(b.dataset.kind, b.dataset.id),
@@ -232,7 +234,7 @@ const ACTIONS = {
   notRegular: b => notRegular(b.dataset.key),
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
-const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
+const FORMS = { ask: saveAsk, reply: saveReply, expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
   signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, repay: saveRepay, item: saveItem, receive: saveReceive, stockOut: saveStockOut, count: saveCount, delivery: saveDelivery, dnReceipt: saveDnReceipt,
   stockFilter: filterStock, payFind: f => { $('#payList').innerHTML = payRows(f.dataset.id, f.dataset.w, f.elements.q.value); }, shopFind: f => { shopQ = f.elements.q.value; $('#shopList').innerHTML = shopRows(); }, stockMonth: f => stockReport(f.elements.month.value), left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
   idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList, subIdea: saveSubIdea, budgets: saveBudgets, exchange: saveExchange };

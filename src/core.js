@@ -33,7 +33,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I', needs: 'N', suppliers: 'U', trips: 'J', exchanges: 'X', stock: 'M', receipts: 'Y', stockOut: 'O', deliveries: 'D' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I', needs: 'N', suppliers: 'U', trips: 'J', exchanges: 'X', stock: 'M', receipts: 'Y', stockOut: 'O', deliveries: 'D', questions: 'Q' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // an empty list of every kind of record (a new company, a new phone, a sign-in that starts again)
 const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
@@ -284,7 +284,7 @@ function render() {
   if (tab === 'staff' || tab === 'stock') loadThumbs();
   if (tab === 'sheet') paintBrandThumbs();
   render.tab = tab;
-  renderLock(); paintSync();
+  renderLock(); paintSync(); paintBell();
 }
 
 let setupMode = ''; // '' = decide when drawn: an invite link in the address opens 'join'
@@ -334,7 +334,7 @@ function viewMenu() {
   const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const who = signedIn() ? session.user.name.split(' ')[0] : '';
   const staffWaiting = waiting().filter(c => c.kind === 'W').length;
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${lostBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${notifyBanner()}${lostBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
     <section class="launch">
       <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
       <div class="apps">
@@ -369,7 +369,7 @@ function viewHome() {
   const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${brandBanner()}${lostBanner()}${doubleBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${notifyBanner()}${approvalsBanner()}${brandBanner()}${lostBanner()}${doubleBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? `${signedIn() && session.user.sees ? 'The expenses you entered, and those an admin lets you see.' : 'Your expenses — only the ones you entered.'} The balances are kept by the admins.` : 'Your expenses — only you and the admins see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
@@ -628,6 +628,7 @@ function detail(k, id) {
     ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}
     ${k === 'E' && r.paidTo ? `<button class="btn ghost" data-act="payeeStatement" data-name="${esc(r.paidTo)}" style="margin-top:10px">📄 All payments to ${esc(r.paidTo)}</button>` : ''}
     ${filesBlock(id)}`);
+  askInto(k, r);
   here = () => detail(k, id);
 }
 const rateFact = r => (usdOf(r) === null ? [] : [['SSP for 1 USD', `${plain(r.rate)} · about ${money(usdOf(r), 'USD')}`]]);

@@ -81,6 +81,7 @@ function workerDetail(id) {
     ${filesBlock(id)}
     ${can('delete') ? `<button class="btn danger" data-act="del" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Delete employee 🔒</button>`
       : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Ask to delete employee 🔒</button>` : ''}`);
+  askInto('W', w);
   comeBack(() => workerDetail(id));
   if (photo) { $('#wPhoto').dataset.photo = photo.id; loadThumbs(); }
 }

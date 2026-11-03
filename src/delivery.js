@@ -126,6 +126,7 @@ function deliveryDetail(id) {
     ${filesList(filesFor(id), 'Papers and photos')}
     ${attachButton(id, '📷 Add a photo')}
     ${can('delete') ? `<button class="btn danger" data-act="deleteDelivery" data-id="${esc(id)}" style="margin-top:16px">🗑 Delete 🔒</button>` : ''}`);
+  askInto('D', d);
   comeBack(() => deliveryDetail(id));
 }
 async function remakeDelivery(id) { const d = deliveryOf(id); if (d) await deliveryPdf(d); }

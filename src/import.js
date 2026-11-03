@@ -52,7 +52,7 @@ function importPlan(text) {
   const fresh = rows.filter(r => !have.has(importKey(r)));
   return { fresh, errors, skipped: rows.length - fresh.length };
 }
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`; // many: the plural when it is not word + s (entries)
 
 async function importSheet() {
   if (!await unlock('Enter the password to import old entries (they have old dates).')) return;

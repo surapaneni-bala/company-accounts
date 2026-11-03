@@ -419,6 +419,7 @@ function receiptDetail(id) {
       ${attachButton(id, '📎 Add their invoice, packing list, customs papers…')}
       ${filesBlock(id)}
       <button class="btn danger" data-act="deleteReceipt" data-id="${esc(id)}" style="margin-top:16px">🗑 Delete 🔒</button>` : ''}`);
+  askInto('Y', y);
   comeBack(() => receiptDetail(id));
 }
 /* ---------- an import's payments in Accounts: linked (or changed) any time, from every payment, searched (owner, 3 Nov 2026) ---------- */
@@ -585,6 +586,7 @@ function outDetail(id) {
     ${attachButton(id, '📷 Add a photo')}
     ${filesBlock(id)}
     ${can('delete') ? `<button class="btn danger" data-act="deleteOut" data-id="${esc(id)}" style="margin-top:16px">🗑 Delete 🔒</button>` : ''}`);
+  askInto('O', o);
   comeBack(() => outDetail(id));
 }
 async function deleteOut(id) {

@@ -204,6 +204,7 @@ fieldset[disabled] .fld.check { opacity: .5; }
 .banner .btn { background: var(--warn); color: #fff; flex: none; white-space: nowrap; }
 .banner.new { background: #E8ECF6; color: var(--ink); }
 .banner.new .btn { background: var(--ink); }
+.banner .two-btn { display: flex; flex-direction: column; gap: 6px; flex: none; } .banner.new .btn.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); } /* Turn on · Not now */
 
 /* buttons */
 .btn { border: 0; cursor: pointer; width: 100%; font-weight: 800; font-size: 18px; padding: 16px clamp(8px, 4vw, 20px); border-radius: 16px; transition: transform .15s var(--ease), filter .15s; }
@@ -504,6 +505,15 @@ button.wh-stat { cursor: pointer; } .wh-stat b { font-size: 22px; font-variant-n
 .wh-hero-pic { position: relative; aspect-ratio: 4 / 3; border-radius: var(--r-md); overflow: hidden; margin-bottom: 12px; background: var(--paper); }
 .cost-row { border-top: 1px solid var(--line); } .cost-row:first-child { border-top: 0; } .cost-row .mrow { border-top: 0; }
 .pay-link { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 14px 10px; font-size: 14px; } .pay-link .link { padding: 0; font-size: 14px; text-align: left; }
+/* notifications: the 🔔 with how many need you; one line a thing; questions as a conversation (owner, 3 Nov 2026) */
+.chip.bell { position: relative; padding-inline: 10px; } .chip.bell b { display: inline-block; min-width: 18px; margin-left: 4px; padding: 1px 5px; border-radius: 99px; background: var(--out); color: #fff; font-size: 12px; line-height: 16px; text-align: center; }
+.nlist .nrow { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); } .nlist .nrow:first-child { border-top: 0; }
+.nrow .nmain { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: flex-start; padding: 13px 0 13px 14px; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; overflow-wrap: break-word; }
+.nrow .nic { flex: none; width: 22px; text-align: center; } .nrow.new .nmain { font-weight: 700; } .nrow.info .nmain { color: var(--muted); }
+.nrow .nnot { flex: none; margin-right: 10px; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.nrow .nmain:hover, .nrow .nmain:focus-visible { background: var(--field); } .nrow .nnot:hover, .nrow .nnot:focus-visible { background: var(--line); color: var(--ink); }
+.msgs { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 16px; } .msg { max-width: 86%; padding: 10px 12px; border-radius: 14px 14px 14px 4px; background: var(--paper); }
+.msg.me { align-self: flex-end; border-radius: 14px 14px 4px 14px; background: var(--in-soft); } .msg p { margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; } .msg small { color: var(--muted); font-size: 12px; }
 .amt .conv, .list .row > .amt .conv { display: block; margin-left: 0; font-weight: 600; text-align: inherit; } /* what an SSP payment comes to in dollars: under its amount */
 .pay-one { display: flex; flex-wrap: wrap; gap: 2px 12px; flex-basis: 100%; } .pay-one .link + .link { color: var(--muted); font-weight: 600; } .pay-link .tally { flex-basis: 100%; font-weight: 600; } /* several payments for one cost: one a line, then whether they tally */
 @media (max-width: 340px) { .rnums { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rnums .x { grid-column: 2; justify-self: end; width: 44px; } .cnums:nth-child(2) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .stepper-q { grid-template-columns: 36px 48px 36px; } }
@@ -671,7 +681,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 <div class="app">
   <header class="top" id="hdr" hidden>
     <div class="top-l"><button class="backbtn" id="menuBtn" data-act="tab" data-tab="menu" hidden aria-label="Back to the menu" title="Menu">‹</button><div><div class="co" id="coName"></div><div class="today-date" id="todayDate"></div></div></div>
-    <div class="top-r"><button class="chip who" id="whoChip" data-act="account" hidden></button><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
+    <div class="top-r"><button class="chip who" id="whoChip" data-act="account" hidden></button><button class="chip bell" id="bellChip" data-act="bell" hidden aria-label="Notifications">🔔</button><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
   </header>
   <div id="installSlot"></div>
   <main id="main"></main>

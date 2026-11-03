@@ -26,7 +26,7 @@ const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves',
 // reGular payment (rent, internet, licence fees: due every 1, 3, 6 or 12 months), Bank account (the company's, to be paid into),
 // Vault document (a licence, a vehicle's papers, a passport…: its file is an F record of type 'document'),
 // Klient (who invoices and quotations go to) and Invoice (an invoice or a quotation: its PDF is an F record) — admins only
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 'K', 'I', 'N', 'U', 'J', 'X', 'M', 'Y', 'O', 'D'];
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 'K', 'I', 'N', 'U', 'J', 'X', 'M', 'Y', 'O', 'D', 'Q'];
 // the warehouse (owner, 2 Nov 2026): stock items (M), goods received — an import with every cost (Y), goods out (O), and the
 // delivery note (D) every load leaves with: who takes it, the vehicle, and once there who received what, signed, with a photo
 const STOCK_KINDS = ['M', 'Y', 'O', 'D'];
@@ -130,6 +130,13 @@ const SHAPES = {
       && (d.recv.geo === undefined || (isObj_(d.recv.geo) && num_(d.recv.geo.lat) && num_(d.recv.geo.lng) && num_(d.recv.geo.acc)))),
   J: d => str_(d.to) && d.to.length > 0 && DATE_RE.test(d.out) && (!d.back || DATE_RE.test(d.back)) && Array.isArray(d.who) && d.who.length <= 20 && d.who.every(str_) && strs_(d, ['country', 'purpose', 'note'])
     && (d.budget === undefined || (num_(d.budget) && d.budget >= 0)),
+  // a question or an alert (owner, 3 Nov 2026): to whom (a login's id, or 'admins') and what about (an entry: its kind, id and a
+  // line saying what it is, as the one asked may not see that entry) — or re = the question a reply answers. state: done = sorted,
+  // open = opened again; the newest message that says decides
+  Q: d => str_(d.text) && d.text.trim().length > 0 && d.text.length <= 2000 && (d.state === undefined || d.state === 'open' || d.state === 'done')
+    && (d.re === undefined ? (d.to === 'admins' || SAFE_ID.test(String(d.to))) && (d.about === undefined || (isObj_(d.about) && KINDS.indexOf(d.about.k) >= 0
+      && SAFE_ID.test(String(d.about.id)) && strs_(d.about, ['what']) && String(d.about.what || '').length <= 200))
+      : SAFE_ID.test(String(d.re)) && d.to === undefined && d.about === undefined),
 };
 const strs_ = (d, ks) => ks.every(k => d[k] === undefined || str_(d[k]));
 const EVERY_MONTHS = [1, 3, 6, 12];
@@ -154,7 +161,7 @@ const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const MAX_BIG_RECORD = 40000; // a stock count, an invoice or a delivery note may list many items (review, 2 Nov 2026)
 const LOCK_WAIT_MS = 25000;
-const VERSION = 23; // shown when the web app link is opened in a browser
+const VERSION = 24; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -257,7 +264,8 @@ function sync_(req) {
     else organize_(result.rows, result.touched, result.trash);
   } catch (err) { console.error('Filing in Drive: ' + err.message); }
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
-  const pull = result.pull.map(r => view_(viewer, r, hidden)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V')));
+  const threads = threadsFor_(result.rows, viewer);
+  const pull = result.pull.map(r => view_(viewer, r, hidden, threads)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V')));
   // an entry an office manager had that changed and is no longer hers to see (moved to another project or place, no longer an
   // employee's pay): only its id, so her phone forgets its old copy
   const forget = viewer && viewer.role === 'manager' && Number(req.since) > 0 ? result.pull.filter(r => r.k === 'E' && !view_(viewer, r, hidden)).map(r => r.id) : [];
@@ -284,14 +292,27 @@ function who_(req) {
 // What each login receives. Store keepers get only their own entries; only admins get the company password.
 // hidden = what the office manager may not have (hiddenFor_): personal documents, other people's expenses, and their files
 // and change requests
-function view_(user, rec, hidden) {
+function view_(user, rec, hidden, threads) {
   if (!user || user.role === 'admin') return rec;
+  if (rec.k === 'Q') return threads && threads[rec.d.re || rec.id] ? rec : null; // a question and its replies: to who asked and who was asked
   if (rec.k === 'S') return { id: rec.id, k: rec.k, u: rec.u, d: { company: rec.d.company } };
   if (rec.k === 'B') return rec; // the company's bank details are for everyone to give to clients (no balances)
   if (user.role === 'manager' && rec.k === 'I' && hidden && hidden[rec.id]) return saleStub_(rec); // someone else's: only what left the stock
   if (user.role === 'manager') return (rec.k === 'V' && rec.d.kind === 'personal') || (hidden && hidden[rec.k === 'F' ? rec.d.for : rec.k === 'C' ? rec.d.target : rec.id]) ? null : managerView_(user, rec);
   if (rec.k === 'F' && BRAND_FILES.indexOf(rec.d.type) >= 0) return rec; // everyone's vouchers carry the letterhead and stamp
   return (rec.k === 'E' || rec.k === 'L' || rec.k === 'F') && rec.d.uid === user.id ? rec : null;
+}
+// the questions a login was asked, or asked (admins get every one): their ids map to true
+function threadsFor_(rows, user) {
+  const out = Object.create(null);
+  if (!user || user.role === 'admin') return out;
+  rows.forEach(r => {
+    if (r[1] !== 'Q') return;
+    let d = null;
+    try { d = JSON.parse(r[4]); } catch (err) { return; }
+    if (d.re === undefined && (d.to === user.id || d.uid === user.id)) out[r[0]] = true;
+  });
+  return out;
 }
 // The office manager runs staff and salaries but never sees the company's money (owner, 10 Oct 2026): no money received,
 // no cash ↔ bank moves, no project values, no files or change requests about those, and only her own Change Log lines
@@ -364,11 +385,21 @@ function allowed_(user, p, before) {
   // arrives received at once — deliveryOk_ checks that receipt the same way
   if (p.k === 'F' && /^I-/.test(String(p.d.for)) && user.role !== 'manager') return false; // an office manager's own invoices' PDFs
   if (p.k === 'I' && (p.d.ok === 'approved' && !p.d.from || p.d.ok === 'rejected')) return false; // only an admin approves a price (or it came from an approved quotation)
-  if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A', 'V', 'K', 'I', 'O', 'D'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0)) && (p.k !== 'V' || p.d.kind !== 'personal');
-  return p.k === 'E' || p.k === 'L' || p.k === 'F'; // store keeper: own expenses, notes and their receipts
+  if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A', 'V', 'K', 'I', 'O', 'D', 'Q'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0)) && (p.k !== 'V' || p.d.kind !== 'personal');
+  return p.k === 'E' || p.k === 'L' || p.k === 'F' || p.k === 'Q'; // store keeper: own expenses, notes and their receipts; questions
 }
 
 // the delivery note as it was made, now with who received what: status out → done and recv added, every other field the same
+// A question (owner, 3 Nov 2026): an admin asks anyone with a login; anyone else asks the admins. A reply answers a question
+// (never another reply) that its sender asked or was asked. Nobody changes a message once sent (merge_: only admins edit).
+function threadOk_(d, out, index, user, roles) {
+  const limited = !!user && user.role !== 'admin';
+  if (d.re === undefined) return d.to === 'admins' || (!limited && !!(roles || {})[d.to]);
+  const i = index[d.re];
+  if (i === undefined || out[i][1] !== 'Q') return false;
+  const root = JSON.parse(out[i][4]);
+  return root.re === undefined && (!limited || root.to === user.id || root.uid === user.id);
+}
 function receiptOnly_(was, now, user, at) {
   if (was.uid !== user.id || was.status !== 'out' || now.status !== 'done' || !now.recv || !recvOk_(now, at)) return false;
   const rest = x => JSON.stringify(Object.keys(x).filter(k => ['status', 'recv', 'by', 'u'].indexOf(k) < 0).sort().map(k => [k, x[k]])); // u: the phone's own stamp, sent inside the record
@@ -518,7 +549,8 @@ function merge_(rows, push, since, user, uploads, codeOnly, roles) {
     if (p.k === 'I' && (limited || (ownerRole && ownerRole !== 'admin')) && !adminDecides && !sameLines && !pricesOk_(d, out, index, p.id, owner ? owner.off : 0, now, roles)) { refused.push(p.id); return; }
     if (p.k === 'I' && d.type === 'invoice' && d.ok !== 'waiting' && dupNumber_(d, out, p.id)) { refused.push(p.id); return; } // one invoice per number
     if (p.k === 'I' && limited && d.type === 'invoice' && d.ok !== 'waiting' && !(before && before.no === d.no) && !issued_(d.no, user.id)) { refused.push(p.id); return; } // a number the sheet gave her
-    if (p.k === 'D' && limited && !before && !deliveryOk_(d, now, out, index, p.id)) { refused.push(p.id); return; } // for a real sale, not more than it sold; a receipt within its bounds
+    if (p.k === 'D' && limited && !before && !deliveryOk_(d, now, out, index, p.id)) { refused.push(p.id); return; }
+    if (p.k === 'Q' && !threadOk_(d, out, index, user, roles)) { refused.push(p.id); return; } // for a real sale, not more than it sold; a receipt within its bounds
     if (p.k === 'I' && limited && d.ok === 'waiting' && /^INV-/.test(d.no)) { refused.push(p.id); return; } // a waiting invoice takes its number when approved
     if (p.k === 'F' && limited) { // a file belongs to a record the sender may see (a store keeper: their own)
       const f = index[p.d.for];
@@ -1507,6 +1539,17 @@ function alertLines_(recs, t) {
   }
   // a buying trip a week, a day and on the day before it leaves: what is still on its list
   const N = live('N');
+  // questions (owner, 3 Nov 2026): what staff asked the admins and nobody answered, and what an admin asked that is a day without answer
+  const Q = live('Q');
+  users_().forEach(u => { names[u.id] = names[u.id] || u.name; });
+  Q.filter(q => q.re === undefined).forEach(q => {
+    const thread = [q].concat(Q.filter(r => r.re === q.id)).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))), last = thread[thread.length - 1];
+    const said = thread.filter(m => m.state).pop();
+    if (said && said.state === 'done') return; // sorted
+    const what = '"' + String(q.text).slice(0, 80) + (q.text.length > 80 ? '…' : '') + '"' + (q.about && q.about.what ? ' (about ' + q.about.what + ')' : '');
+    if (q.to === 'admins' && last.uid === q.uid) lines.push('QUESTION from ' + (q.by || names[q.uid] || '?') + ', ' + String(q.createdAt).slice(0, 10) + ': ' + what);
+    else if (q.to !== 'admins' && last.uid !== q.to && daysBetween_(String(last.createdAt).slice(0, 10), t) >= 1) lines.push('NO ANSWER YET from ' + (names[q.to] || 'them') + ', asked ' + String(q.createdAt).slice(0, 10) + ': ' + what);
+  });
   live('J').forEach(j => {
     const left = daysBetween_(t, j.out), open = N.filter(n => n.trip === j.id && ['idea', 'tobuy'].indexOf(n.status) >= 0).length;
     if ([7, 1, 0].indexOf(left) >= 0) lines.push('Trip ' + (left ? 'in ' + left + ' day' + (left === 1 ? '' : 's') : 'TODAY') + ': ' + j.to + (j.who.length ? ' (' + j.who.join(', ') + ')' : '') + ' — ' + open + ' item' + (open === 1 ? '' : 's') + ' on its buying list');

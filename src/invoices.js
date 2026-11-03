@@ -274,7 +274,7 @@ async function approvePrice(id) {
     try { no = (await callServer(S.link, { op: 'number' })).no; }
     catch (e) { return alert(e.offline ? 'Approving an invoice needs the internet: the Google Sheet gives it its number.' : e.message); }
   }
-  const by = myName() || S.lastBy || '', done = { ...x, no, ok: 'approved', okBy: by };
+  const by = myName() || S.lastBy || '', done = { ...x, no, ok: 'approved', okBy: by, okAt: stampSec() };
   update({ invoices: S.invoices.map(y => (y.id === id ? done : y)), log: logWith([['Approved', id, `Price on ${no} for ${(clientOf(x.client) || {}).name || ''} (asked by ${x.by})`]], by) });
   const sig = await mySignature();
   await makeInvoicePdf(done, sig ? { sig, name: myName(), date: fmtDate(today()) } : null);
@@ -285,7 +285,7 @@ async function refusePrice(id) {
   const why = clean(prompt('Why is the price refused? (they see it)', 'Too far below the list price'));
   if (!why) return;
   const by = myName() || S.lastBy || '';
-  update({ invoices: S.invoices.map(y => (y.id === id ? { ...y, ok: 'rejected', okBy: by, why } : y)), log: logWith([['Refused', id, `Price on ${x.no}: ${why}`]], by) });
+  update({ invoices: S.invoices.map(y => (y.id === id ? { ...y, ok: 'rejected', okBy: by, okAt: stampSec(), why } : y)), log: logWith([['Refused', id, `Price on ${x.no}: ${why}`]], by) });
   toast('Refused ✓'); invoiceDetail(id);
 }
 // the price requests an admin decides on (Changes to approve)
@@ -349,6 +349,7 @@ function invoiceDetail(id) {
     ${isQ || !seesPaid() ? '' : `<h3 class="subh">Payments (${pays.length})</h3>${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}`}
     ${k && k.phone ? `<a class="btn ghost" style="margin-top:14px" href="${esc(waChat(k.phone))}" target="_blank" rel="noopener">💬 WhatsApp chat with ${esc(k.name)}</a>` : ''}
     <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="copyInvoice" data-id="${esc(id)}">📋 Copy as new</button>${can('edit') && !inv.cancelled && !pays.length && !dns.length ? `<button class="btn danger" data-act="cancelInvoice" data-id="${esc(id)}">🚫 Cancel 🔒</button>` : ''}</div>`);
+  askInto('I', inv);
   comeBack(() => invoiceDetail(id));
 }
 function payInvoice(id) {

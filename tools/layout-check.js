@@ -83,6 +83,13 @@ const SETUP = () => {
     ['delivery receipt', () => { S = { ...S, deliveries: [...S.deliveries, { ...S.deliveries[0], id: 'D-2', no: 'DN-TST-0002', status: 'out', recv: undefined }] }; receiveDelivery('D-2'); }],
     ['price waiting', () => invoiceDetail('I-3')], ['approvals with price', () => approvalsSheet()], ['invoice from stock', () => invoiceDetail('I-2')],
     ['advance form', () => payForm('W-1', 'advance')], ['salary with plan', () => payForm('W-1', 'salary')], ['repay form', () => repayForm('W-1')],
+    ['notifications', () => { session = { token: 't', user: { id: 'U-0', name: 'Bala', username: 'bala', role: 'admin' } }; usersCache = [{ id: 'U-1', name: 'Agnes Office-Manager-With-A-Long-Name', active: true }];
+      S = { ...S, link: { u: 'https://example.invalid/x', v: 24, since: 1, logins: true }, questions: [
+        { id: 'Q-1', to: 'U-1', text: 'Which site was the cement for? The receipt in the photo does not show the delivery address and the amount differs from the quotation we approved last week.', about: { k: 'E', id: 'E-1', what: 'Payment of $1,250.50 to Sample Hardware Supplies Limited, 20 Oct 2026' }, by: 'Bala', uid: 'U-0', createdAt: '2026-11-02T09:00:00' },
+        { id: 'Q-2', re: 'Q-1', text: 'Gudele block 3 — I will attach the delivery note today.', by: 'Agnes', uid: 'U-1', createdAt: '2026-11-02T10:30:00' },
+        { id: 'Q-3', to: 'admins', text: 'The cement store roof is leaking over the bags', by: 'Store One', uid: 'U-2', createdAt: '2026-11-03T07:10:00' }] }; bellSheet(); }],
+    ['question thread', () => threadSheet('Q-1')], ['ask a question', () => askForm('E', 'E-1')], ['messages', () => messagesSheet()], ['entries to check', () => reviewSheet()], ['entry with questions', () => detail('E', 'E-1')],
+    ['turn on notifications', () => { closeAll(); tab = 'menu'; render(); }],
   ];
   window.__show = i => { screens[i][1](); const d = document.querySelector('#sheet[open]'); if (d) d.scrollTop = 0; };
   return screens.map(s => s[0]);
