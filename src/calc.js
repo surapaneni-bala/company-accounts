@@ -326,9 +326,16 @@ function landedCost(y) {
 }
 // the selling price of one: its landed cost plus the markup (10 % unless an admin set another), to the cent
 const sellPrice = (cost, markup = 10) => Math.round(cost * (1 + markup / 100) * 100) / 100;
-// how far below the list price a price is, in % (an office manager may go 1 % below; more waits for an admin)
+// The price an admin is offered for an item: its landed cost plus the markup, rounded UP to a clean price — 5 cents under $10,
+// 25 cents under $100, $1 under $1,000, $5 above — so the exact markup does not show through it (owner, 3 Nov 2026: "hide the
+// 10 % part"). The admin sets the price; it never changes by itself.
+function niceUp(p) {
+  const step = p < 10 ? 0.05 : p < 100 ? 0.25 : p < 1000 ? 1 : 5;
+  return Math.round(Math.ceil(Math.round(p / step * 1e6) / 1e6 - 1e-9) * step * 100) / 100;
+}
+const suggestPrice = (cost, markup = 10) => niceUp(cost * (1 + markup / 100));
+// how far below the list price a price is, in % (an office manager sells at the list price, or as far below it as an admin allows her)
 const belowList = (price, list) => (list > 0 && price < list ? Math.round((list - price) / list * 1e4) / 100 : 0);
-const MANAGER_OFF = 1;
 // an invoice that takes goods out of stock: an invoice (not a quotation), not cancelled, not waiting for an admin or refused
 const sells = x => x.type === 'invoice' && !x.deleted && !x.cancelled && x.ok !== 'waiting' && x.ok !== 'rejected';
 const OUT_RANK = { in: 0, sale: 1, use: 1, damage: 1, return: 1, count: 2 };

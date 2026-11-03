@@ -78,7 +78,7 @@ const SETUP = () => {
     ['warehouse', () => stockSheet()], ['shop', () => { shopQ = ''; cart = {}; shopSheet(); }], ['shop with cart', () => { cart = { 'M-1': 100, 'M-3': 12 }; shopSheet(); }], ['checkout', () => { cart = { 'M-1': 100, 'M-3': 12 }; checkout(); }],
     ['stock item', () => itemDetail('M-1')], ['stock item form', () => { seesCost() && itemForm('M-1'); }], ['goods received form', () => receiveForm()], ['goods received edit', () => receiveForm('Y-1')],
     ['goods received', () => receiptDetail('Y-1')], ['received list', () => receivedList()], ['goods out form', () => outForm('M-2')], ['goods out', () => outDetail('O-1')], ['out list', () => outList()],
-    ['stock count', () => countSheet()], ['stock report', () => stockReport('')], ['delivery form', () => deliveryForm({ inv: 'I-2' })], ['delivery note', () => deliveryDetail('D-1')],
+    ['selling prices', () => pricesSheet()], ['stock count', () => countSheet()], ['stock report', () => stockReport('')], ['delivery form', () => deliveryForm({ inv: 'I-2' })], ['delivery note', () => deliveryDetail('D-1')],
     ['delivery receipt', () => { S = { ...S, deliveries: [...S.deliveries, { ...S.deliveries[0], id: 'D-2', no: 'DN-TST-0002', status: 'out', recv: undefined }] }; receiveDelivery('D-2'); }],
     ['price waiting', () => invoiceDetail('I-3')], ['approvals with price', () => approvalsSheet()], ['invoice from stock', () => invoiceDetail('I-2')],
     ['advance form', () => payForm('W-1', 'advance')], ['salary with plan', () => payForm('W-1', 'salary')], ['repay form', () => repayForm('W-1')],

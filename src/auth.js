@@ -5,7 +5,7 @@
 // The sign-in lives in its own storage slot, so it never ends up in a backup file.
 const SESSION_KEY = KEY + '-login';
 const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper' };
-const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Staff and salaries · their own payments, and any you choose below · no company money · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
+const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Staff and salaries · their own payments, and any you choose below · sells from stock at the list price (or the discount you allow) · no company money · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
 const RIGHTS = {
   admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones', 'staff'],
   manager: ['add', 'suggest', 'date', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval; no money (balances)
@@ -149,7 +149,12 @@ const lastSeen = u => (u.lastLogin ? ` · signed in ${fmtAbs(stamp(new Date(u.la
 const userRow = u => `<button class="row" data-act="userForm" data-id="${esc(u.id)}">
   <span class="dot">${u.active ? '👤' : '⛔'}</span>
   <span class="main"><span class="t"><span class="tt">${esc(u.name)}</span>${u.active ? '' : '<i class="tag warn">Blocked</i>'}${session.user.id === u.id ? '<i class="tag">You</i>' : ''}</span>
-  <span class="s">${esc(u.username)} · ${ROLES[u.role]}${u.sees ? ` · also sees ${esc(seesText(u.sees))}` : ''}${lastSeen(u)}</span></span></button>`;
+  <span class="s">${esc(u.username)} · ${ROLES[u.role]}${u.sees ? ` · also sees ${esc(seesText(u.sees))}` : ''}${u.off ? ` · may sell up to ${plain(u.off)} % below the list` : ''}${lastSeen(u)}</span></span></button>`;
+// how far below the list price this phone's login may sell from stock without an admin (admins: any price)
+const myOff = () => (can('edit') ? Infinity : signedIn() && session.user.off > 0 ? session.user.off : 0);
+// the discount an admin allows an office manager (owner, 3 Nov 2026): none unless given; the sheet holds her to it
+const offField = u => `<label class="fld off-fld" ${u && u.role === 'manager' ? '' : 'hidden'}><span>May sell below the list price <em>(optional — up to this %, e.g. 2; empty: the list price only, a lower price waits for you)</em></span>
+  <input name="off" inputmode="decimal" value="${u && u.off ? esc(u.off) : ''}" placeholder="0" autocomplete="off" ${(S.link && S.link.v || 0) < 23 ? 'disabled' : ''}></label>`;
 // What else an office manager may see (owner, 1 Nov 2026), in words: "every payment" or "Villa project, Juba, what Babu enters"
 const tidyPlace = s => String(s || '').trim().replace(/\s+/g, ' ');
 const placeName = key => tidyPlace((live(S.expenses).find(e => placeKey(e.location) === key) || { location: key }).location);
@@ -185,6 +190,7 @@ function userForm(id) {
       <label class="fld"><span>Username <em>(what they type to sign in)</em></span><input name="username" required maxlength="30" autocapitalize="off" autocorrect="off" spellcheck="false" value="${esc(u?.username)}" placeholder="e.g. mary"></label>
       <div class="fld"><span>What may they do?</span><div class="curseg roles">${Object.keys(ROLES).map(r => `<label><input type="radio" name="role" value="${esc(r)}" ${r === role ? 'checked' : ''}><span><b>${ROLES[r]}</b><small>${ROLE_HELP[r]}</small></span></label>`).join('')}</div></div>
       ${seesField(u)}
+      ${offField(u)}
       <label class="fld"><span>${u ? 'New password <em>(leave empty to keep theirs)</em>' : 'Password'}</span><input name="password" ${u ? '' : 'required'} minlength="8" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="At least 8 characters"></label>
       ${u ? `<label class="fld check"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> Login is open <em>(untick to block this person)</em></label>` : ''}
       <p class="err"></p>
@@ -199,13 +205,17 @@ async function saveUserForm(f) {
   const sees = v.role !== 'manager' ? null : v.seeAll ? { all: true, p: [], l: [], u: [] } : { all: false, p: fd.getAll('seeP'), l: fd.getAll('seeL'), u: fd.getAll('seeU') };
   const none = !sees || (!sees.all && !sees.p.length && !sees.l.length && !sees.u.length);
   const user = { name: clean(v.name), username: clean(v.username).toLowerCase(), role: v.role, ...(id ? { id, active: !!v.active } : {}), ...(v.password ? { password: v.password } : {}), ...((S.link.v || 0) >= 22 ? { sees: none ? null : sees } : {}) };
-  const seesChanged = (S.link.v || 0) >= 22 && was && JSON.stringify(was.sees || null) !== JSON.stringify(none ? null : sees);
+  const off = v.role === 'manager' && String(v.off || '').trim() ? parseNum(v.off) : 0;
+  if (off === null || off > 50) return formErr(f, 'off', 'Type the most below the list price as a %, from 0 to 50 — or leave it empty');
+  if ((S.link.v || 0) >= 23) user.off = off;
+  const seesChanged = ((S.link.v || 0) >= 22 && was && JSON.stringify(was.sees || null) !== JSON.stringify(none ? null : sees)) || ((S.link.v || 0) >= 23 && was && (was.off || 0) !== off);
   $('.err', f).textContent = 'Saving…';
   try { usersCache = (await callServer(S.link, { op: 'saveUser', user })).users; }
   catch (e) { return formErr(f, null, e.offline ? 'No internet. Managing logins needs internet.' : e.message); }
   const now = usersCache.find(x => x.username === user.username);
   const what = [id ? 'Login changed' : 'Login given', `${user.name} (${user.username}) · ${ROLES[user.role]}`, id && !user.active && 'blocked', id && v.password && 'new password',
-    (seesChanged || (!id && now && now.sees)) && (now && now.sees ? `also sees ${seesText(now.sees)}` : 'sees only their own payments')].filter(Boolean).join(' · ');
+    (seesChanged || (!id && now && now.sees)) && (now && now.sees ? `also sees ${seesText(now.sees)}` : 'sees only their own payments'),
+    seesChanged && now && now.role === 'manager' && (now.off ? `may sell up to ${plain(now.off)} % below the list` : 'sells at the list price only')].filter(Boolean).join(' · ');
   update({ log: logWith([['Logins', id || '—', what]]) });
   toast(!id ? `Login created ✓ Tell ${user.name}: username "${user.username}" and the password` : seesChanged ? `Saved ✓ ${user.name} signs in again to see the change` : 'Saved ✓');
   if (id === session.user.id && (user.role !== session.user.role || v.password)) return syncNow(); // own role or password changed: sign in again

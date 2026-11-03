@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ TextEncoder });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry, landedCost, splitCents, sellPrice, belowList, stockBook };', ctx);
-const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry, landedCost, splitCents, sellPrice, belowList, stockBook } = ctx.api;
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry, landedCost, splitCents, sellPrice, belowList, stockBook, niceUp, suggestPrice };', ctx);
+const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry, landedCost, splitCents, sellPrice, belowList, stockBook, niceUp, suggestPrice } = ctx.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 
 /* ---------- days on a 30-day month: joining and leaving days both count, day 31 counts as day 30 ---------- */
@@ -250,6 +250,8 @@ const t0 = Date.now(); findDoubles(many); assert.ok(Date.now() - t0 < 500, `6,00
   assert.deepStrictEqual([r.goods, r.extra, r.total, r.kg], [2505054, 1193500, 3698554, 32115], 'invoice $25,050.54 (the lines added up, not typed) + $11,935 = $36,985.54 over 32.115 tons');
   assert.deepStrictEqual(r.lines.map(l => Math.round(l.unit * 100) / 100), [8.53, 12.27, 21.83, 34.13], 'landed cost of one bar: 10, 12, 16 and 20 mm, as the owner worked out');
   assert.deepStrictEqual(r.lines.map(l => sellPrice(l.unit)), [9.38, 13.5, 24.02, 37.55], 'and with 10 % on top, what one sells for');
+  assert.deepStrictEqual(r.lines.map(l => suggestPrice(l.unit)), [9.4, 13.5, 24.25, 37.75], 'the price suggested to an admin: 10 % on top, rounded up to a clean price, so the markup does not show through (owner, 3 Nov 2026)');
+  assert.deepStrictEqual([niceUp(9.379), niceUp(9.4), niceUp(13.4988), niceUp(13.5), niceUp(0.123), niceUp(99.99), niceUp(100.2), niceUp(1003)], [9.4, 9.4, 13.5, 13.5, 0.15, 100, 101, 1005], '5 cents under $10, 25 cents under $100, $1 under $1,000, $5 above; a clean price stays as it is');
   assert.strictEqual(r.lines.reduce((t, l) => t + l.extra, 0), 1193500, 'the extra costs are spread to the cent: nothing lost or made up');
   assert.deepStrictEqual(plain(landedCost({ ...rebars, costs: rebars.costs.map(c => ({ ...c, split: 'value' })) })).lines.map(l => Math.round(l.unit * 100) / 100), [8.53, 12.27, 21.83, 34.13], 'by value: the same here (every size cost $780 a ton)');
   // a cost paid in SSP at that day's rate; goods bought in yuan

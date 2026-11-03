@@ -124,18 +124,22 @@ async function deleteClient(id) {
 
 /* ---------- making one ---------- */
 // a line may come from the warehouse: its item (m), name, unit and price (the list price in the invoice's money); how many are in
-// stock shows under it. An office manager may go 1 % below the list; lower waits for an admin (the sheet checks it too).
+// stock shows under it. An office manager sells at the list price — her price box is locked — unless an admin allows her a
+// discount (Logins); lower waits for an admin (the sheet checks it too).
+const priceLocked = () => !can('edit') && !(myOff() > 0);
 const stockPick = it => (live(S.stock).length ? `<select name="m" class="ipick" aria-label="From stock"><option value="">✎ Typed line (not from stock)</option>${items().map(m => `<option value="${esc(m.id)}" ${m.id === it.m ? 'selected' : ''}>📦 ${esc(m.name)}</option>`).join('')}</select>` : '');
 const listFor = (m, cur, rate) => (!m || !(m.price > 0) ? 0 : cur === 'USD' ? m.price : rate > 0 ? Math.round(m.price * rate) : 0);
 const lineRow = (it = {}) => `<div class="iline">${stockPick(it)}<input name="t" placeholder="What — e.g. Cement 42.5, 50 kg bags" value="${esc(it.t)}" maxlength="200" autocomplete="off" aria-label="Description">
   <div class="iline-n"><input name="qty" inputmode="decimal" placeholder="Qty" value="${esc(it.qty ?? '')}" autocomplete="off" aria-label="Quantity"><input name="unit" placeholder="Unit" value="${esc(it.unit)}" maxlength="20" autocomplete="off" aria-label="Unit, e.g. bags">
-  <input name="price" inputmode="decimal" placeholder="Unit price" value="${esc(it.price ?? '')}" autocomplete="off" aria-label="Unit price" ${it.keep ? 'data-typed="1"' : ''}><button type="button" class="x" data-act="delLine" aria-label="Remove line">×</button></div><small class="muted ihint"></small></div>`;
+  <input name="price" inputmode="decimal" placeholder="Unit price" value="${esc(it.price ?? '')}" autocomplete="off" aria-label="Unit price" ${it.keep ? 'data-typed="1"' : ''} ${it.m && priceLocked() ? 'readonly title="The list price — an admin sets prices"' : ''}><button type="button" class="x" data-act="delLine" aria-label="Remove line">×</button></div><small class="muted ihint"></small></div>`;
 // a line picked from stock: its name, unit and list price; again whenever the money or the rate changes (unless a price was typed)
 function pickStockLine(row, fresh) {
   const f = row.closest('form'), m = itemOf($('[name=m]', row).value), cur = formCur(f), rate = cur === 'SSP' ? parseAmount(f.elements.rate && f.elements.rate.value) : null;
   if (!m) return;
   if (fresh) { $('[name=t]', row).value = m.name; $('[name=unit]', row).value = m.unit; delete $('[name=price]', row).dataset.typed; }
   const list = listFor(m, cur, rate), price = $('[name=price]', row);
+  price.readOnly = priceLocked();
+  if (price.readOnly) delete price.dataset.typed; // locked: always the list price
   if (!price.dataset.typed) price.value = list || '';
 }
 // src: a quotation to invoice, or an earlier one to copy; client: made from a client's page
@@ -193,7 +197,8 @@ function refreshInvoice(f) {
     const m = $('[name=m]', el) && itemOf($('[name=m]', el).value), hint = $('.ihint', el);
     if (!m) { hint.textContent = ''; return; }
     const list = listFor(m, cur, rate), price = parseAmount($('[name=price]', el).value), qty = parseAmount($('[name=qty]', el).value), have = b[m.id] ? b[m.id].qty : 0, off = price !== null ? belowList(price, list) : 0;
-    hint.innerHTML = `${plain(have)} ${esc(m.unit)} in stock${qty > have ? ' — <b class="out-c">not enough</b>' : ''} · list ${list ? money(list, cur) : cur === 'SSP' ? '— type the rate above' : 'no price yet'}${off ? ` · <b class="${off > MANAGER_OFF && !can('edit') ? 'out-c' : ''}">${plain(off)} % below</b>${off > MANAGER_OFF && !can('edit') ? ' — an admin must approve it' : ''}` : ''}`;
+    const over = off > myOff() + 1e-9;
+    hint.innerHTML = `${plain(have)} ${esc(m.unit)} in stock${qty > have ? ' — <b class="out-c">not enough</b>' : ''} · ${priceLocked() ? 'the list price' : `list ${list ? money(list, cur) : cur === 'SSP' ? '— type the rate above' : 'no price yet'}`}${off ? ` · <b class="${over ? 'out-c' : ''}">${plain(off)} % below</b>${over ? ' — an admin must approve it' : ''}` : ''}`;
   });
   const rateBox = $('[data-stock-rate]', f);
   rateBox.hidden = !(cur === 'SSP' && stockLines.length); $('input', rateBox).required = !rateBox.hidden;
@@ -221,8 +226,8 @@ async function saveInvoice(f) {
   const src = f.dataset.from && invOf(f.dataset.from), mine = signedIn() ? session.user.id : '';
   const usedQuote = src && invs().some(x => x.from === src.id && !x.cancelled), approvedQuote = src && src.type === 'quote' && src.ok === 'approved' && src.uid === mine && src.cur === cur && !usedQuote ? src : null;
   const quotedQty = m => (approvedQuote ? approvedQuote.items.filter(q => q.m === m).reduce((t, q) => t + q.qty, 0) : 0), soldQty = m => stockLines.filter(it => it.m === m).reduce((t, it) => t + it.qty, 0);
-  const offOk = it => belowList(it.price, it.list) <= MANAGER_OFF + 1e-9 || (approvedQuote && soldQty(it.m) <= quotedQty(it.m) + 1e-9 && approvedQuote.items.some(q => q.m === it.m && it.price >= q.price - 1e-9));
-  const typedLines = items.filter(it => !it.m), lowRate = cur === 'SSP' && stockLines.length && S.link && S.link.rate > 0 && rate < S.link.rate * (1 - MANAGER_OFF / 100) - 1e-9;
+  const offOk = it => belowList(it.price, it.list) <= myOff() + 1e-9 || (approvedQuote && soldQty(it.m) <= quotedQty(it.m) + 1e-9 && approvedQuote.items.some(q => q.m === it.m && it.price >= q.price - 1e-9));
+  const typedLines = items.filter(it => !it.m), lowRate = !can('edit') && cur === 'SSP' && stockLines.length && S.link && S.link.rate > 0 && rate < S.link.rate * (1 - myOff() / 100) - 1e-9;
   const needsApproval = !can('edit') && (stockLines.some(it => !offOk(it)) || typedLines.length > 0 || lowRate);
   if (type === 'invoice') {
     const b = book(), want = {};
@@ -326,7 +331,7 @@ function invoiceDetail(id) {
   openSheet(`${head(`${isQ ? 'Quotation' : 'Invoice'} ${inv.no}`, 'in', k ? k.name : '')}
     <div class="dbig in">${money(t.total, inv.cur)}</div>
     ${status ? `<p class="note">${esc(status)}</p>` : ''}
-    ${inv.ok === 'waiting' ? `<p class="note">⏳ A price is more than ${MANAGER_OFF} % below the list: it waits for an admin. It is numbered and made when they approve.</p>${can('edit') ? priceCard(inv) : ''}` : ''}
+    ${inv.ok === 'waiting' ? `<p class="note">⏳ A price is lower than ${esc(inv.by || 'its maker')} may give, or a line is not from stock: it waits for an admin. It is numbered and made when they approve.</p>${can('edit') ? priceCard(inv) : ''}` : ''}
     ${inv.ok === 'rejected' ? `<p class="note">✗ The price was refused by ${esc(inv.okBy || 'an admin')}${inv.why ? `: ${esc(inv.why)}` : ''}. Copy it as new with another price.</p>` : ''}
     <div class="two">${held ? '' : pdfFile ? `<button class="btn ghost" data-act="showFile" data-id="${esc(pdfFile.id)}">📄 Open or send</button>` : `<button class="btn ghost" data-act="remakeInvoice" data-id="${esc(id)}">📄 Make the PDF</button>`}
       ${seesPaid() && !isQ && !inv.cancelled && !held && st.due ? `<button class="btn in" data-act="payInvoice" data-id="${esc(id)}">💵 Record payment</button>` : ''}

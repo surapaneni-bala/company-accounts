@@ -55,7 +55,17 @@ assert.deepStrictEqual(sync(owner, [{ id: 'X-OW1-0001', k: 'X', u: 21, d: { id: 
 const sale = (id, u, lines, extra = {}) => ({ id, k: 'I', u, d: { id, type: 'invoice', no: post({ op: 'number', token: m.token }).no || 'X', client: 'K-AG1-0001', date: ago(4), cur: 'USD', items: lines.map(([mm, qty, price, list]) => ({ t: 'Rebar', m: mm, qty, price, list, unit: 'pcs' })), tax: 0, uid: m.me.id, createdAt: '2026-10-30T09:00:00', ...extra } });
 res = sync(m.token, [client, sale('I-AG1-0001', 23, [['M-OW1-0002', 100, 13.5, 13.5]]), sale('I-AG1-0002', 23, [['M-OW1-0002', 10, 13.37, 13.5]]), sale('I-AG1-0003', 23, [['M-OW1-0002', 10, 13.3, 13.5]]),
   sale('I-AG1-0004', 23, [['M-OW1-0002', 10, 13.3, 13.3]]), sale('I-AG1-0005', 23, [['M-OW1-0004', 5, 37.55, 37.55]], { ok: 'approved' }), sale('I-AG1-0006', 23, [['M-OW1-0003', 10, 60750, 24.02 * 2500]], { cur: 'SSP', rate: 2500 })]);
-assert.deepStrictEqual(res.refused.sort(), ['I-AG1-0003', 'I-AG1-0004', 'I-AG1-0005'], 'the list price, or 0.96 % below; not 1.5 % below — even claiming a lower list price — and she cannot approve her own price; an SSP sale at its rate is checked in dollars');
+assert.deepStrictEqual(res.refused.sort(), ['I-AG1-0002', 'I-AG1-0003', 'I-AG1-0004', 'I-AG1-0005'], 'the list price only (owner, 3 Nov 2026): not even 0.96 % below unless an admin allows it, not with a lower list price claimed, not her own approval; an SSP sale at its rate is checked in dollars');
+// an admin allows her 1 % below the list: 0.96 % is taken, 1.5 % is not
+post({ op: 'saveUser', token: owner, user: { id: m.me.id, off: 1 } });
+const mOff = post({ op: 'login', username: 'mary', password: 'mary-pass1' });
+assert.strictEqual(mOff.me.off, 1, 'her phone is told what she may give');
+m.token = mOff.token;
+assert.deepStrictEqual(sync(m.token, [sale('I-AG1-0002', 23, [['M-OW1-0002', 10, 13.37, 13.5]]), sale('I-AG1-0003', 23, [['M-OW1-0002', 10, 13.3, 13.5]])]).refused, ['I-AG1-0003'], 'given 1 %: 0.96 % below is taken, 1.5 % is not');
+assert.strictEqual(post({ op: 'saveUser', token: owner, user: { id: m.me.id, off: 90 } }).users.find(u => u.id === m.me.id).off, 50, 'never more than 50 %');
+assert.strictEqual(post({ op: 'saveUser', token: m.token, user: { id: m.me.id, off: 50 } }).ok, false, 'she cannot give herself a discount');
+post({ op: 'saveUser', token: owner, user: { id: m.me.id, off: 1 } });
+m.token = post({ op: 'login', username: 'mary', password: 'mary-pass1' }).token;
 assert.ok(/^INV-\d{4}$/.test(sale('I-x', 1, []).d.no), 'she takes invoice numbers from the one series');
 res = sync(m.token, [sale('I-AG1-0007', 24, [['M-OW1-0002', 10, 12, 13.5]], { ok: 'waiting', no: 'REQ-AG1-0001' })]);
 assert.deepStrictEqual(res.refused, [], 'lower than 1 %: sent to an admin, waiting');

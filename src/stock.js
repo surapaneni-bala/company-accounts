@@ -85,10 +85,11 @@ function stockSheet() {
     ${admin ? `<div class="ssp-big"><small>STOCK WORTH</small><b>${money(atCost / 100, 'USD')}</b><span>at landed cost · ${money(atPrice / 100, 'USD')} at selling prices · ${list.length} item${list.length === 1 ? '' : 's'}</span></div>` : ''}
     <div class="two">${admin ? '<button class="btn primary" data-act="receiveForm">🚢 Goods received</button>' : ''}<button class="btn ghost" data-act="outForm">➖ Goods out</button>
       <button class="btn in" data-act="sellStock">🧾 Sell from stock</button><button class="btn ghost" data-act="countSheet">📋 Count the stock</button></div>
+    ${admin && pricesToCheck().length ? `<p class="note" style="margin-top:12px">💲 ${pricesToCheck().length} price${pricesToCheck().length === 1 ? ' is' : 's are'} below the landed cost + markup. <button class="link" data-act="prices">Check the prices</button></p>` : ''}
     ${low.length ? `<p class="note" style="margin-top:12px">⚠️ Running low: ${low.map(m => `<b>${esc(m.name)}</b> (${plain(b[m.id] ? b[m.id].qty : 0)})`).join(', ')}</p>` : ''}
     <form data-form="stockFilter" class="qadd" style="margin-top:12px"><input name="q" placeholder="Find an item, a code or a shelf" value="${esc(stockQ)}" autocomplete="off" aria-label="Find an item"></form>
     <div id="stockList">${stockRows(list, b, wait)}</div>
-    ${admin ? '<button class="btn ghost" data-act="itemForm" style="margin-top:12px">＋ New stock item</button>' : ''}
+    ${admin ? '<div class="two" style="margin-top:12px"><button class="btn ghost" data-act="itemForm">＋ New stock item</button><button class="btn ghost" data-act="prices">💲 Selling prices</button></div>' : ''}
     <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="stockPdf">📄 Stock list (PDF)</button><button class="btn ghost" data-act="countPdf">🖨 Count sheet to print</button></div>`);
   comeBack(stockSheet);
 }
@@ -112,11 +113,12 @@ function itemDetail(id) {
   const m = itemOf(id);
   if (!m) return false;
   const s = book()[id] || { qty: 0, avg: 0, value: 0, moves: [], sold: 0, revenue: 0, cogs: 0 }, admin = seesCost(), wait = awaitingDelivery(S.invoices, S.deliveries)[id] || 0;
-  const markup = m.markup === undefined ? DEFAULT_MARKUP : m.markup, suggest = s.avg ? sellPrice(s.avg, markup) : 0;
+  const markup = m.markup === undefined ? DEFAULT_MARKUP : m.markup, suggest = s.avg ? suggestPrice(s.avg, markup) : 0;
   const what = mv => mv.kind === 'in' ? 'Received' : mv.kind === 'sale' ? `Sold${(invOf(mv.ref) || {}).no ? ' · ' + invOf(mv.ref).no : ''}` : (OUT_KIND[mv.kind] || [mv.kind])[0];
   openSheet(`${head(m.name, 'stock', [m.code, m.cat].filter(Boolean).join(' · '))}
     <div class="dbig${s.short ? ' out' : ''}">${plain(s.qty)} <small style="font-size:.45em">${esc(m.unit)}</small></div>
-    <p class="note">Sells for <b>${priceText(m)}</b> each${m.fixed ? ' (price set by hand)' : ''}.${admin && s.avg ? `<br>Landed cost <b>${usd4(s.avg)}</b> each (average) · ${plain(markup)} % on top = ${money(suggest, 'USD')}${!m.fixed && Math.abs(suggest - (m.price || 0)) > 0.004 ? ' — the price follows it when goods come in' : ''}.<br>In stock worth ${money(s.value / 100, 'USD')} at cost.` : ''}</p>
+    <p class="note">Sells for <b>${priceText(m)}</b> each.${admin && s.avg ? `<br>Landed cost <b>${usd4(s.avg)}</b> each (average) · with ${plain(markup)} % on top, rounded up: <b>${money(suggest, 'USD')}</b>.<br>In stock worth ${money(s.value / 100, 'USD')} at cost.` : ''}</p>
+    ${admin && suggest && suggest > (m.price || 0) + 0.004 ? `<p class="note">⚠️ The price is below the landed cost + ${plain(markup)} %. <button class="link" data-act="setPrice" data-id="${esc(id)}" data-price="${suggest}">Sell for ${money(suggest, 'USD')} instead 🔒</button></p>` : ''}
     ${wait ? `<p class="note">🚚 ${plain(wait)} ${esc(m.unit)} are sold but still here, waiting for their delivery note.</p>` : ''}
     <div class="two"><button class="btn in" data-act="sellStock" data-id="${esc(id)}">🧾 Sell</button><button class="btn ghost" data-act="outForm" data-id="${esc(id)}">➖ Goods out</button>${admin ? `<button class="btn ghost" data-act="itemForm" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}</div>
     <dl class="facts" style="margin-top:16px">${[['Unit', m.unit], ['Shelf / place', m.bin], ['Reorder at', m.min ? `${plain(m.min)} ${m.unit}` : ''], ['Sold so far', s.sold ? `${plain(s.sold)} ${m.unit}` : ''],
@@ -148,32 +150,34 @@ async function itemForm(id) {
       <label class="fld"><span>Category</span><input name="cat" list="dl-cat" value="${esc(d.cat || '')}" maxlength="60" placeholder="e.g. Steel" autocomplete="off"></label>
       <div class="two"><label class="fld"><span>Shelf / place <em>(optional)</em></span><input name="bin" value="${esc(d.bin || '')}" maxlength="40" placeholder="e.g. Yard A" autocomplete="off"></label>
         <label class="fld"><span>Reorder at <em>(optional)</em></span><input name="min" inputmode="decimal" value="${esc(d.min || '')}" placeholder="e.g. 50" autocomplete="off"></label></div>
-      <label class="fld"><span>Markup on the landed cost, %</span><input name="markup" inputmode="decimal" value="${esc(d.markup === undefined ? DEFAULT_MARKUP : d.markup)}" autocomplete="off"></label>
-      <label class="fld check"><input type="checkbox" name="fixed" ${d.fixed ? 'checked' : ''}><span>Set the selling price by hand instead</span></label>
-      <label class="fld fixed-price" ${d.fixed ? '' : 'hidden'}><span>Sells for, in US dollars, each</span><input name="price" inputmode="decimal" value="${esc(d.fixed ? d.price || '' : '')}" autocomplete="off"></label>
+      <label class="fld"><span>Sells for, in US dollars, each <em>(only admins set it; it never changes by itself)</em></span><input name="price" inputmode="decimal" value="${esc(d.price || '')}" placeholder="${suggestFor(d) || 'set when goods come in'}" autocomplete="off">
+        ${suggestFor(d) ? `<small class="muted">Landed cost ${usd4(book()[d.id].avg)} + markup, rounded up: <button type="button" class="link" data-act="useSuggest" data-price="${suggestFor(d)}">use ${money(suggestFor(d), 'USD')}</button></small>` : ''}</label>
+      <label class="fld"><span>Markup for the suggested price, % <em>(admins only see it)</em></span><input name="markup" inputmode="decimal" value="${esc(d.markup === undefined ? DEFAULT_MARKUP : d.markup)}" autocomplete="off"></label>
       ${textField('note', 'Note', '', d.note || '', false)}
       <p class="err"></p>
       <button class="btn primary">${old ? 'Save changes' : 'Add the item'}</button>
     </form>${stockLists()}`);
 }
+// the price an admin is offered for an item: its average landed cost + markup, rounded up (calc.js suggestPrice); 0 before any cost
+const suggestFor = m => { const s = m && m.id && book()[m.id]; return s && s.avg > 0 ? suggestPrice(s.avg, m.markup === undefined ? DEFAULT_MARKUP : m.markup) : 0; };
 const stockLists = () => `<datalist id="dl-unit">${STOCK_UNITS.map(u => `<option value="${esc(u)}">`).join('')}</datalist><datalist id="dl-cat">${[...new Set([...live(S.stock).map(m => m.cat).filter(Boolean), ...BUY_CATS.map(c => c[0])])].map(c => `<option value="${esc(c)}">`).join('')}</datalist>`;
 function itemFields(v) {
   const markup = String(v.markup ?? '').trim() === '' ? DEFAULT_MARKUP : parseNum(v.markup), min = String(v.min || '').trim() ? parseNum(v.min) : 0;
-  const rec = { name: clean(v.name), unit: clean(v.unit) || 'pcs', code: clean(v.code), cat: clean(v.cat), bin: clean(v.bin), min, markup, note: clean(v.note), fixed: !!v.fixed };
-  return { rec, price: v.fixed ? parseAmount(v.price) : null };
+  const rec = { name: clean(v.name), unit: clean(v.unit) || 'pcs', code: clean(v.code), cat: clean(v.cat), bin: clean(v.bin), min, markup, note: clean(v.note) };
+  return { rec, price: String(v.price || '').trim() ? parseAmount(v.price) : undefined };
 }
 function saveItem(f) {
   const old = itemOf(f.dataset.id), { rec, price } = itemFields(Object.fromEntries(new FormData(f)));
   if (!rec.name) return formErr(f, 'name', 'Type what it is');
   if (rec.markup === null || rec.markup > 1000) return formErr(f, 'markup', 'Type the markup as a percentage, like 10');
   if (rec.min === null) return formErr(f, 'min', 'Type how few should make you reorder, like 50 — or leave it empty');
-  if (rec.fixed && !(price > 0)) return formErr(f, 'price', 'Type what one sells for, like 13.50');
+  if (price === null) return formErr(f, 'price', 'Type what one sells for, like 13.50 — or leave it empty until goods come in');
   const clash = live(S.stock).find(m => m.id !== (old && old.id) && (m.name.toLowerCase() === rec.name.toLowerCase() || (rec.code && m.code && m.code.toLowerCase() === rec.code.toLowerCase())));
   if (clash) return formErr(f, clash.name.toLowerCase() === rec.name.toLowerCase() ? 'name' : 'code', `${clash.name} already has this ${clash.name.toLowerCase() === rec.name.toLowerCase() ? 'name' : 'code'}`);
-  const by = myName() || S.lastBy || '', s = book()[old ? old.id : ''], auto = s && s.avg ? sellPrice(s.avg, rec.markup) : undefined;
-  const full = { ...rec, ...(rec.fixed ? { price } : auto ? { price: auto } : old && old.price && !old.fixed ? { price: old.price } : {}) };
+  const by = myName() || S.lastBy || '';
+  const full = { ...rec, ...(price !== undefined ? { price } : old && old.price ? { price: old.price } : {}) };
   if (old) {
-    const { price: _p, ...rest } = old, moved = old.price > 0 && Math.abs((full.price || 0) - old.price) >= 0.005;
+    const { price: _p, fixed: _f, ...rest } = old, moved = old.price > 0 && Math.abs((full.price || 0) - old.price) >= 0.005;
     update({ stock: S.stock.map(x => (x.id === old.id ? { ...rest, ...full, ...(moved ? { prev: { price: old.price, until: today() } } : {}), editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', old.id, `Stock item ${rec.name}${(full.price || 0) !== (old.price || 0) ? `: sells for ${money(full.price || 0, 'USD')} (was ${money(old.price || 0, 'USD')})` : ''}`]], by) });
     toast('Saved ✓'); return itemDetail(old.id);
   }
@@ -185,18 +189,41 @@ function newItem(rec, by) {
   update({ stock: [...S.stock, { id, ...rec, by, createdAt: stampSec() }], seq, log: logWith([['Added', id, `Stock item: ${rec.name} (${rec.unit})`]], by) });
   return id;
 }
-// after goods come in (or an import is changed or deleted): an item's price follows its new average cost and markup, unless fixed
-function followCosts(ids, by) {
-  const b = book(), changed = [];
+// Prices are an admin's (owner, 3 Nov 2026): set by hand and never changed by themselves, so a price says nothing of what the item
+// cost. An item's first goods give it its first price — the suggestion (landed cost + markup, rounded up) — so it can be sold
+// at once; after that, a cost that rises puts it on the admins' "prices to check".
+function firstPrices(ids, by) {
+  const named = [];
   const stock = S.stock.map(m => {
-    const s = b[m.id];
-    if (!ids.includes(m.id) || m.fixed || !s || !(s.avg > 0)) return m;
-    const price = sellPrice(s.avg, m.markup === undefined ? DEFAULT_MARKUP : m.markup);
-    if (Math.abs(price - (m.price || 0)) < 0.005) return m;
-    changed.push(`${m.name}: ${money(price, 'USD')}`);
-    return { ...m, price, ...(m.price > 0 ? { prev: { price: m.price, until: today() } } : {}), editedAt: stampSec(), editedBy: by };
+    if (!ids.includes(m.id) || m.price > 0) return m;
+    const p = suggestFor(m);
+    if (!p) return m;
+    named.push(`${m.name}: ${money(p, 'USD')}`);
+    return { ...m, price: p };
   });
-  if (changed.length) update({ stock, log: logWith([['Prices', '—', `Selling prices follow the landed cost: ${changed.join('; ')}`]], by) });
+  if (named.length) update({ stock, log: logWith([['Prices', '—', `First selling prices: ${named.join('; ')}`]], by) });
+}
+// items whose price is now below their landed cost + markup (a dearer import came in): for the admins to look at
+const pricesToCheck = () => live(S.stock).filter(m => m.price > 0 && suggestFor(m) > m.price + 0.004);
+async function setPrice(id, price, all, back) {
+  const list = all ? pricesToCheck().map(m => [m, suggestFor(m)]) : [[itemOf(id), +price]];
+  if (!seesCost() || !list.length || !list.every(([m, p]) => m && p > 0) || !await unlock('Enter the password to change selling prices.')) return;
+  const by = myName() || S.lastBy || '', to = new Map(list.map(([m, p]) => [m.id, p]));
+  update({ stock: S.stock.map(m => (to.has(m.id) ? { ...m, price: to.get(m.id), ...(m.price > 0 ? { prev: { price: m.price, until: today() } } : {}), editedAt: stampSec(), editedBy: by } : m)),
+    log: logWith([['Prices', '—', `Selling prices set: ${list.map(([m, p]) => `${m.name} ${money(p, 'USD')} (was ${money(m.price || 0, 'USD')})`).join('; ')}`]], by) });
+  toast('Price set ✓');
+  if (all || back === 'prices') pricesSheet(); else itemDetail(id);
+}
+function pricesSheet() {
+  if (!seesCost()) return;
+  const check = pricesToCheck(), rest = items().filter(m => !check.includes(m));
+  const row = m => { const s = book()[m.id] || { avg: 0 }, sug = suggestFor(m); return `<div class="mrow"><span>${esc(m.name)}<br><small class="muted">${s.avg ? `landed ${usd4(s.avg)} · +${plain(m.markup === undefined ? DEFAULT_MARKUP : m.markup)} % → ${money(sug, 'USD')}` : 'no cost yet'}</small></span>
+    <span>${sug && Math.abs(sug - (m.price || 0)) > 0.004 ? `<button class="btn small ghost" data-act="setPrice" data-back="prices" data-id="${esc(m.id)}" data-price="${sug}">${money(sug, 'USD')}</button>` : ''}</span><b>${m.price ? money(m.price, 'USD') : '—'}</b></div>`; };
+  openSheet(`${head('Selling prices', 'stock', 'Set by admins; they never change by themselves')}
+    <p class="hint">Office managers see only the price. The suggestion is the landed cost plus the item's markup, rounded up to a clean price — so the markup does not show through.</p>
+    ${check.length ? `<h3 class="subh">To check — the cost went up (${check.length})</h3><div class="card list inset">${check.map(row).join('')}</div><button class="btn primary" data-act="setAllPrices" style="margin-top:10px">Set all ${check.length} to the suggestion 🔒</button>` : '<p class="note">Every price is at or above its landed cost + markup. ✓</p>'}
+    <h3 class="subh">All prices</h3><div class="card list inset">${rest.map(row).join('') || '<p class="muted pad">None yet.</p>'}</div>`);
+  comeBack(pricesSheet);
 }
 
 /* ---------- goods received: an import, every cost in its currency, the landed cost of one ---------- */
@@ -284,9 +311,11 @@ function refreshReceive(f) {
   if (r.err) { out.innerHTML = `<p class="err" style="margin:0">To spread ${r.cost !== undefined ? `the ${esc((COST_NAME[costs[r.cost].t] || '').toLowerCase())} cost` : 'the costs'}, type ${esc(r.err)}.</p>`; return; }
   const name = (row) => (row.m && row.m !== '__new' ? (itemOf(row.m) || {}).name : row.nname) || '—';
   const markupOf = row => { const m = row.m && itemOf(row.m); return m && m.markup !== undefined ? m.markup : DEFAULT_MARKUP; };
+  const sellsFor = (row, unit) => { const m = row.m && itemOf(row.m), sug = suggestPrice(unit, markupOf(row));
+    return m && m.price > 0 ? `sells for <b>${money(m.price, 'USD')}</b>${sug > m.price + 0.004 ? ` <span class="out-c">— below the suggested ${money(sug, 'USD')}</span>` : ''}` : `will sell for <b>${money(sug, 'USD')}</b> (+${plain(markupOf(row))} %, rounded up)`; };
   out.innerHTML = `<h3 style="margin:0 0 8px">Landed cost</h3>
     <div class="lc-table">${r.lines.map((l, i) => `<div class="lc-row"><b>${esc(name(rows[i]))}</b><span class="muted">${plain(rows[i].qty)} · goods ${money(l.goods / 100, 'USD')} + costs ${money(l.extra / 100, 'USD')} = ${money(l.total / 100, 'USD')}</span>
-      <span class="lc-each"><b>${usd4(l.unit)}</b> each · sells for <b>${money(sellPrice(l.unit, markupOf(rows[i])), 'USD')}</b> (+${plain(markupOf(rows[i]))} %)</span></div>`).join('')}</div>
+      <span class="lc-each"><b>${usd4(l.unit)}</b> each · ${sellsFor(rows[i], l.unit)}</span></div>`).join('')}</div>
     <p class="muted" style="margin:10px 0 0">Goods ${money(r.goods / 100, 'USD')} + costs ${money(r.extra / 100, 'USD')} = <b>${money(r.total / 100, 'USD')}</b>${r.kg ? ` · ${plain(Math.round(r.kg) / 1000)} tons · ${usd4(Math.round(r.total / r.kg * 1e4) / 1e6)} a kg` : ''}${r.goods ? ` · the costs add ${plain(Math.round(r.extra / r.goods * 1000) / 10)} % to the goods` : ''}.</p>`;
 }
 async function saveReceive(f) {
@@ -324,7 +353,7 @@ async function saveReceive(f) {
   if (differ.length) alert(`In Accounts these payments are not what the costs now say:\n${differ.map(({ c, e }) => `${COST_NAME[c.t]}: ${cost(c.amt, c.cur)} here, ${money(e.amount, e.cur)} in Accounts`).join('\n')}\n\nCorrect the payment in Accounts too (open it from History).`);
   if (old) update({ receipts: S.receipts.map(x => { if (x.id !== old.id) return x; const { sup: _s, from: _f, ...base } = x; return { ...base, ...rec, editedAt: stampSec(), editedBy: by }; }), log: logWith([['Edited', id, `Goods received ${rec.ref || rec.date}: ${text}`]], by) });
   else update({ receipts: [...S.receipts, { id, ...rec, by, createdAt: stampSec() }], log: logWith([['Received', id, `Goods received ${rec.ref || rec.date}: ${text}`]], by) });
-  followCosts([...new Set([...rec.lines.map(l => l.m), ...(old ? old.lines.map(l => l.m) : [])])], by);
+  firstPrices(rec.lines.map(l => l.m), by);
   toast(old ? 'Saved ✓' : 'In stock ✓');
   receiptDetail(id);
 }
@@ -355,7 +384,7 @@ async function deleteReceipt(id) {
   const by = confirmBy(`Delete these goods received${y.ref ? ` (${y.ref})` : ''}?${short.length ? `\n\n⚠️ Without them there would be fewer than nothing of: ${short.join(', ')} — they were sold or used.` : ''}\n\nPayments it added to Accounts stay (delete them there if they are wrong).`);
   if (!by) return;
   update({ receipts: S.receipts.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Goods received ${y.ref || y.date}`]], by) });
-  followCosts(y.lines.map(l => l.m), by);
+
   toast('Deleted ✓'); closeAll(); stockSheet();
 }
 function receivedList() {

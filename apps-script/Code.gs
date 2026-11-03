@@ -244,7 +244,7 @@ function sync_(req) {
   // hers, drop everything and fetch again, over and over
   const viewer = user && user.sees && req.sees !== 1 ? Object.assign({}, user, { sees: null }) : user;
   const roles = Object.create(null);
-  users_().forEach(u => { roles[u.id] = u.role; });
+  users_().forEach(u => { roles[u.id] = { role: u.role, off: u.off || 0 }; });
   const result = merge_(rows, req.push, Number(req.since) || 0, user, uploads_(), codeOnly, roles), hidden = hiddenFor_(result.rows, viewer);
   let warning = '';
   if (result.changed) {
@@ -376,8 +376,10 @@ function receiptOnly_(was, now, user, at) {
 }
 // An office manager may sell from stock at most 1 % below the list price (owner, 2 Nov 2026); lower waits for an admin (ok:
 // 'waiting'). A price from a quotation an admin approved stands. The list price is the stock item's as the sheet has it now.
-const MANAGER_OFF_ = 1;
-function pricesOk_(d, out, index, id) {
+// An office manager sells at the list price, or as far below it as an admin allows her login (off, %: none unless given —
+// owner, 3 Nov 2026: "only admins can give a lower priced invoice, or admins can give access to certain office managers")
+function pricesOk_(d, out, index, id, off) {
+  const allow = off > 0 ? off : 0;
   if (d.ok === 'waiting') return true;
   const rec = x => (index[x] === undefined ? null : { k: out[index[x]][1], d: JSON.parse(out[index[x]][4]) });
   // an approved quotation's prices stand on the one invoice made from it, by whoever asked for it, in its money, for no more than
@@ -387,8 +389,8 @@ function pricesOk_(d, out, index, id) {
   const approved = quote && quote.k === 'I' && quote.d.type === 'quote' && quote.d.ok === 'approved' && quote.d.uid === d.uid && quote.d.cur === d.cur && !usedBefore ? quote.d : null;
   if (d.ok === 'approved' && !approved) return false;
   if (d.cur === 'SSP' && d.items.some(it => it.m)) { // at the company's own rate, not one typed to look cheaper
-    const ref = newestRate_(out);
-    if (!ref || !(d.rate >= ref * (1 - MANAGER_OFF_ / 100) - 1e-9)) return false;
+    const ref = newestRate_(out, d.createdAt); // the newest she could have known when she made it
+    if (!ref || !(d.rate >= ref * (1 - allow / 100) - 1e-9)) return false;
   }
   const quoted = m => (approved ? approved.items.filter(q => q.m === m).reduce((t, q) => t + q.qty, 0) : 0), want = Object.create(null);
   d.items.forEach(it => { if (it.m) want[it.m] = (want[it.m] || 0) + it.qty; });
@@ -400,23 +402,25 @@ function pricesOk_(d, out, index, id) {
     const usd = d.cur === 'USD' ? it.price : d.rate > 0 ? it.price / d.rate : null;
     if (usd === null) return false;
     if (approved && want[it.m] <= quoted(it.m) + 1e-9 && approved.items.some(q => q.m === it.m && it.price >= q.price - 1e-9)) return true;
-    const floor = p => p * (1 - MANAGER_OFF_ / 100) - (d.cur === 'SSP' ? 0.5 / d.rate : 1e-9); // half an SSP: the rounding of a price in SSP
+    const floor = p => p * (1 - allow / 100) - (d.cur === 'SSP' ? 0.5 / d.rate : 1e-9); // half an SSP: the rounding of a price in SSP
     // the price the item had before its last change still stands for a sale dated on or before that day (an offline phone)
     const prev = m.d.prev && d.date <= m.d.prev.until && m.d.prev.price > 0 ? m.d.prev.price : Infinity;
     return usd >= floor(Math.min(m.d.price, prev));
   });
 }
-// the newest SSP rate the company typed (money changed, payments and money received in SSP), for the rule above
-function newestRate_(out) {
-  let at = '', rate = 0;
+// the newest SSP rate the company typed (money changed, payments and money received in SSP), for the rule above; before = only
+// those typed before then (a rate recorded after she made the invoice could not be on it), else the newest of all
+function newestRate_(out, before) {
+  let at = '', rate = 0, atB = '', rateB = 0;
   out.forEach(r => {
     if (r[1] !== 'X' && r[1] !== 'E' && r[1] !== 'R') return;
     const x = JSON.parse(r[4]);
     if (x.deleted) return;
     const v = r[1] === 'X' ? (x.usd > 0 ? x.ssp / x.usd : 0) : x.cur === 'SSP' ? x.rate : 0;
     if (v > 0 && String(x.at) > at) { at = String(x.at); rate = v; }
+    if (v > 0 && before && String(x.createdAt || x.at) <= String(before) && String(x.at) > atB) { atB = String(x.at); rateB = v; }
   });
-  return rate;
+  return rateB || rate;
 }
 function dupNumber_(d, out, id) {
   return out.some(r => r[1] === 'I' && r[0] !== id && (() => { const x = JSON.parse(r[4]); return x.type === 'invoice' && x.no === d.no && !x.deleted; })());
@@ -487,9 +491,9 @@ function merge_(rows, push, since, user, uploads, codeOnly, roles) {
     // a price from stock lower than an office manager may give waits for an admin — checked by whose invoice it is, so an admin
     // signed in on her phone cannot send it through; an admin's own approval or refusal (ok) is the admin's call; a change that
     // leaves the lines as they were (cancelling it) is not checked again
-    const ownerRole = p.k === 'I' ? (roles || {})[p.d.uid] : '', adminDecides = !limited && (d.ok === 'approved' || d.ok === 'rejected');
+    const owner = p.k === 'I' ? (roles || {})[p.d.uid] : null, ownerRole = owner ? owner.role : '', adminDecides = !limited && (d.ok === 'approved' || d.ok === 'rejected');
     const sameLines = before && JSON.stringify(before.items) === JSON.stringify(d.items) && before.cur === d.cur && before.rate === d.rate;
-    if (p.k === 'I' && (limited || (ownerRole && ownerRole !== 'admin')) && !adminDecides && !sameLines && !pricesOk_(d, out, index, p.id)) { refused.push(p.id); return; }
+    if (p.k === 'I' && (limited || (ownerRole && ownerRole !== 'admin')) && !adminDecides && !sameLines && !pricesOk_(d, out, index, p.id, owner ? owner.off : 0)) { refused.push(p.id); return; }
     if (p.k === 'I' && d.type === 'invoice' && d.ok !== 'waiting' && dupNumber_(d, out, p.id)) { refused.push(p.id); return; } // one invoice per number
     if (p.k === 'I' && limited && d.type === 'invoice' && d.ok !== 'waiting' && !(before && before.no === d.no) && !issued_(d.no, user.id)) { refused.push(p.id); return; } // a number the sheet gave her
     if (p.k === 'D' && limited && !before && !deliveryOk_(d, now)) { refused.push(p.id); return; } // dated now-ish; a receipt within its bounds
@@ -514,7 +518,8 @@ function merge_(rows, push, since, user, uploads, codeOnly, roles) {
 /* ---------- logins ---------- */
 const USERS_TAB = '_users';
 const SESSIONS_TAB = '_sessions';
-const USER_COLS = ['id', 'username', 'name', 'role', 'salt', 'hash', 'active', 'fails', 'lockUntil', 'createdAt', 'createdBy', 'lastLogin', 'sees'];
+const USER_COLS = ['id', 'username', 'name', 'role', 'salt', 'hash', 'active', 'fails', 'lockUntil', 'createdAt', 'createdBy', 'lastLogin', 'sees', 'off'];
+const MAX_OFF = 50; // the most below the list price an admin can allow an office manager, %
 const SESSION_COLS = ['token', 'uid', 'createdAt', 'seen', 'device'];
 const ROLES = ['admin', 'manager', 'store']; // admin = everything · manager = staff, her own payments (and what she is given), asks for edits · store = own entries
 const PW_MIN = 8;
@@ -860,7 +865,8 @@ function saveUser_(me, input) {
   if (input.role !== undefined) u.role = String(input.role);
   if (input.active !== undefined) u.active = !!input.active;
   if (input.sees !== undefined) u.sees = cleanSees_(input.sees);
-  if (u.role !== 'manager') u.sees = null; // only an office manager is given more to see
+  if (input.off !== undefined) u.off = num_(input.off) && input.off > 0 ? Math.min(MAX_OFF, Math.round(input.off * 100) / 100) : 0;
+  if (u.role !== 'manager') { u.sees = null; u.off = 0; } // only an office manager is given more to see, or a discount to give
   const pw = input.password === undefined || input.password === '' ? null : String(input.password);
   if (!old && pw === null) return { ok: false, error: 'Give the new login a password.' };
   if (!/^[a-z0-9._-]{2,30}$/.test(u.username)) return { ok: false, error: 'Username: 2 to 30 letters or numbers, no spaces.' };
@@ -874,7 +880,7 @@ function saveUser_(me, input) {
   saveUsers_(old ? list.map(x => (x.id === u.id ? u : x)) : list.concat([u]));
   // a new password, a new role, a change in what she may see or a disabled login: signed out everywhere, so the phone drops what it
   // held and reloads what it may see
-  if (old && (pw !== null || !u.active || u.role !== old.role || JSON.stringify(u.sees || null) !== JSON.stringify(old.sees || null))) endSessions_(u.id, '', false);
+  if (old && (pw !== null || !u.active || u.role !== old.role || JSON.stringify(u.sees || null) !== JSON.stringify(old.sees || null) || (u.off || 0) !== (old.off || 0))) endSessions_(u.id, '', false);
   return { ok: true, users: users_().map(public_) };
 }
 
@@ -929,10 +935,11 @@ function users_() {
     id: String(u.id), username: String(u.username), name: String(u.name), role: String(u.role), salt: String(u.salt), hash: String(u.hash),
     active: String(u.active) === 'true', fails: Number(u.fails) || 0, lockUntil: Number(u.lockUntil) || 0, lastLogin: Number(u.lastLogin) || 0,
     sees: String(u.role) === 'manager' ? seesOf_(u.sees) : null,
+    off: String(u.role) === 'manager' && Number(u.off) > 0 ? Math.min(MAX_OFF, Number(u.off)) : 0,
   }));
 }
 const saveUsers_ = list => saveRows_(USERS_TAB, USER_COLS, list.map(u => Object.assign({}, u, { active: u.active ? 'true' : 'false', sees: u.sees ? JSON.stringify(u.sees) : '' })));
-const public_ = u => ({ id: u.id, username: u.username, name: u.name, role: u.role, active: u.active, lastLogin: u.lastLogin || 0, sees: u.sees || null });
+const public_ = u => ({ id: u.id, username: u.username, name: u.name, role: u.role, active: u.active, lastLogin: u.lastLogin || 0, sees: u.sees || null, off: u.off || 0 });
 const cleanUsername_ = s => String(s || '').trim().toLowerCase();
 
 // small hidden tables: a header row, then one object per row; stored as plain text so nothing is reformatted

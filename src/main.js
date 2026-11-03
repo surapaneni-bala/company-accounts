@@ -109,6 +109,10 @@ const ACTIONS = {
   deleteDelivery: b => deleteDelivery(b.dataset.id),
   addGeo: b => addGeo(b),
   approvePrice: b => approvePrice(b.dataset.id),
+  prices: () => pricesSheet(),
+  setPrice: b => setPrice(b.dataset.id, b.dataset.price, false, b.dataset.back),
+  setAllPrices: () => setPrice('', 0, true),
+  useSuggest: b => { const i = b.closest('form').elements.price; i.value = b.dataset.price; i.focus(); },
   refusePrice: b => refusePrice(b.dataset.id),
   repayForm: b => repayForm(b.dataset.id),
   editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
@@ -303,11 +307,10 @@ document.addEventListener('change', e => {
   if (t.name === 'cur' && t.form && t.form.dataset.form === 'invoice') $$('.iline', t.form).forEach(r => pickStockLine(r, false));
   if (t.form && t.form.dataset.form === 'receive') refreshReceive(t.form);
   if (t.form && t.form.dataset.form === 'stockOut') refreshOut(t.form);
-  if (t.name === 'fixed' && t.form && t.form.dataset.form === 'item') $('.fixed-price', t.form).hidden = !t.checked;
   if (t.name === 'how' && t.form && t.form.dataset.form === 'delivery') refreshDelivery(t.form);
   if (t.name === 'sigby' && t.form && t.form.dataset.form === 'dnReceipt') refreshDnReceipt(t.form);
   if (t.form && t.form.dataset.form === 'stockMonth') stockReport(t.value);
-  if (t.name === 'role' && t.form && t.form.dataset.form === 'user') $('.sees', t.form).hidden = t.value !== 'manager';
+  if (t.name === 'role' && t.form && t.form.dataset.form === 'user') { $('.sees', t.form).hidden = t.value !== 'manager'; $('.off-fld', t.form).hidden = t.value !== 'manager'; }
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'kind' && t.form && t.form.dataset.form === 'doc') refreshDocKind(t.form);
   if (t.name === 'periods' && t.form && t.form.dataset.form === 'expense') refreshPeriods(t.form);
