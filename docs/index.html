@@ -717,7 +717,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '52a9985953'; // filled in by tools/build.js
+const APP_VERSION = '4adb2c2d69'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -996,6 +996,7 @@ function render() {
   $('#coName').innerHTML = tab === 'menu' || !can('staff') ? `<img class="co-logo" src="logo-wide.png" alt="${esc(S.company)}">` : ({ staff: 'Employees', hist: 'History', proj: 'Projects', sheet: 'Google Sheet', stock: 'Warehouse' })[tab] || 'Accounts';
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
+  noteLaunch(); // which app file opened the app, a tapped notification (before drawing: the banners depend on it)
   const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were
   main.innerHTML = { menu: viewMenu, home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet, stock: viewStock }[tab]();
   if (y) scrollTo(0, y);
@@ -1052,7 +1053,7 @@ function viewMenu() {
   const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const who = signedIn() ? session.user.name.split(' ')[0] : '';
   const staffWaiting = waiting().filter(c => c.kind === 'W').length;
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${notifyBanner()}${lostBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${apkBanner()}${notifyBanner()}${lostBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
     <section class="launch">
       <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
       <div class="apps">
@@ -1087,7 +1088,7 @@ function viewHome() {
   const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${notifyBanner()}${approvalsBanner()}${brandBanner()}${lostBanner()}${doubleBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${apkBanner()}${notifyBanner()}${approvalsBanner()}${brandBanner()}${lostBanner()}${doubleBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? `${signedIn() && session.user.sees ? 'The expenses you entered, and those an admin lets you see.' : 'Your expenses — only the ones you entered.'} The balances are kept by the admins.` : 'Your expenses — only you and the admins see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
@@ -1207,6 +1208,7 @@ function viewSheet() {
         <div class="setrow" ${can('settings') && signedIn() ? '' : 'hidden'}><span>My signature<br><span class="muted">On this phone only — for "Approved by", digitally signed</span></span><button class="btn small ghost" data-act="mySig">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span class="brandthumb" data-brand="stamp"></span><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : '<b class="out-c">Not set — papers print without it</b>'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Company bank details<br><span class="muted">${live(S.banks).length ? `${live(S.banks).length} account${live(S.banks).length === 1 ? '' : 's'} — for clients to pay into` : '<b class="out-c">None yet — add each account once</b>'}</span></span><button class="btn small ghost" data-act="banks">Open</button></div>
+        <div class="setrow" ${can('settings') && S.link && signedIn() ? '' : 'hidden'}><span>Phone notifications<br><span class="muted">${S.link && S.link.push ? 'On — questions, approvals and alerts reach phones' : '<b class="out-c">Not set up — they only show inside the app</b>'}</span></span><button class="btn small ghost" data-act="pushSheet">${S.link && S.link.push ? 'Change' : 'Set up'} 🔒</button></div>
         <div class="setrow" ${can('settings') && S.link ? '' : 'hidden'}><span>Morning email<br><span class="muted">Payments due and documents expiring, every morning</span></span><button class="btn small ghost" data-act="alerts">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span class="brandthumb" data-brand="letterhead"></span><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : '<b class="out-c">Not set — papers get a plain heading</b>'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>
@@ -3419,11 +3421,11 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 24; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 25; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // What an older script still keeps on the phones: the version that first stores it. From NEEDED_SCRIPT on, everything goes
 // up and a newer script only improves things — said quietly, never as a warning (owner, 23 Oct 2026: the message showed
 // "needed" while everything worked).
-const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [24, 'questions reach your staff and theirs reach you']];
+const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [24, 'questions reach your staff and theirs reach you'], [25, 'notifications reach phones']];
 const NEEDED_SCRIPT = 23, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines'], [22, 'what you let an office manager see'], [23, 'the warehouse — stock, goods received, goods out and delivery notes']];
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
@@ -3623,7 +3625,7 @@ async function syncNow() {
     const accepted = new Set(res.kinds || OLD_SERVER_KINDS), notAllowed = new Set(res.refused || []);
     const refused = new Set([...push.filter(p => !accepted.has(p.k)).map(p => p.id), ...notAllowed]);
     const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link;
-    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins), ...(res.rate > 0 ? { rate: res.rate } : {}) }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
+    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins), ...(res.rate > 0 ? { rate: res.rate } : {}), push: res.push || null }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
     S = { ...S, base: Object.fromEntries(Object.entries(S.base || {}).filter(([id]) => S.dirty.includes(id))) }; // sent: the next edit starts from the new copy
     // entries an office manager may no longer see (moved to another project or place): her old copies go, unless changed here
     const forget = new Set((res.forget || []).filter(id => !S.dirty.includes(id)));
@@ -8216,6 +8218,7 @@ function paintBell() {
   chip.hidden = false;
   chip.innerHTML = `🔔${n ? `<b>${n > 99 ? '99+' : n}</b>` : ''}`;
   chip.setAttribute('aria-label', n ? `Notifications: ${n} need you` : 'Notifications');
+  if (S.link && S.link.push && notifyState() === 'granted') pushRegister(); // at most once a week, quietly
   try { if (n && navigator.setAppBadge) navigator.setAppBadge(n).catch(() => {}); else if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {}); } catch (e) { /* a number on the icon is a nicety */ }
 }
 const noticeRow = n => `<div class="nrow ${n.how}"><button class="nmain" data-act="${n.act}" ${Object.entries(n.data).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ')}><span class="nic">${n.icon}</span><span>${esc(n.text)}</span></button>
@@ -8240,16 +8243,17 @@ function bellSheet() {
    phone notifications reach them once they are switched on for the company. Blocked: only the phone's settings can undo it. */
 const notifyState = () => (typeof Notification === 'undefined' ? 'none' : Notification.permission); // none · default · granted · denied
 function notifyBanner() {
-  if (!signedIn() || notifyState() !== 'default' || ((S.notifyAsk || {})[myUid()] || '') >= today()) return '';
+  if (!signedIn() || S.apk === 1 || notifyState() !== 'default' || ((S.notifyAsk || {})[myUid()] || '') >= today()) return ''; // the first Android app file: the download banner instead
   return `<div class="banner new"><span>🔔 <b>Turn on notifications</b> so questions, approvals and alerts reach you on this phone.</span><span class="two-btn"><button class="btn small" data-act="notifyOn">Turn on</button><button class="btn small ghost" data-act="notifyLater">Not now</button></span></div>`;
 }
 async function notifyOn() {
   try { await Notification.requestPermission(); } catch (e) { /* an old phone: nothing to ask */ }
+  if (notifyState() === 'granted') await pushRegister(true);
   toast(notifyState() === 'granted' ? 'Notifications are on ✓' : notifyState() === 'denied' ? 'Notifications are off. To turn them on later, allow them for this app in the phone’s settings.' : 'Not turned on');
   render();
 }
 function notifyLater() { update({ notifyAsk: perUser(S.notifyAsk, plusDays(today(), SNOOZE_DAYS)) }); render(); }
-const notifyLine = () => ({ granted: '🔔 Notifications are on for this phone.', denied: '🔕 Notifications are blocked on this phone — allow them for this app in the phone’s settings.', none: '' }[notifyState()]
+const notifyLine = () => ({ granted: `🔔 Notifications are on for this phone.${pushErr ? ` <b class="out-c">It could not register: ${esc(pushErr)}</b>` : ''}${S.link && S.link.push ? ' <button class="btn small ghost" data-act="pushTest">Send a test</button>' : ''}`, denied: '🔕 Notifications are blocked on this phone — allow them for this app in the phone’s settings.', none: '' }[notifyState()]
   ?? '<button class="btn small" data-act="notifyOn">🔔 Turn on notifications for this phone</button>');
 function snooze(key) { update({ snooze: { ...Object.fromEntries(Object.entries(S.snooze || {}).filter(([, d]) => d >= today())), [key]: plusDays(today(), SNOOZE_DAYS) } }); bellSheet(); }
 function unsnooze() { update({ snooze: {} }); bellSheet(); }
@@ -8357,6 +8361,91 @@ function messagesSheet() {
   comeBack(messagesSheet);
 }
 
+/* ---------- phone notifications (owner, 3 Nov 2026): this phone registers with Firebase so the sheet can reach it ---------- */
+// Once an admin has set it up (Settings → Phone notifications), the sheet gives signed-in phones the Firebase project's public
+// web settings and Web Push key (S.link.push). A phone that allowed notifications loads Firebase's messaging library (only then,
+// only online), gets its token and gives it to the sheet — again once a week, so the sheet knows the phone is still in use.
+// The private key that sends them stays in the sheet. Tapping a notification opens the 🔔.
+const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
+const launch = { bell: new URLSearchParams(location.search).has('bell'), apk: new URLSearchParams(location.search).get('apk'), fromApp: document.referrer.startsWith('android-app://com.bepl.brookfield') };
+let pushBusy = false, pushErr = '', launchSeen = false;
+const loadScript = src => new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('no internet to load the notification library')); document.head.appendChild(s); });
+const deviceName = () => (/iPhone|iPad/.test(navigator.userAgent) ? 'iPhone' : /Android/.test(navigator.userAgent) ? (S.apk ? 'Android app' : 'Android') : 'Computer');
+async function pushRegister(force) {
+  const p = S.link && S.link.push, uid = myUid(), kept = (S.pushReg || {})[uid];
+  if (!p || !uid || pushBusy || notifyState() !== 'granted' || !('serviceWorker' in navigator) || !navigator.onLine) return false;
+  if (!force && kept && kept.project === p.web.projectId && kept.at >= plusDays(today(), -7)) return true;
+  pushBusy = true;
+  try {
+    if (!window.firebase || !firebase.messaging) { await loadScript(`${FIREBASE_SDK}firebase-app-compat.js`); await loadScript(`${FIREBASE_SDK}firebase-messaging-compat.js`); }
+    const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(p.web);
+    const token = await app.messaging().getToken({ vapidKey: p.vapid, serviceWorkerRegistration: await navigator.serviceWorker.ready });
+    if (!token) throw new Error('Firebase gave no token');
+    const res = await callServer(S.link, { op: 'pushToken', fcm: token, device: deviceName() });
+    if (!res.ok) throw new Error(res.error || 'the sheet did not take it');
+    update({ pushReg: perUser(S.pushReg, { project: p.web.projectId, at: today() }) });
+    pushErr = '';
+    return true;
+  } catch (e) {
+    pushErr = e.message || String(e); // shown in the 🔔 and in Settings, never lost in silence
+    return false;
+  } finally { pushBusy = false; }
+}
+async function pushTest() {
+  if (!await pushRegister(true)) return alert(`This phone could not register for notifications${pushErr ? `: ${pushErr}` : ''}.`);
+  try { const res = await callServer(S.link, { op: 'pushTest' }); toast(res.ok ? 'Test sent ✓ It arrives in a few seconds' : res.error); } catch (e) { alert(e.offline ? 'No internet.' : e.message); }
+}
+// a tapped notification: the 🔔, on a phone where the app was already open or freshly opened
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.bell && signedIn()) bellSheet(); });
+// on the first drawing after the app opened: which Android app file opened it (S.apk: 1 = the first, made before notifications;
+// 2 = the new one, which opens at /?apk=2), and the 🔔 when a notification was tapped (/?bell=1)
+function noteLaunch() {
+  if (launchSeen) return;
+  launchSeen = true;
+  if (launch.apk === '2' && S.apk !== 2) update({ apk: 2 });
+  else if (launch.fromApp && !launch.apk && !S.apk) update({ apk: 1 });
+  if (launch.bell || launch.apk) history.replaceState(null, '', location.pathname);
+  if (launch.bell && signedIn()) setTimeout(bellSheet, 300);
+}
+
+/* the admin's set-up: the three things from the Firebase console, checked by the sheet with Google before they are kept */
+async function pushSheet() {
+  if (!await unlock('Enter the password to set up phone notifications.')) return;
+  const p = S.link && S.link.push, old = (S.link.v || 2) < 25;
+  openSheet(`${head('Phone notifications', '', p ? `On · Firebase project ${p.web.projectId}` : 'Not set up yet')}
+    ${old ? `<p class="note">First update the Google Sheet script to version 25 (Sheet tab → Show me how), then come back.</p>` : ''}
+    ${p ? `<p class="muted">✓ Questions, approvals and alerts reach the phones of everyone who allowed notifications. Change the set-up below only if you made a new Firebase project.</p><button class="btn ghost" data-act="pushTest">📲 Send a test to this phone</button>` : ''}
+    <form data-form="pushSetup" style="margin-top:14px">
+      <label class="fld"><span>1. The firebaseConfig <em>(Firebase → Project settings → General → Your apps)</em></span><textarea name="cfg" rows="5" required placeholder="const firebaseConfig = { apiKey: &quot;…&quot;, … };" autocomplete="off" spellcheck="false"></textarea></label>
+      <label class="fld"><span>2. The Web Push key <em>(Cloud Messaging → Web Push certificates)</em></span><input name="vapid" required autocomplete="off" spellcheck="false" placeholder="B…"></label>
+      <label class="fld"><span>3. The key file <em>(Service accounts → Generate new private key — the .json file)</em></span><input type="file" name="key" accept=".json,application/json" required></label>
+      <p class="hint">The key file goes only to your Google Sheet and stays there. Once it says it is on, delete the file from your computer.</p>
+      <p class="err"></p>
+      <button class="btn primary" ${old ? 'disabled' : ''}>Check and switch on</button>
+    </form>`);
+}
+async function savePushSetup(f) {
+  const web = Object.fromEntries([...f.elements.cfg.value.matchAll(/(\w+)\s*:\s*["']([^"']+)["']/g)].map(m => [m[1], m[2]]));
+  const file = f.elements.key.files[0];
+  if (!web.apiKey || !web.projectId || !web.appId || !web.messagingSenderId) return formErr(f, 'cfg', 'Paste everything from "const firebaseConfig" to the closing };');
+  if (!file) return formErr(f, 'key', 'Choose the .json key file you downloaded.');
+  if (file.size > 20000) return formErr(f, 'key', 'That is not the key file (it is too big).');
+  const btn = $('button.primary', f);
+  btn.disabled = true; btn.textContent = 'Checking with Google…';
+  try {
+    const res = await callServer(S.link, { op: 'pushSetup', web, vapid: f.elements.vapid.value.trim(), key: await file.text() });
+    if (!res.ok) return formErr(f, null, res.error);
+    update({ link: { ...S.link, push: res.push } });
+    toast('Phone notifications are on ✓');
+    if (notifyState() === 'default') await notifyOn(); else await pushRegister(true);
+    pushSheet();
+  } catch (e) { formErr(f, null, e.offline ? 'No internet. Setting this up needs internet.' : e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Check and switch on'; }
+}
+
+// phones with the first Android app file are told to download the new one
+const apkBanner = () => (S.apk === 1 ? `<div class="banner new"><span>📦 <b>A new Brookfield app is ready.</b> Download it and tap <b>Update</b> — nothing is lost, and notifications can then reach this phone.</span><a class="btn small" href="/brookfield.apk" download="Brookfield.apk">Download</a></div>` : '');
+
 /* ---------- events ---------- */
 const ACTIONS = {
   tab: b => { tab = b.dataset.tab; render(); scrollTo(0, 0); },
@@ -8409,7 +8498,7 @@ const ACTIONS = {
   account: () => accountSheet(),
   signOut: () => signOut(),
   approvals: () => approvalsSheet(),
-  bell: () => bellSheet(), notifyOn: () => notifyOn(), notifyLater: () => notifyLater(), snooze: b => snooze(b.dataset.key), unsnooze: () => unsnooze(), review: () => reviewSheet(), reviewDone: () => reviewDone(),
+  bell: () => bellSheet(), pushSheet: () => pushSheet(), pushTest: () => pushTest(), notifyOn: () => notifyOn(), notifyLater: () => notifyLater(), snooze: b => snooze(b.dataset.key), unsnooze: () => unsnooze(), review: () => reviewSheet(), reviewDone: () => reviewDone(),
   ask: b => askForm(b.dataset.kind, b.dataset.id), askNew: () => askForm('', ''), thread: b => threadSheet(b.dataset.id), qDone: b => qDone(b.dataset.id), messages: () => messagesSheet(),
   moveApp: () => moveApp(),
   decide: b => decide(b.dataset.id, !!b.dataset.ok),
@@ -8593,7 +8682,7 @@ const ACTIONS = {
   notRegular: b => notRegular(b.dataset.key),
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
-const FORMS = { ask: saveAsk, reply: saveReply, expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
+const FORMS = { pushSetup: savePushSetup, ask: saveAsk, reply: saveReply, expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
   signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, repay: saveRepay, item: saveItem, receive: saveReceive, stockOut: saveStockOut, count: saveCount, delivery: saveDelivery, dnReceipt: saveDnReceipt,
   stockFilter: filterStock, payFind: f => { $('#payList').innerHTML = payRows(f.dataset.id, f.dataset.w, f.elements.q.value); }, shopFind: f => { shopQ = f.elements.q.value; $('#shopList').innerHTML = shopRows(); }, stockMonth: f => stockReport(f.elements.month.value), left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
   idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList, subIdea: saveSubIdea, budgets: saveBudgets, exchange: saveExchange };

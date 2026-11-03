@@ -161,7 +161,7 @@ const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const MAX_BIG_RECORD = 40000; // a stock count, an invoice or a delivery note may list many items (review, 2 Nov 2026)
 const LOCK_WAIT_MS = 25000;
-const VERSION = 24; // shown when the web app link is opened in a browser
+const VERSION = 25; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -263,6 +263,7 @@ function sync_(req) {
     if (PropertiesService.getScriptProperties().getProperty('FILES_LAYOUT') !== LAYOUT) organizeAll_(result.rows);
     else organize_(result.rows, result.touched, result.trash);
   } catch (err) { console.error('Filing in Drive: ' + err.message); }
+  try { if (result.changed) pushFor_(rows, result, user, roles); } catch (err) { console.error('Phone notifications: ' + err.message); } // never stops a sync
   if (!user && !users_().length) setupCode_(); // ready for the owner, inside the sheet
   const threads = threadsFor_(result.rows, viewer);
   const pull = result.pull.map(r => view_(viewer, r, hidden, threads)).filter(r => r && !(codeOnly && (r.k === 'W' || r.k === 'F' || r.k === 'V')));
@@ -272,7 +273,7 @@ function sync_(req) {
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role !== 'admin' ? '' : ss.getUrl(), kinds: KINDS, // the sheet shows every balance
     pull: pull, refused: result.refused, older: (result.older || []).filter(id => pull.some(r => r.id === id)), stamps: result.stamps || [], me: user ? public_(user) : null, forget: forget, rate: newestRate_(result.rows, null, roles),
-    logins: !!user || users_().length > 0, warning: warning,
+    logins: !!user || users_().length > 0, warning: warning, push: user ? pushPublic_() : null,
   };
 }
 
@@ -570,6 +571,137 @@ function merge_(rows, push, since, user, uploads, codeOnly, roles) {
   return { rows: out, seq: seq, changed: changed, pull: pull, refused: refused, touched: touched, trash: trash, older: behind.map(i => out[i][0]), stamps: touched.map(id => [id, Number(out[index[id]][2])]) };
 }
 
+/* ---------- phone notifications (owner, 3 Nov 2026): Firebase Cloud Messaging, sent by this script ---------- */
+// An admin pastes the Firebase project's web settings and Web Push key and picks its service-account key file in the app (Settings
+// → Phone notifications); they are kept in this script's properties, never in the app's public code. Phones that allow
+// notifications register (tab _push). Only what needs someone is sent, and only to them: a question or an answer; changes and
+// prices waiting for approval (admins); a decision on what they asked; a delivery received short or goods written off by staff
+// (admins); and at 7 one line for admins saying how many things the morning email lists. Never 9 pm – 7 am (the 🔔 and the
+// morning email have it), at most 6 a day a person, one kind replacing the last on the phone (tag); the lock screen says what
+// kind of thing, never amounts or names. Run allowPush once in the editor so the script may reach Google's notification service.
+const PUSH_TAB = '_push', PUSH_COLS = ['token', 'uid', 'device', 'createdAt', 'seen'];
+const PUSH_QUIET = [21, 7], PUSH_DAY_MAX = 6, PUSH_PER_USER = 10;
+const PUSH_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
+const KIND_WORD_ = { E: 'a payment', R: 'money received', I: 'an invoice', Y: 'goods received', O: 'goods out', D: 'a delivery note', W: 'an employee' };
+function allowPush() { // run once from the editor: Google asks the owner to allow "connect to an external service"
+  UrlFetchApp.fetch('https://oauth2.googleapis.com/token', { method: 'post', payload: {}, muteHttpExceptions: true });
+  return 'Phone notifications may now be sent. Set them up in the app: Settings → Phone notifications.';
+}
+const pushPublic_ = () => { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('PUSH_WEB') || 'null'); } catch (err) { return null; } };
+// an access token for Firebase from the service account: a JWT signed with its key, swapped at Google (kept 50 minutes)
+function pushAccess_(key) {
+  const cache = CacheService.getScriptCache(), hit = key ? null : cache.get('PUSH_AT');
+  if (hit) return hit;
+  const k = key || JSON.parse(PropertiesService.getScriptProperties().getProperty('PUSH_KEY'));
+  const now = Math.floor(Date.now() / 1000), b64 = x => Utilities.base64EncodeWebSafe(x).replace(/=+$/, '');
+  const input = b64(JSON.stringify({ alg: 'RS256', typ: 'JWT' })) + '.' + b64(JSON.stringify({ iss: k.client_email, scope: PUSH_SCOPE, aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 }));
+  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', { method: 'post', muteHttpExceptions: true,
+    payload: { grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: input + '.' + b64(Utilities.computeRsaSha256Signature(input, k.private_key)) } });
+  let body = {};
+  try { body = JSON.parse(res.getContentText() || '{}'); } catch (err) { /* below */ }
+  if (res.getResponseCode() !== 200 || !body.access_token) throw new Error(body.error_description || body.error || 'Google answered ' + res.getResponseCode());
+  if (!key) cache.put('PUSH_AT', body.access_token, 3000);
+  return body.access_token;
+}
+// the admin's set-up: checked with Google before it is kept
+function pushSetup_(req) {
+  const w = isObj_(req.web) ? req.web : {}, vapid = String(req.vapid || '').trim();
+  let k = null;
+  try { k = JSON.parse(String(req.key || '')); } catch (err) { return { ok: false, error: 'The key file is not the one Firebase downloads (a .json file).' }; }
+  const web = { apiKey: String(w.apiKey || ''), authDomain: String(w.authDomain || ''), projectId: String(w.projectId || ''), storageBucket: String(w.storageBucket || ''), messagingSenderId: String(w.messagingSenderId || ''), appId: String(w.appId || '') };
+  if (!/^[A-Za-z0-9_-]{20,60}$/.test(web.apiKey) || !/^[a-z0-9-]{4,40}$/.test(web.projectId) || !/^\d{5,20}$/.test(web.messagingSenderId) || !/^[0-9]+:[0-9]+:web:[0-9a-f]+$/.test(web.appId)) return { ok: false, error: 'The firebaseConfig is not complete: paste everything from "const firebaseConfig" to the closing };' };
+  if (!/^[A-Za-z0-9_-]{60,120}$/.test(vapid)) return { ok: false, error: 'The Web Push key is not right: copy the whole key from Cloud Messaging → Web Push certificates.' };
+  if (!k || k.type !== 'service_account' || !/\.iam\.gserviceaccount\.com$/.test(String(k.client_email)) || !/BEGIN PRIVATE KEY/.test(String(k.private_key))) return { ok: false, error: 'The key file is not a service-account key: download it from Project settings → Service accounts → Generate new private key.' };
+  if (k.project_id !== web.projectId) return { ok: false, error: 'The key file is from another Firebase project (' + k.project_id + ') than the firebaseConfig (' + web.projectId + ').' };
+  const key = { client_email: k.client_email, private_key: k.private_key, project_id: k.project_id };
+  try { pushAccess_(key); } catch (err) { return { ok: false, error: /external|UrlFetch|permission/i.test(err.message) ? 'The sheet may not send notifications yet: in Apps Script, choose allowPush and press Run once, then try again.' : 'Google did not accept the key: ' + err.message }; }
+  const props = PropertiesService.getScriptProperties();
+  props.setProperties({ PUSH_WEB: JSON.stringify({ web: web, vapid: vapid }), PUSH_KEY: JSON.stringify(key) });
+  CacheService.getScriptCache().remove('PUSH_AT');
+  return { ok: true, push: pushPublic_() };
+}
+// a phone that allowed notifications: its token, for the login signed in on it (a phone used by someone else moves to them)
+function pushTokenSave_(me, req) {
+  const token = String(req.fcm || ''), device = String(req.device || '').slice(0, 60); // req.token is the sign-in
+  if (!/^[A-Za-z0-9_:-]{20,4096}$/.test(token)) return { ok: false, error: 'Bad request' };
+  const now = Date.now(), rows = rowsOf_(PUSH_TAB, PUSH_COLS).filter(r => String(r.token) !== token);
+  const mine = rows.filter(r => String(r.uid) === me.id).sort((a, b) => Number(b.seen) - Number(a.seen)).slice(0, PUSH_PER_USER - 1), others = rows.filter(r => String(r.uid) !== me.id);
+  saveRows_(PUSH_TAB, PUSH_COLS, others.concat(mine, [{ token: token, uid: me.id, device: device, createdAt: now, seen: now }]));
+  return { ok: true };
+}
+function pushTest_(me) {
+  const n = push_([me.id], { title: 'Brookfield', body: 'Phone notifications work on this phone ✓', tag: 'test' }, true);
+  return n ? { ok: true, sent: n } : { ok: false, error: pushPublic_() ? 'No phone of yours is registered yet: allow notifications on this phone, wait a few seconds, and try again.' : 'Phone notifications are not set up yet.' };
+}
+// one notification to each person (by login id), within the rules; force (a test) skips the hours and the daily limit
+function push_(uids, n, force) {
+  const props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('PUSH_KEY') || !uids.length) return 0;
+  const hour = Number(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'H'));
+  if (!force && (hour >= PUSH_QUIET[0] || hour < PUSH_QUIET[1])) return 0;
+  let count = {};
+  try { count = JSON.parse(props.getProperty('PUSH_COUNT') || '{}'); } catch (err) { /* a new day */ }
+  if (count.day !== today_()) count = { day: today_() };
+  const active = users_().filter(u => u.active).map(u => u.id); // a closed login gets nothing, even on a phone it registered
+  const want = uids.filter((u, i) => uids.indexOf(u) === i && active.indexOf(u) >= 0 && (force || (count[u] || 0) < PUSH_DAY_MAX));
+  const rows = rowsOf_(PUSH_TAB, PUSH_COLS), targets = rows.filter(r => want.indexOf(String(r.uid)) >= 0);
+  if (!targets.length) return 0;
+  const project = JSON.parse(props.getProperty('PUSH_KEY')).project_id, access = pushAccess_();
+  const res = UrlFetchApp.fetchAll(targets.map(r => ({ url: 'https://fcm.googleapis.com/v1/projects/' + project + '/messages:send', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + access },
+    payload: JSON.stringify({ message: { token: String(r.token), data: { title: n.title, body: n.body, tag: n.tag, url: n.url || '/?bell=1' }, webpush: { headers: { TTL: '43200', Urgency: 'high' } } } }) })));
+  let sent = 0;
+  const gone = [];
+  res.forEach((x, i) => {
+    const code = x.getResponseCode();
+    if (code === 200) sent += 1;
+    else if (code === 404 || (code === 400 && /registration token|UNREGISTERED/i.test(x.getContentText()))) gone.push(String(targets[i].token)); // a phone that left
+    else console.error('Notification not sent (' + code + '): ' + x.getContentText().slice(0, 300));
+  });
+  if (gone.length) saveRows_(PUSH_TAB, PUSH_COLS, rows.filter(r => gone.indexOf(String(r.token)) < 0));
+  if (!force) { want.forEach(u => { count[u] = (count[u] || 0) + 1; }); props.setProperty('PUSH_COUNT', JSON.stringify(count)); }
+  return sent;
+}
+// what a sync changed that someone must hear about now (before = the rows as they were, for what an edit changed)
+function pushFor_(before, result, user, roles) {
+  if (!PropertiesService.getScriptProperties().getProperty('PUSH_KEY')) return;
+  const was = Object.create(null), now = Object.create(null), sender = user ? user.id : '';
+  const ids = Object.create(null);
+  result.touched.forEach(id => { ids[id] = true; });
+  before.forEach(r => { if (ids[r[0]]) try { was[r[0]] = JSON.parse(r[4]); } catch (err) { /* new */ } });
+  result.rows.forEach(r => { if (ids[r[0]] && ['Q', 'C', 'I', 'D', 'O'].indexOf(r[1]) >= 0) try { now[r[0]] = { k: r[1], d: JSON.parse(r[4]) }; } catch (err) { /* skip */ } });
+  const admins = Object.keys(roles || {}).filter(id => roles[id].role === 'admin'), others = list => list.filter(u => u && u !== sender);
+  const waitingCount = () => result.rows.filter(r => (r[1] === 'C' || r[1] === 'I') && /"(status|ok)":"waiting"/.test(r[4]) && !/"deleted":true/.test(r[4])).length;
+  const send = [], add = (uids, title, body, tag) => { if (others(uids).length) send.push([others(uids), { title: title, body: body, tag: tag }]); };
+  let approvals = false;
+  Object.keys(now).forEach(id => {
+    const k = now[id].k, d = now[id].d, old = was[id] || null;
+    if (d.deleted) return;
+    const by = (user && user.id === d.uid ? user.name : d.by) || 'Someone'; // the login that sent it (an admin's record carries no stamp)
+    if (k === 'Q' && !old) {
+      if (d.re === undefined) add(d.to === 'admins' ? admins : [d.to], 'A question for you', by + ' asked you a question' + (d.about && KIND_WORD_[d.about.k] ? ' about ' + KIND_WORD_[d.about.k] : ''), 'q');
+      else {
+        const root = result.rows.filter(r => r[0] === d.re).map(r => JSON.parse(r[4]))[0];
+        if (!root) return;
+        const to = root.to === 'admins' ? (d.uid === root.uid ? admins : [root.uid]) : (d.uid === root.to ? [root.uid] : [root.to]);
+        add(to, d.state === 'done' ? 'Marked as sorted' : 'An answer', by + (d.state === 'done' ? ' marked your question as sorted' : ' answered'), 'q');
+      }
+    }
+    if ((k === 'C' && d.status === 'waiting' && !old) || (k === 'I' && d.ok === 'waiting' && (!old || old.ok !== 'waiting'))) approvals = true;
+    if (k === 'C' && old && old.status === 'waiting' && (d.status === 'approved' || d.status === 'rejected')) add([d.uid], d.status === 'approved' ? 'Your change was approved' : 'Your change was refused', 'Open Brookfield to see it.', 'decided');
+    if (k === 'I' && old && old.ok === 'waiting' && (d.ok === 'approved' || d.ok === 'rejected')) add([d.uid], d.ok === 'approved' ? 'Your price was approved' : 'Your price was refused', 'Open Brookfield to see it.', 'decided');
+    if (k === 'D' && d.status === 'done' && (!old || old.status !== 'done') && d.lines.some(l => d.recv.lines.filter(g => g.m === l.m).reduce((a, g) => a + g.qty, 0) < l.qty)) add(admins, 'A delivery was received short', d.no + ' was received with less than was sent.', 'stock');
+    if (k === 'O' && !old && user && user.role !== 'admin' && (d.kind !== 'count' ? d.kind !== 'use' : d.lines.some(l => l.qty < 0))) add(admins, 'Goods written off', by + (d.kind === 'count' ? ' counted less than the books show' : d.kind === 'damage' ? ' recorded goods damaged or lost' : ' recorded goods returned'), 'stock');
+  });
+  if (approvals) { const n = waitingCount(); add(admins, 'Waiting for your approval', n + (n === 1 ? ' change or price is' : ' changes or prices are') + ' waiting for you.', 'approvals'); }
+  send.forEach(x => push_(x[0], x[1], false));
+}
+function morningPush_() {
+  if (!PropertiesService.getScriptProperties().getProperty('PUSH_KEY')) return;
+  const n = alertLines_(readAll_(syncTab_(SpreadsheetApp.getActive())).map(toRec_), today_()).length;
+  if (n) push_(users_().filter(u => u.role === 'admin').map(u => u.id), { title: 'Good morning', body: n + (n === 1 ? ' thing' : ' things') + ' to see to today — open Brookfield.', tag: 'morning' }, false);
+}
+
 /* ---------- logins ---------- */
 const USERS_TAB = '_users';
 const SESSIONS_TAB = '_sessions';
@@ -603,7 +735,10 @@ function account_(req) {
   if (!me) return { ok: false, error: SIGNED_OUT, code: 'LOGIN' };
   if (req.op === 'logout') { endSessions_('', sha_(String(req.token)), true); return { ok: true }; }
   if (req.op === 'password') return changePassword_(me, req);
+  if (req.op === 'pushToken') return pushTokenSave_(me, req);
+  if (req.op === 'pushTest') return pushTest_(me);
   if (me.role !== 'admin') return { ok: false, error: 'Only an admin can do this.' };
+  if (req.op === 'pushSetup') return pushSetup_(req);
   if (req.op === 'users') return { ok: true, users: users_().map(public_), required: required_() };
   if (req.op === 'saveUser') return saveUser_(me, req.user || {});
   if (req.op === 'require') {
@@ -1558,6 +1693,7 @@ function alertLines_(recs, t) {
 }
 function morningEmail(test) {
   if (test !== true) { try { tidySpares_(readAll_(syncTab_(SpreadsheetApp.getActive()))); } catch (err) { console.error('Tidying spare copies: ' + err.message); } } // the daily job
+  if (test !== true) { try { morningPush_(); } catch (err) { console.error('Morning notification: ' + err.message); } }
   const to = PropertiesService.getScriptProperties().getProperty('ALERT_EMAIL');
   if (!to) return 'No address: an admin sets it in the app (Settings → Morning email).';
   const recs = readAll_(syncTab_(SpreadsheetApp.getActive())).map(toRec_), lines = alertLines_(recs, today_());
