@@ -176,7 +176,9 @@ function invoiceForm(type, src, client, pre) {
       <p class="err"></p>
       <button class="btn in">Make the ${type === 'quote' ? 'quotation' : 'invoice'} (PDF)</button>
     </form>`);
-  refreshInvoice($('#sheet form'));
+  const f = $('#sheet form');
+  if (!can('edit') && S.link && S.link.rate > 0) { f.elements.rate.value = S.link.rate; f.elements.rate.readOnly = true; }
+  refreshInvoice(f);
   showMySigField();
 }
 // the lines typed, and which one is not complete; empty lines are skipped
@@ -224,11 +226,12 @@ async function saveInvoice(f) {
   const noPrice = stockLines.find(it => !(it.list > 0));
   if (noPrice) return formErr(f, null, `${itemOf(noPrice.m).name} has no selling price yet — an admin sets it in the Warehouse.`);
   const src = f.dataset.from && invOf(f.dataset.from), mine = signedIn() ? session.user.id : '';
-  const usedQuote = src && invs().some(x => x.from === src.id && !x.cancelled), approvedQuote = src && src.type === 'quote' && src.ok === 'approved' && src.uid === mine && src.cur === cur && !usedQuote ? src : null;
+  const usedQuote = src && invs().some(x => x.from === src.id && !x.cancelled && x.ok !== 'waiting' && x.ok !== 'rejected'), approvedQuote = src && src.type === 'quote' && src.ok === 'approved' && src.uid === mine && src.cur === cur && !usedQuote ? src : null;
   const quotedQty = m => (approvedQuote ? approvedQuote.items.filter(q => q.m === m).reduce((t, q) => t + q.qty, 0) : 0), soldQty = m => stockLines.filter(it => it.m === m).reduce((t, it) => t + it.qty, 0);
-  const offOk = it => belowList(it.price, it.list) <= myOff() + 1e-9 || (approvedQuote && soldQty(it.m) <= quotedQty(it.m) + 1e-9 && approvedQuote.items.some(q => q.m === it.m && it.price >= q.price - 1e-9));
+  const offOk = it => belowList(it.price, it.list) <= myOff() + 1e-9 || (approvedQuote && soldQty(it.m) <= quotedQty(it.m) + 1e-9 && approvedQuote.items.some(q => q.m === it.m) && it.price >= Math.max(...approvedQuote.items.filter(q => q.m === it.m).map(q => q.price)) - 1e-9);
   const typedLines = items.filter(it => !it.m), lowRate = !can('edit') && cur === 'SSP' && stockLines.length && S.link && S.link.rate > 0 && rate < S.link.rate * (1 - myOff() / 100) - 1e-9;
-  const needsApproval = !can('edit') && (stockLines.some(it => !offOk(it)) || typedLines.length > 0 || lowRate);
+  const noRate = !can('edit') && cur === 'SSP' && stockLines.length > 0 && !(S.link && S.link.rate > 0); // the sheet has told this phone no company rate yet
+  const needsApproval = !can('edit') && (stockLines.some(it => !offOk(it)) || typedLines.length > 0 || lowRate || noRate);
   if (type === 'invoice') {
     const b = book(), want = {};
     stockLines.forEach(it => { want[it.m] = (want[it.m] || 0) + it.qty; });
@@ -240,7 +243,7 @@ async function saveInvoice(f) {
     if (under && !confirm(`${itemOf(under.m).name} sells here for less than it cost (${usd4(b[under.m].avg)} landed). Make it anyway?`)) return;
   }
   const why = [...stockLines.filter(it => !offOk(it)).map(it => `${itemOf(it.m).name}: ${money(it.price, cur)} (list ${money(it.list, cur)}, ${plain(belowList(it.price, it.list))} % below)`),
-    ...typedLines.map(it => `"${it.t}" is typed, not from stock`), ...(lowRate ? [`The rate ${plain(rate)} is below the company's ${plain(S.link.rate)}`] : [])];
+    ...typedLines.map(it => `"${it.t}" is typed, not from stock`), ...(lowRate ? [`The rate ${plain(rate)} is below the company's ${plain(S.link.rate)}`] : []), ...(noRate ? ['No company SSP rate has reached this phone yet'] : [])];
   if (needsApproval && !confirm(`An admin must approve this first:\n${why.join('\n')}\n\nSend it to an admin? It is made only when they approve.`)) return;
   let no;
   $('.err', f).textContent = 'Making it…';

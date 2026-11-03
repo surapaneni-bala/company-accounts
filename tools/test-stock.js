@@ -84,6 +84,33 @@ assert.deepStrictEqual(sync(m.token, [low]).refused, ['I-AG1-0026']);
 assert.deepStrictEqual(sync(owner, [low]).refused, ['I-AG1-0026'], 'the same record sent by an admin: still hers, still checked');
 assert.deepStrictEqual(sync(owner, [{ ...low, d: { ...low.d, ok: 'approved', okBy: 'Owner' } }]).refused, [], 'an admin approving it is the admin\'s call');
 
+/* ---------- the second review's ways round it (3 Nov 2026), each refused ---------- */
+const withLines = (id, u, items, extra = {}) => ({ id, k: 'I', u, d: { id, type: 'invoice', no: post({ op: 'number', token: m.token }).no, client: 'K-AG1-0001', date: ago(4), cur: 'USD', items, tax: 0, uid: m.me.id, createdAt: ago(0) + 'T09:00:00', ...extra } });
+assert.deepStrictEqual(sync(m.token, [withLines('I-AG1-0040', 30, [{ t: 'Rebar', m: 'M-OW1-0002', qty: 1000, price: 0, dlv: true }]), withLines('I-AG1-0041', 30, [{ t: 'Rebar 12 mm', qty: 100, price: 1, dlv: true }]),
+  withLines('I-AG1-0042', 30, [{ t: 'Delivery', qty: 1, price: 5, dlv: true }, { t: 'Delivery again', qty: 1, price: 5, dlv: true }])]).refused.sort(), ['I-AG1-0040', 'I-AG1-0041', 'I-AG1-0042'],
+  'the delivery charge cannot carry stock, be 100 of anything, or come twice');
+assert.deepStrictEqual(sync(m.token, [withLines('I-AG1-0043', 30, [{ t: 'Rebar', m: 'M-OW1-0002', qty: 1, price: 13.5 }, { t: 'Delivery to site', qty: 1, price: 25, dlv: true }])]).refused, [], 'one delivery charge on a sale at the list price: taken');
+// her own expense cannot set the company's SSP rate
+const myE = { id: 'E-AG1-0100', k: 'E', u: 31, d: { id: 'E-AG1-0100', cur: 'SSP', amount: 1000, rate: 1, paidTo: 'Shop', reason: 'Tea', at: ago(0) + 'T08:00', uid: m.me.id, createdAt: ago(0) + 'T08:00:00' } };
+assert.deepStrictEqual(sync(m.token, [myE]).refused, []);
+res = sync(m.token, [withLines('I-AG1-0044', 31, [{ t: 'Rebar', m: 'M-OW1-0002', qty: 1, price: 13.5, list: 13.5 }], { cur: 'SSP', rate: 1 })]);
+assert.deepStrictEqual([res.refused, res.rate], [['I-AG1-0044'], 2500], 'an SSP rate in her own expense changes nothing: the sale at "1" is refused, and phones are told the admins\' 2,500');
+assert.deepStrictEqual(sync(m.token, [withLines('I-AG1-0045', 31, [{ t: 'Rebar', m: 'M-OW1-0002', qty: 1, price: Math.round(13.5 * 0.99 * 2475), list: 13.5 * 2475 }], { cur: 'SSP', rate: 2475 })]).refused, ['I-AG1-0045'],
+  'nor does a lower rate add to her 1 %: 1 % off at a 1 % lower rate is valued at the company\'s rate — 2 % below');
+// a delivery note only for a real sale, no more than it sold and other notes did not take
+const dnFor = (id, inv, qty, extra = {}) => ({ id, k: 'D', u: 32, d: { id, u: 32, no: 'DN-' + id.slice(2), date: ago(0), inv, to: 'X', how: 'collect', driver: 'Y', lines: [{ m: 'M-OW1-0002', qty }], status: 'out', uid: m.me.id, createdAt: ago(0) + 'T10:00:00', ...extra } });
+assert.deepStrictEqual(sync(m.token, [dnFor('D-AG1-0050', 'I-NOPE', 1), dnFor('D-AG1-0051', 'I-AG1-0043', 2), dnFor('D-AG1-0052', 'I-AG1-0002', 1), dnFor('D-AG1-0053', 'I-AG1-0007', 1)]).refused.sort(), ['D-AG1-0050', 'D-AG1-0051', 'D-AG1-0053'],
+  'not for an invoice that does not exist, not more than it sold (1), not one still waiting for its price; a real sale: yes');
+// an approved quotation with two prices for one item: its highest stands, not its cheapest for everything
+const q2 = { id: 'I-AG1-0060', k: 'I', u: 33, d: { id: 'I-AG1-0060', type: 'quote', no: 'QT-AG1-0060', client: 'K-AG1-0001', date: ago(1), cur: 'USD', items: [{ t: 'Rebar', m: 'M-OW1-0004', qty: 10, price: 30, list: 37.55 }, { t: 'Rebar', m: 'M-OW1-0004', qty: 10, price: 36, list: 37.55 }], tax: 0, ok: 'waiting', uid: m.me.id, createdAt: ago(1) + 'T10:00:00' } };
+sync(m.token, [q2]); sync(owner, [{ ...q2, u: 34, d: { ...q2.d, ok: 'approved', okBy: 'Owner' } }]);
+assert.deepStrictEqual(sync(m.token, [withLines('I-AG1-0061', 35, [{ t: 'Rebar', m: 'M-OW1-0004', qty: 20, price: 30, list: 37.55 }], { from: 'I-AG1-0060', ok: 'approved' })]).refused, ['I-AG1-0061'], 'not 20 at the cheaper quoted price');
+// a waiting invoice never carries (or holds) a number from the series
+assert.deepStrictEqual(sync(m.token, [withLines('I-AG1-0062', 35, [{ t: 'x', qty: 1, price: 1 }], { ok: 'waiting', no: 'INV-0900' })]).refused, ['I-AG1-0062'], 'a waiting invoice cannot take a number from the series');
+// her own client's note is hers
+sync(m.token, [{ id: 'K-AG1-0009', k: 'K', u: 36, d: { id: 'K-AG1-0009', name: 'Mine', note: 'call before 5pm', uid: m.me.id } }]);
+assert.strictEqual(sync(m.token).pull.find(p => p.id === 'K-AG1-0009').d.note, 'call before 5pm', 'the note on her own client');
+
 /* ---------- an admin approves (or refuses) the price; an approved quotation's price stands on its invoice ---------- */
 const waiting = sync(owner).pull.find(p => p.id === 'I-AG1-0007');
 assert.strictEqual(waiting.d.ok, 'waiting', 'the admin sees it waiting');
@@ -122,13 +149,13 @@ assert.deepStrictEqual([sync(m.token, [badRecv({ lines: [{ m: 'M-OW1-0002', qty:
 assert.deepStrictEqual(sync(m.token, [sent]).refused, [], 'only who received what is added');
 assert.deepStrictEqual(sync(m.token, [{ ...sent, u: 62, d: { ...sent.d, recv: { ...sent.d.recv, lines: [{ m: 'M-OW1-0002', qty: 100 }] } } }]).refused, ['D-AG1-0001'], 'and once received it stays as it was signed');
 assert.deepStrictEqual(sync(s.token, [dn('D-SK1-0001', 63, { uid: s.me.id })]).refused, ['D-SK1-0001'], 'a store keeper does not make them');
-const born = dn('D-AG1-0009', 64, { no: 'DN-AG1-0009', date: ago(1), status: 'done', recv: { name: 'Site', at: ago(0) + 'T09:00', lines: [{ m: 'M-OW1-0002', qty: 100 }] } });
+const born = dn('D-AG1-0009', 64, { no: 'DN-AG1-0009', date: ago(1), inv: 'I-AG1-0002', lines: [{ m: 'M-OW1-0002', qty: 5 }], status: 'done', recv: { name: 'Site', at: ago(0) + 'T09:00', lines: [{ m: 'M-OW1-0002', qty: 5 }] } });
 assert.deepStrictEqual([sync(m.token, [born]).refused, sync(m.token, [dn('D-AG1-0010', 64, { no: 'DN-AG1-0010', date: '2026-01-01' })]).refused], [[], ['D-AG1-0010']], 'made and received before the phone synced: taken at once; dated far back: refused');
 assert.ok(sync(m.token).pull.some(p => p.id === 'D-AG1-0001' && p.d.recv.name === 'Peter (site engineer)'), 'the office manager has them');
 
 /* ---------- the readable tabs (admins have the sheet): stock, every move, each import and its costs ---------- */
 const st = rowOf('Stock', 'M-OW1-0002'), st10 = rowOf('Stock', 'M-OW1-0001');
-assert.deepStrictEqual([st[5], st[6], st[7], st[10]], [470, 130, 340, 12.2716], '12 mm: 470 in, 100 + 10 + 10 sold and 10 at a price an admin approved, 340 on hand, at the landed cost');
+assert.deepStrictEqual([st[5], st[6], st[7], st[10]], [470, 131, 339, 12.2716], '12 mm: 470 in, 100 + 10 + 10 + 1 sold and 10 at a price an admin approved, 339 on hand, at the landed cost');
 assert.deepStrictEqual([st10[7], st10[9]], [227, ''], '10 mm: 280 − 3 counted short − 50 sold = 227; above its reorder level of 50');
 assert.ok(tab('Stock moves').some(r => r[3] === 'Used' && r[4] === '' && r[5] === 40 && r[6] === 752 && r[10] === 'Site foreman'), 'the 40 bars used on the project, as a move: 792 − 40 = 752 left, who took them');
 const lines = tab('Imports').filter(r => r[15] === 'Y-OW1-0001');

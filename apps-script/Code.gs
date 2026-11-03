@@ -88,7 +88,7 @@ const SHAPES = {
     && d.items.every(it => isObj_(it) && str_(it.t) && num_(it.qty) && it.qty > 0 && num_(it.price) && it.price >= 0 && (it.unit === undefined || str_(it.unit))
       && (it.m === undefined || SAFE_ID.test(it.m)) && (it.list === undefined || (num_(it.list) && it.list >= 0))) // from stock: the item and its list price then
     && (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (d.ok === undefined || ['waiting', 'approved', 'rejected'].indexOf(d.ok) >= 0) // SSP for 1 USD; a price below the list waiting for an admin
-    && (d.dl === undefined || ['deliver', 'collect'].indexOf(d.dl) >= 0) && strs_(d, ['addr', 'okBy', 'why']) && d.items.every(it => it.dlv === undefined || typeof it.dlv === 'boolean') // delivered or collected; the delivery charge line
+    && (d.dl === undefined || ['deliver', 'collect'].indexOf(d.dl) >= 0) && strs_(d, ['addr', 'okBy', 'why']) && d.items.every(it => it.dlv === undefined || (it.dlv === true && it.m === undefined)) // delivered or collected; the delivery charge line (never an item)
     && (d.tax === undefined || (num_(d.tax) && d.tax >= 0 && d.tax <= 100)) && ['bank', 'from'].every(k => !d[k] || SAFE_ID.test(d[k])) && ['notes', 'project'].every(k => d[k] === undefined || str_(d[k])),
   // an item to buy: what, its category, every detail as spec lines (label, value), suppliers' quotes, the order, the inspection
   N: d => str_(d.t) && d.t.length > 0 && BUY_STATES.indexOf(d.status) >= 0 && strs_(d, ['cat', 'sub', 'area', 'unit', 'notes', 'link', 'where', 'ship', 'project'])
@@ -263,7 +263,7 @@ function sync_(req) {
   const forget = viewer && viewer.role === 'manager' && Number(req.since) > 0 ? result.pull.filter(r => r.k === 'E' && !view_(viewer, r, hidden)).map(r => r.id) : [];
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role !== 'admin' ? '' : ss.getUrl(), kinds: KINDS, // the sheet shows every balance
-    pull: pull, refused: result.refused, older: (result.older || []).filter(id => pull.some(r => r.id === id)), stamps: result.stamps || [], me: user ? public_(user) : null, forget: forget, rate: newestRate_(result.rows),
+    pull: pull, refused: result.refused, older: (result.older || []).filter(id => pull.some(r => r.id === id)), stamps: result.stamps || [], me: user ? public_(user) : null, forget: forget, rate: newestRate_(result.rows, null, roles),
     logins: !!user || users_().length > 0, warning: warning,
   };
 }
@@ -344,7 +344,7 @@ function managerView_(user, rec) {
   if (MONEY_KINDS.indexOf(rec.k) >= 0 || BUY_KINDS.indexOf(rec.k) >= 0) return null;
   if (rec.k === 'M') return stripCost_(rec);
   if (rec.k === 'Y') return receivedOnly_(rec);
-  if (rec.k === 'K') { const d = Object.assign({}, rec.d); delete d.note; return { id: rec.id, k: rec.k, u: rec.u, d: d }; } // an admin's note on a client stays theirs
+  if (rec.k === 'K' && rec.d.uid !== user.id) { const d = Object.assign({}, rec.d); delete d.note; return { id: rec.id, k: rec.k, u: rec.u, d: d }; } // an admin's note on a client stays theirs
   if (rec.k === 'D' && rec.d.uid !== user.id) { const d = Object.assign({}, rec.d); delete d.cost; delete d.costCur; delete d.pay; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
   if (rec.k === 'F' && /^[KNUJY]-/.test(String(rec.d.for))) return null; // clients' papers, the buying list's photos and reports, import papers (they show costs)
   if (rec.k === 'P') { const d = Object.assign({}, rec.d); delete d.value; delete d.valueCur; delete d.buyBudget; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
@@ -378,60 +378,82 @@ function receiptOnly_(was, now, user, at) {
 // 'waiting'). A price from a quotation an admin approved stands. The list price is the stock item's as the sheet has it now.
 // An office manager sells at the list price, or as far below it as an admin allows her login (off, %: none unless given —
 // owner, 3 Nov 2026: "only admins can give a lower priced invoice, or admins can give access to certain office managers")
-function pricesOk_(d, out, index, id, off) {
+function pricesOk_(d, out, index, id, off, now, roles) {
   const allow = off > 0 ? off : 0;
   if (d.ok === 'waiting') return true;
   const rec = x => (index[x] === undefined ? null : { k: out[index[x]][1], d: JSON.parse(out[index[x]][4]) });
+  // the delivery charge: one line, not an item from stock, once (review, 3 Nov 2026: "dlv" carried stock at $0)
+  if (d.items.filter(it => it.dlv).length > 1 || d.items.some(it => it.dlv && (it.m || it.qty !== 1))) return false;
   // an approved quotation's prices stand on the one invoice made from it, by whoever asked for it, in its money, for no more than
-  // it quoted (review, 2 Nov 2026: an approved price could be used again and again, by anyone, in SSP, for any quantity)
+  // it quoted, at no less than its highest price for each item; a waiting or refused invoice naming it does not use it up
   const quote = d.from ? rec(d.from) : null;
-  const usedBefore = d.from && out.some(r => r[1] === 'I' && r[0] !== id && (() => { const x = JSON.parse(r[4]); return x.from === d.from && !x.deleted && !x.cancelled; })());
+  const usedBefore = d.from && out.some(r => r[1] === 'I' && r[0] !== id && (() => { const x = JSON.parse(r[4]); return x.from === d.from && !x.deleted && !x.cancelled && x.ok !== 'waiting' && x.ok !== 'rejected'; })());
   const approved = quote && quote.k === 'I' && quote.d.type === 'quote' && quote.d.ok === 'approved' && quote.d.uid === d.uid && quote.d.cur === d.cur && !usedBefore ? quote.d : null;
   if (d.ok === 'approved' && !approved) return false;
-  if (d.cur === 'SSP' && d.items.some(it => it.m)) { // at the company's own rate, not one typed to look cheaper
-    const ref = newestRate_(out, d.createdAt); // the newest she could have known when she made it
-    if (!ref || !(d.rate >= ref * (1 - allow / 100) - 1e-9)) return false;
+  // in SSP, a price is valued at the company's rate (an admin's), never at one she typed: a lower rate cannot add to her allowance
+  let ref = 0;
+  if (d.cur === 'SSP' && d.items.some(it => it.m)) {
+    // the newest rate she could have known when she made it — she cannot date it more than a day back to pick an older one
+    const floorAt = Utilities.formatDate(new Date(now - 864e5), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
+    ref = newestRate_(out, String(d.createdAt || '') > floorAt ? d.createdAt : floorAt, roles);
+    if (!ref) return false;
   }
   const quoted = m => (approved ? approved.items.filter(q => q.m === m).reduce((t, q) => t + q.qty, 0) : 0), want = Object.create(null);
   d.items.forEach(it => { if (it.m) want[it.m] = (want[it.m] || 0) + it.qty; });
+  const recent = Utilities.formatDate(new Date(now - 3 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   return d.items.every(it => {
-    if (it.dlv) return true; // the delivery charge: hers to set
+    if (it.dlv) return true; // the delivery charge (checked above): hers to set
     if (!it.m) return false; // a line typed by hand (not from stock) waits for an admin: it could be stock at any price
     const m = rec(it.m);
     if (!m || m.k !== 'M' || !(m.d.price > 0)) return false; // an item that is not in stock, or has no price yet
-    const usd = d.cur === 'USD' ? it.price : d.rate > 0 ? it.price / d.rate : null;
-    if (usd === null) return false;
-    if (approved && want[it.m] <= quoted(it.m) + 1e-9 && approved.items.some(q => q.m === it.m && it.price >= q.price - 1e-9)) return true;
-    const floor = p => p * (1 - allow / 100) - (d.cur === 'SSP' ? 0.5 / d.rate : 1e-9); // half an SSP: the rounding of a price in SSP
-    // the price the item had before its last change still stands for a sale dated on or before that day (an offline phone)
-    const prev = m.d.prev && d.date <= m.d.prev.until && m.d.prev.price > 0 ? m.d.prev.price : Infinity;
+    const usd = d.cur === 'USD' ? it.price : it.price / ref;
+    const highest = approved ? Math.max.apply(null, approved.items.filter(q => q.m === it.m).map(q => q.price).concat([-1])) : -1;
+    if (approved && highest >= 0 && want[it.m] <= quoted(it.m) + 1e-9 && it.price >= highest - 1e-9) return true;
+    const floor = p => p * (1 - allow / 100) - (d.cur === 'SSP' ? 0.5 / ref : 1e-9); // half an SSP: the rounding of a price in SSP
+    // the price before the item's last change still stands for a sale dated on or before that day, for 3 days (an offline phone)
+    const prev = m.d.prev && m.d.prev.price > 0 && d.date <= m.d.prev.until && m.d.prev.until >= recent ? m.d.prev.price : Infinity;
     return usd >= floor(Math.min(m.d.price, prev));
   });
 }
-// the newest SSP rate the company typed (money changed, payments and money received in SSP), for the rule above; before = only
-// those typed before then (a rate recorded after she made the invoice could not be on it), else the newest of all
-function newestRate_(out, before) {
+// the newest SSP rate the company typed — money changed (admins only), and payments or money received in SSP that an admin
+// entered (review, 3 Nov 2026: an office manager's own expense must never set it); before = only those typed before then
+function newestRate_(out, before, roles) {
   let at = '', rate = 0, atB = '', rateB = 0;
+  const byAdmin = x => !x.uid || !roles || (roles[x.uid] && roles[x.uid].role === 'admin');
   out.forEach(r => {
     if (r[1] !== 'X' && r[1] !== 'E' && r[1] !== 'R') return;
     const x = JSON.parse(r[4]);
-    if (x.deleted) return;
+    if (x.deleted || (r[1] !== 'X' && !byAdmin(x))) return;
     const v = r[1] === 'X' ? (x.usd > 0 ? x.ssp / x.usd : 0) : x.cur === 'SSP' ? x.rate : 0;
     if (v > 0 && String(x.at) > at) { at = String(x.at); rate = v; }
     if (v > 0 && before && String(x.createdAt || x.at) <= String(before) && String(x.at) > atB) { atB = String(x.at); rateB = v; }
   });
-  return rateB || rate;
+  return before ? rateB || 0 : rate;
 }
 function dupNumber_(d, out, id) {
-  return out.some(r => r[1] === 'I' && r[0] !== id && (() => { const x = JSON.parse(r[4]); return x.type === 'invoice' && x.no === d.no && !x.deleted; })());
+  return out.some(r => r[1] === 'I' && r[0] !== id && (() => { const x = JSON.parse(r[4]); return x.type === 'invoice' && x.no === d.no && !x.deleted && x.ok !== 'waiting' && x.ok !== 'rejected'; })());
 }
 // invoice numbers given out (the series): who took each and when, so a number taken and never used shows in the morning email
 const NUMBERS_TAB = '_numbers', NUMBER_COLS = ['no', 'uid', 'at'];
 const issued_ = (no, uid) => rowsOf_(NUMBERS_TAB, NUMBER_COLS).some(r => String(r.no) === no && String(r.uid) === uid);
 // a delivery note an office manager makes: dated within the last week; its receipt (made at once, or added later) sound
-function deliveryOk_(d, now) {
-  const t = Utilities.formatDate(new Date(now), Session.getScriptTimeZone(), 'yyyy-MM-dd'), week = Utilities.formatDate(new Date(now - 7 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  if (d.date > t || d.date < week) return false;
+function deliveryOk_(d, now, out, index, id) {
+  const tz = Session.getScriptTimeZone(), tomorrow = Utilities.formatDate(new Date(now + 864e5), tz, 'yyyy-MM-dd'), back = Utilities.formatDate(new Date(now - 14 * 864e5), tz, 'yyyy-MM-dd');
+  if (d.date > tomorrow || d.date < back) return false;
+  const src = index[d.inv || d.out] === undefined ? null : { k: out[index[d.inv || d.out]][1], d: JSON.parse(out[index[d.inv || d.out]][4]) };
+  if (!src || src.d.deleted) return false;
+  const may = Object.create(null);
+  if (d.inv) { // an invoice that sells (not a quotation, cancelled, waiting or refused): no more of each item than it sold and no other note took
+    if (src.k !== 'I' || !sells_(src.d)) return false;
+    src.d.items.forEach(it => { if (it.m) may[it.m] = (may[it.m] || 0) + it.qty; });
+    out.forEach(r => { if (r[1] === 'D' && r[0] !== id) { const x = JSON.parse(r[4]); if (x.inv === d.inv && !x.deleted) x.lines.forEach(l => { may[l.m] = (may[l.m] || 0) - l.qty; }); } });
+  } else { // goods used on a project: what was taken out
+    if (src.k !== 'O' || src.d.kind !== 'use') return false;
+    src.d.lines.forEach(l => { may[l.m] = (may[l.m] || 0) + Math.abs(l.qty); });
+  }
+  const want = Object.create(null);
+  d.lines.forEach(l => { want[l.m] = (want[l.m] || 0) + l.qty; });
+  if (!Object.keys(want).every(m => m in may && want[m] <= may[m] + 1e-9)) return false;
   return d.status === 'out' || recvOk_(d, now);
 }
 // who received what: every item that left, each from 0 up to what was sent, nothing else; received between leaving and now
@@ -493,10 +515,11 @@ function merge_(rows, push, since, user, uploads, codeOnly, roles) {
     // leaves the lines as they were (cancelling it) is not checked again
     const owner = p.k === 'I' ? (roles || {})[p.d.uid] : null, ownerRole = owner ? owner.role : '', adminDecides = !limited && (d.ok === 'approved' || d.ok === 'rejected');
     const sameLines = before && JSON.stringify(before.items) === JSON.stringify(d.items) && before.cur === d.cur && before.rate === d.rate;
-    if (p.k === 'I' && (limited || (ownerRole && ownerRole !== 'admin')) && !adminDecides && !sameLines && !pricesOk_(d, out, index, p.id, owner ? owner.off : 0)) { refused.push(p.id); return; }
+    if (p.k === 'I' && (limited || (ownerRole && ownerRole !== 'admin')) && !adminDecides && !sameLines && !pricesOk_(d, out, index, p.id, owner ? owner.off : 0, now, roles)) { refused.push(p.id); return; }
     if (p.k === 'I' && d.type === 'invoice' && d.ok !== 'waiting' && dupNumber_(d, out, p.id)) { refused.push(p.id); return; } // one invoice per number
     if (p.k === 'I' && limited && d.type === 'invoice' && d.ok !== 'waiting' && !(before && before.no === d.no) && !issued_(d.no, user.id)) { refused.push(p.id); return; } // a number the sheet gave her
-    if (p.k === 'D' && limited && !before && !deliveryOk_(d, now)) { refused.push(p.id); return; } // dated now-ish; a receipt within its bounds
+    if (p.k === 'D' && limited && !before && !deliveryOk_(d, now, out, index, p.id)) { refused.push(p.id); return; } // for a real sale, not more than it sold; a receipt within its bounds
+    if (p.k === 'I' && limited && d.ok === 'waiting' && /^INV-/.test(d.no)) { refused.push(p.id); return; } // a waiting invoice takes its number when approved
     if (p.k === 'F' && limited) { // a file belongs to a record the sender may see (a store keeper: their own)
       const f = index[p.d.for];
       const o = f === undefined ? null : JSON.parse(out[f][4]);
