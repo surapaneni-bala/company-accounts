@@ -204,6 +204,7 @@ fieldset[disabled] .fld.check { opacity: .5; }
 .banner .btn { background: var(--warn); color: #fff; flex: none; white-space: nowrap; }
 .banner.new { background: #E8ECF6; color: var(--ink); }
 .banner.new .btn { background: var(--ink); }
+.banner .two-btn { display: flex; flex-direction: column; gap: 6px; flex: none; } .banner.new .btn.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); } /* Turn on · Not now */
 
 /* buttons */
 .btn { border: 0; cursor: pointer; width: 100%; font-weight: 800; font-size: 18px; padding: 16px clamp(8px, 4vw, 20px); border-radius: 16px; transition: transform .15s var(--ease), filter .15s; }
@@ -504,6 +505,15 @@ button.wh-stat { cursor: pointer; } .wh-stat b { font-size: 22px; font-variant-n
 .wh-hero-pic { position: relative; aspect-ratio: 4 / 3; border-radius: var(--r-md); overflow: hidden; margin-bottom: 12px; background: var(--paper); }
 .cost-row { border-top: 1px solid var(--line); } .cost-row:first-child { border-top: 0; } .cost-row .mrow { border-top: 0; }
 .pay-link { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 14px 10px; font-size: 14px; } .pay-link .link { padding: 0; font-size: 14px; text-align: left; }
+/* notifications: the 🔔 with how many need you; one line a thing; questions as a conversation (owner, 3 Nov 2026) */
+.chip.bell { position: relative; padding-inline: 10px; } .chip.bell b { display: inline-block; min-width: 18px; margin-left: 4px; padding: 1px 5px; border-radius: 99px; background: var(--out); color: #fff; font-size: 12px; line-height: 16px; text-align: center; }
+.nlist .nrow { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); } .nlist .nrow:first-child { border-top: 0; }
+.nrow .nmain { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: flex-start; padding: 13px 0 13px 14px; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; overflow-wrap: break-word; }
+.nrow .nic { flex: none; width: 22px; text-align: center; } .nrow.new .nmain { font-weight: 700; } .nrow.info .nmain { color: var(--muted); }
+.nrow .nnot { flex: none; margin-right: 10px; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.nrow .nmain:hover, .nrow .nmain:focus-visible { background: var(--field); } .nrow .nnot:hover, .nrow .nnot:focus-visible { background: var(--line); color: var(--ink); }
+.msgs { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 16px; } .msg { max-width: 86%; padding: 10px 12px; border-radius: 14px 14px 14px 4px; background: var(--paper); }
+.msg.me { align-self: flex-end; border-radius: 14px 14px 4px 14px; background: var(--in-soft); } .msg p { margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; } .msg small { color: var(--muted); font-size: 12px; }
 .amt .conv, .list .row > .amt .conv { display: block; margin-left: 0; font-weight: 600; text-align: inherit; } /* what an SSP payment comes to in dollars: under its amount */
 .pay-one { display: flex; flex-wrap: wrap; gap: 2px 12px; flex-basis: 100%; } .pay-one .link + .link { color: var(--muted); font-weight: 600; } .pay-link .tally { flex-basis: 100%; font-weight: 600; } /* several payments for one cost: one a line, then whether they tally */
 @media (max-width: 340px) { .rnums { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rnums .x { grid-column: 2; justify-self: end; width: 44px; } .cnums:nth-child(2) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .stepper-q { grid-template-columns: 36px 48px 36px; } }
@@ -671,7 +681,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 <div class="app">
   <header class="top" id="hdr" hidden>
     <div class="top-l"><button class="backbtn" id="menuBtn" data-act="tab" data-tab="menu" hidden aria-label="Back to the menu" title="Menu">‹</button><div><div class="co" id="coName"></div><div class="today-date" id="todayDate"></div></div></div>
-    <div class="top-r"><button class="chip who" id="whoChip" data-act="account" hidden></button><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
+    <div class="top-r"><button class="chip who" id="whoChip" data-act="account" hidden></button><button class="chip bell" id="bellChip" data-act="bell" hidden aria-label="Notifications">🔔</button><button class="chip" id="syncChip" data-act="tab" data-tab="sheet" hidden></button><button class="lockpill" id="lockPill" data-act="lock" hidden>🔓 Unlocked · Lock</button></div>
   </header>
   <div id="installSlot"></div>
   <main id="main"></main>
@@ -707,7 +717,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '8d62464df6'; // filled in by tools/build.js
+const APP_VERSION = '52a9985953'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -741,7 +751,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I', needs: 'N', suppliers: 'U', trips: 'J', exchanges: 'X', stock: 'M', receipts: 'Y', stockOut: 'O', deliveries: 'D' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I', needs: 'N', suppliers: 'U', trips: 'J', exchanges: 'X', stock: 'M', receipts: 'Y', stockOut: 'O', deliveries: 'D', questions: 'Q' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // an empty list of every kind of record (a new company, a new phone, a sign-in that starts again)
 const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
@@ -992,7 +1002,7 @@ function render() {
   if (tab === 'staff' || tab === 'stock') loadThumbs();
   if (tab === 'sheet') paintBrandThumbs();
   render.tab = tab;
-  renderLock(); paintSync();
+  renderLock(); paintSync(); paintBell();
 }
 
 let setupMode = ''; // '' = decide when drawn: an invite link in the address opens 'join'
@@ -1042,7 +1052,7 @@ function viewMenu() {
   const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const who = signedIn() ? session.user.name.split(' ')[0] : '';
   const staffWaiting = waiting().filter(c => c.kind === 'W').length;
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${lostBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${notifyBanner()}${lostBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
     <section class="launch">
       <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
       <div class="apps">
@@ -1077,7 +1087,7 @@ function viewHome() {
   const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${approvalsBanner()}${brandBanner()}${lostBanner()}${doubleBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${notifyBanner()}${approvalsBanner()}${brandBanner()}${lostBanner()}${doubleBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? `${signedIn() && session.user.sees ? 'The expenses you entered, and those an admin lets you see.' : 'Your expenses — only the ones you entered.'} The balances are kept by the admins.` : 'Your expenses — only you and the admins see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
@@ -1336,6 +1346,7 @@ function detail(k, id) {
     ${canChange() ? '' : '<p class="muted center">To change this entry, ask the office.</p>'}
     ${k === 'E' && r.paidTo ? `<button class="btn ghost" data-act="payeeStatement" data-name="${esc(r.paidTo)}" style="margin-top:10px">📄 All payments to ${esc(r.paidTo)}</button>` : ''}
     ${filesBlock(id)}`);
+  askInto(k, r);
   here = () => detail(k, id);
 }
 const rateFact = r => (usdOf(r) === null ? [] : [['SSP for 1 USD', `${plain(r.rate)} · about ${money(usdOf(r), 'USD')}`]]);
@@ -3365,10 +3376,10 @@ const SYNC_TIMEOUT_MS = 45000, SLOWEST_BPS = 4000; // a request gets 45 s plus t
 const APP_URL = 'https://app.b-e-p-l.com/';
 // the order is the order records are sent in: an employee before a change request about them, files last
 // (the sheet only takes a file record whose entry it already has)
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', M: 'stock', Y: 'receipts', O: 'stockOut', I: 'invoices', D: 'deliveries', U: 'suppliers', J: 'trips', N: 'needs', X: 'exchanges', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
+const KIND_KEY = { Q: 'questions', E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', M: 'stock', Y: 'receipts', O: 'stockOut', I: 'invoices', D: 'deliveries', U: 'suppliers', J: 'trips', N: 'needs', X: 'exchanges', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
-const KINDS_SEEN = 8; // 8 = the warehouse: stock items (M), goods received (Y), goods out (O), delivery notes (D) · 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I), 6 = the buying list (N), suppliers (U), trips (J), 7 = dollars changed into SSP (X)
+const KINDS_SEEN = 9; // 9 = questions and their answers (Q) · 8 = the warehouse: stock items (M), goods received (Y), goods out (O), delivery notes (D) · 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I), 6 = the buying list (N), suppliers (U), trips (J), 7 = dollars changed into SSP (X)
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string' && okRate(d),
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && okRate(d),
@@ -3391,6 +3402,7 @@ const VALID = {
   Y: d => typeof d.id === 'string' && DATE_RE.test(d.date) && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty) && l.qty > 0)
     && (d.stub === true || (Array.isArray(d.costs) && Array.isArray(d.lc) && d.lc.length === d.lines.length && d.lines.every(l => Number.isFinite(l.amt)))),
   O: d => typeof d.id === 'string' && DATE_RE.test(d.date) && ['use', 'damage', 'return', 'count'].includes(d.kind) && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty)),
+  Q: d => typeof d.id === 'string' && typeof d.text === 'string' && d.text.trim().length > 0 && typeof (d.re === undefined ? d.to : d.re) === 'string',
   D: d => typeof d.id === 'string' && typeof d.no === 'string' && DATE_RE.test(d.date) && (SAFE_ID.test(d.inv || '') || SAFE_ID.test(d.out || '')) && ['deliver', 'collect'].includes(d.how)
     && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty)) && ['out', 'done'].includes(d.status) && (d.status === 'out' || (!!d.recv && Array.isArray(d.recv.lines))),
   N: d => typeof d.id === 'string' && typeof d.t === 'string' && BUY_STATES.includes(d.status) && (d.specs === undefined || (Array.isArray(d.specs) && d.specs.every(x => Array.isArray(x) && (x.length === 2 || x.length === 3) && x.every(v => typeof v === 'string'))))
@@ -3407,11 +3419,11 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 23; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 24; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // What an older script still keeps on the phones: the version that first stores it. From NEEDED_SCRIPT on, everything goes
 // up and a newer script only improves things — said quietly, never as a warning (owner, 23 Oct 2026: the message showed
 // "needed" while everything worked).
-const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry']];
+const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [24, 'questions reach your staff and theirs reach you']];
 const NEEDED_SCRIPT = 23, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines'], [22, 'what you let an office manager see'], [23, 'the warehouse — stock, goods received, goods out and delivery notes']];
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
@@ -4404,6 +4416,7 @@ function workerDetail(id) {
     ${filesBlock(id)}
     ${can('delete') ? `<button class="btn danger" data-act="del" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Delete employee 🔒</button>`
       : can('suggest') && !waitingFor(id).length ? `<button class="btn danger" data-act="askDelete" data-kind="W" data-id="${esc(id)}" style="margin-top:18px">🗑 Ask to delete employee 🔒</button>` : ''}`);
+  askInto('W', w);
   comeBack(() => workerDetail(id));
   if (photo) { $('#wPhoto').dataset.photo = photo.id; loadThumbs(); }
 }
@@ -5585,7 +5598,7 @@ async function approvePrice(id) {
     try { no = (await callServer(S.link, { op: 'number' })).no; }
     catch (e) { return alert(e.offline ? 'Approving an invoice needs the internet: the Google Sheet gives it its number.' : e.message); }
   }
-  const by = myName() || S.lastBy || '', done = { ...x, no, ok: 'approved', okBy: by };
+  const by = myName() || S.lastBy || '', done = { ...x, no, ok: 'approved', okBy: by, okAt: stampSec() };
   update({ invoices: S.invoices.map(y => (y.id === id ? done : y)), log: logWith([['Approved', id, `Price on ${no} for ${(clientOf(x.client) || {}).name || ''} (asked by ${x.by})`]], by) });
   const sig = await mySignature();
   await makeInvoicePdf(done, sig ? { sig, name: myName(), date: fmtDate(today()) } : null);
@@ -5596,7 +5609,7 @@ async function refusePrice(id) {
   const why = clean(prompt('Why is the price refused? (they see it)', 'Too far below the list price'));
   if (!why) return;
   const by = myName() || S.lastBy || '';
-  update({ invoices: S.invoices.map(y => (y.id === id ? { ...y, ok: 'rejected', okBy: by, why } : y)), log: logWith([['Refused', id, `Price on ${x.no}: ${why}`]], by) });
+  update({ invoices: S.invoices.map(y => (y.id === id ? { ...y, ok: 'rejected', okBy: by, okAt: stampSec(), why } : y)), log: logWith([['Refused', id, `Price on ${x.no}: ${why}`]], by) });
   toast('Refused ✓'); invoiceDetail(id);
 }
 // the price requests an admin decides on (Changes to approve)
@@ -5660,6 +5673,7 @@ function invoiceDetail(id) {
     ${isQ || !seesPaid() ? '' : `<h3 class="subh">Payments (${pays.length})</h3>${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}`}
     ${k && k.phone ? `<a class="btn ghost" style="margin-top:14px" href="${esc(waChat(k.phone))}" target="_blank" rel="noopener">💬 WhatsApp chat with ${esc(k.name)}</a>` : ''}
     <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="copyInvoice" data-id="${esc(id)}">📋 Copy as new</button>${can('edit') && !inv.cancelled && !pays.length && !dns.length ? `<button class="btn danger" data-act="cancelInvoice" data-id="${esc(id)}">🚫 Cancel 🔒</button>` : ''}</div>`);
+  askInto('I', inv);
   comeBack(() => invoiceDetail(id));
 }
 function payInvoice(id) {
@@ -7223,6 +7237,7 @@ function receiptDetail(id) {
       ${attachButton(id, '📎 Add their invoice, packing list, customs papers…')}
       ${filesBlock(id)}
       <button class="btn danger" data-act="deleteReceipt" data-id="${esc(id)}" style="margin-top:16px">🗑 Delete 🔒</button>` : ''}`);
+  askInto('Y', y);
   comeBack(() => receiptDetail(id));
 }
 /* ---------- an import's payments in Accounts: linked (or changed) any time, from every payment, searched (owner, 3 Nov 2026) ---------- */
@@ -7389,6 +7404,7 @@ function outDetail(id) {
     ${attachButton(id, '📷 Add a photo')}
     ${filesBlock(id)}
     ${can('delete') ? `<button class="btn danger" data-act="deleteOut" data-id="${esc(id)}" style="margin-top:16px">🗑 Delete 🔒</button>` : ''}`);
+  askInto('O', o);
   comeBack(() => outDetail(id));
 }
 async function deleteOut(id) {
@@ -7647,6 +7663,7 @@ function deliveryDetail(id) {
     ${filesList(filesFor(id), 'Papers and photos')}
     ${attachButton(id, '📷 Add a photo')}
     ${can('delete') ? `<button class="btn danger" data-act="deleteDelivery" data-id="${esc(id)}" style="margin-top:16px">🗑 Delete 🔒</button>` : ''}`);
+  askInto('D', d);
   comeBack(() => deliveryDetail(id));
 }
 async function remakeDelivery(id) { const d = deliveryOf(id); if (d) await deliveryPdf(d); }
@@ -7914,7 +7931,7 @@ function importPlan(text) {
   const fresh = rows.filter(r => !have.has(importKey(r)));
   return { fresh, errors, skipped: rows.length - fresh.length };
 }
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`; // many: the plural when it is not word + s (entries)
 
 async function importSheet() {
   if (!await unlock('Enter the password to import old entries (they have old dates).')) return;
@@ -8092,6 +8109,254 @@ async function installApp() {
 }
 paintInstall(); // Android phones see the bar from the start
 
+/* ---------- notifications (owner, 3 Nov 2026): one place for everything that needs someone — accounts, approvals, reviews, the
+   warehouse, papers, questions — without spamming anyone ---------- */
+// Worked out on the phone from what it already holds, never stored: a line goes once what it is about is dealt with, by anyone.
+// "Needs you" lines are counted on the 🔔 and the app's icon; "new" lines (a decision on what you asked) count until the 🔔 is
+// opened; "good to know" lines are never counted. Things of a kind come as one line ("3 deliveries not confirmed"), never one
+// each. "Not now" hides a line on this phone for a week; it comes back if it is still true.
+const SNOOZE_DAYS = 7;
+const myUid = () => (signedIn() ? session.user.id : '');
+const perUser = (o, v) => ({ ...(o || {}), [myUid() || '-']: v }); // what this phone keeps for the one signed in
+const seenAt = () => (S.bellSeen || {})[myUid() || '-'] || '';
+const reviewedAt = () => (S.reviewed || {})[myUid() || '-'] || '';
+const snoozed = key => ((S.snooze || {})[key] || '') >= today();
+const notice = (key, icon, text, act, data = {}, how = 'need') => ({ key, icon, text, act, data, how }); // how: need · new · info
+
+function notices() {
+  const out = [], admin = can('edit'), uid = myUid(), me = myName(), seen = seenAt();
+  const add = (...a) => out.push(notice(...a));
+  // questions: each one waiting for an answer from me; and what the other side marked sorted since I last looked
+  threads().forEach(t => {
+    const who = t.last.by || 'Someone', what = `“${t.last.text.slice(0, 90)}${t.last.text.length > 90 ? '…' : ''}”`;
+    if (waitsOnMe(t)) add(`q:${t.q.id}`, '❓', t.msgs.length === 1 ? `${who} asks: ${what}${t.q.about ? ` — about ${t.q.about.what}` : ''}` : `${who} answered: ${what}`, 'thread', { id: t.q.id });
+    else if (t.done && t.last.uid !== uid && String(t.last.createdAt) > seen && isMine(t)) add(`qd:${t.q.id}`, '✓', `${who} marked “${t.q.text.slice(0, 60)}” as sorted`, 'thread', { id: t.q.id }, 'new');
+  });
+  if (admin) {
+    const ch = waiting().length, pr = priceWaits().length, dbl = doubles().length, look = can('delete') ? lookalikeExpenses() : [];
+    if (ch) add('approvals', '✏️', `${plural(ch, 'change')} waiting for your approval`, 'approvals');
+    if (pr) add('prices', '🏷', `${plural(pr, 'price')} below the list waiting for your approval`, 'approvals');
+    if (dbl) add('doubles', '⚠️', `${dbl === 1 ? 'A payment' : `${dbl} payments`} may be entered twice`, 'doubles');
+    if (look.length) add('lookalike', '⚠️', `${plural(look.length, 'expense')} look${look.length === 1 ? 's' : ''} like a cash ↔ bank move, not spending`, 'open', { kind: 'E', id: look[0].id });
+  }
+  // what I asked for, decided since I last looked
+  const decided = (S.changes || []).filter(c => c.by === me && c.status !== 'waiting' && String(c.decidedAt || '') > seen);
+  decided.forEach(c => { const r = targetOf(c), go = r && ['E', 'R', 'T'].includes(c.kind) ? ['open', { kind: c.kind, id: c.target }] : r && c.kind === 'W' ? ['openWorker', { id: c.target }] : ['tab', { tab: 'home' }];
+    add(`ch:${c.id}`, c.status === 'approved' ? '✓' : '✗', `${c.decidedBy || 'An admin'} ${c.status} your change${r ? `: ${whatIs(c.kind, r)}` : ''}`, go[0], go[1], 'new'); });
+  live(S.invoices).filter(x => x.uid === uid && !x.stub && ['approved', 'rejected'].includes(x.ok) && String(x.okAt || '') > seen && x.okBy !== me)
+    .forEach(x => add(`ok:${x.id}`, x.ok === 'approved' ? '✓' : '✗', `${x.okBy || 'An admin'} ${x.ok === 'approved' ? 'approved' : 'refused'} your price on ${x.no}`, 'openInvoice', { id: x.id }, 'new'));
+  // invoices: unpaid past their due date (admins: all; others: their own)
+  const overdue = live(S.invoices).filter(x => !x.stub && x.type === 'invoice' && (admin || x.uid === uid) && invState(x).state === 'overdue');
+  if (overdue.length) add('overdue', '🧾', `${plural(overdue.length, 'invoice')} overdue — not paid by the due date`, 'sales');
+  // regular payments and papers (whoever runs staff)
+  if (can('staff')) {
+    const due = dueList().filter(([, d]) => isDueSoon(d)), late = due.filter(([, d]) => daysTo(d.next) < 0);
+    if (late.length) add('reglate', '🔁', `${plural(late.length, 'regular payment')} late: ${late.slice(0, 2).map(([g]) => g.name).join(', ')}${late.length > 2 ? '…' : ''}`, 'regulars');
+    if (due.length > late.length) add('regdue', '🔁', `${plural(due.length - late.length, 'regular payment')} due this week`, 'regulars', {}, 'info');
+    const docs = live(S.docs).filter(v => docState(v).soon), bad = docs.filter(v => daysTo(v.expires) <= 7);
+    if (bad.length) add('docs', '📄', `${plural(bad.length, 'document')} expired or expiring within a week: ${bad.slice(0, 2).map(v => v.title).join(', ')}${bad.length > 2 ? '…' : ''}`, 'docs');
+    if (docs.length > bad.length) add('docsoon', '📄', `${plural(docs.length - bad.length, 'document')} to renew soon`, 'docs', {}, 'info');
+  }
+  if (can('staff') && live(S.stock).length) stockNotices(add, admin, uid);
+  // this phone: changes another phone overtook, files not uploaded, a newer app, an older sheet script
+  if ((S.lost || []).length) add('lost', '⚠️', `${plural(S.lost.length, 'change')} of yours ${S.lost.length === 1 ? 'was' : 'were'} not saved — see Accounts`, 'tab', { tab: 'home' });
+  if (typeof outbox !== 'undefined' && outbox.length) add('uploads', '📤', `${plural(outbox.length, 'file')} on this phone not uploaded yet`, 'tab', { tab: 'sheet' });
+  if (newerVersion) add('update', '🆕', 'A new version of the app is ready', 'updateApp', {}, 'info');
+  if (can('settings') && S.link && (S.link.v || 2) < NEWEST_SCRIPT) add('script', '🔧', `The Google Sheet script can be updated to version ${NEWEST_SCRIPT}`, 'howUpdate', {}, (S.link.v || 2) < NEEDED_SCRIPT ? 'need' : 'info');
+  if (admin) { const n = toReview().length; if (n) add('review', '📋', `${plural(n, 'new entry', 'new entries')} by others to check`, 'review', {}, 'info'); }
+  return out.map(n => ({ ...n, hidden: snoozed(n.key) }));
+}
+// the warehouse: sold and not sent, deliveries not confirmed, short or without proof, below zero, imports that do not tally
+function stockNotices(add, admin, uid) {
+  const b = book(), items = live(S.stock), dns = live(S.deliveries), old = plusDays(today(), -2);
+  const toGo = live(S.invoices).filter(x => !x.stub && (admin || x.uid === uid) && sells(x) && toSend(x, S.deliveries).length);
+  if (toGo.length) add('tosend', '📦', `${plural(toGo.length, 'sale')} waiting for a delivery note`, 'stockOutList');
+  const late = dns.filter(d => d.status === 'out' && d.date <= old && (admin || d.uid === uid));
+  if (late.length) add('dnlate', '🚚', `${plural(late.length, 'delivery', 'deliveries')} not confirmed after 2 days`, 'stockOutList');
+  if (!admin) return;
+  const week = plusDays(today(), -7), short = dns.filter(d => dnState(d) === 'short' && d.recv.at.slice(0, 10) >= week);
+  if (short.length) add('dnshort', '🚚', `${plural(short.length, 'delivery', 'deliveries')} received short this week`, 'stockOutList');
+  const proofless = dns.filter(d => d.status === 'done' && d.recv.at.slice(0, 10) >= plusDays(today(), -30) && !S.files.some(f => f.for === d.id && f.proof && !f.deleted));
+  if (proofless.length) add('dnproof', '🚚', `${plural(proofless.length, 'delivery', 'deliveries')} received without a signed slip`, 'stockOutList');
+  const below = items.filter(m => b[m.id] && b[m.id].qty < -1e-9);
+  if (below.length) add('below', '📦', `${plural(below.length, 'item')} below zero in stock: ${below.slice(0, 2).map(m => m.name).join(', ')}${below.length > 2 ? '…' : ''}`, 'stock');
+  const tally = live(S.receipts).filter(y => !y.stub && untallied(y));
+  if (tally.length) add('tally', '🚢', `${plural(tally.length, 'import')} with costs that do not tally with Accounts`, 'stockIn');
+  const low = items.filter(m => m.min > 0 && (b[m.id] ? b[m.id].qty : 0) <= m.min && !(b[m.id] && b[m.id].qty < 0));
+  if (low.length) add('low', '📉', `${plural(low.length, 'item')} running low`, 'stock', {}, 'info');
+  const check = pricesToCheck().length;
+  if (check) add('pricecheck', '🏷', `${plural(check, 'selling price')} to check after new landed costs`, 'prices', {}, 'info');
+}
+// what others entered since an admin last checked: payments, money received, invoices, stock moves, deliveries, employees
+const REVIEW_KINDS = { E: 'expenses', R: 'credits', I: 'invoices', O: 'stockOut', D: 'deliveries', W: 'workers' };
+function toReview() {
+  const since = reviewedAt(), uid = myUid(), me = myName();
+  return Object.entries(REVIEW_KINDS).flatMap(([k, key]) => live(S[key] || []).filter(r => !r.stub && String(r.createdAt || '') > since && (uid ? r.uid && r.uid !== uid : r.by && r.by !== me)).map(r => [k, r]))
+    .sort((a, b) => String(b[1].createdAt).localeCompare(String(a[1].createdAt)));
+}
+const OPEN_ACT = { I: 'openInvoice', O: 'openOut', D: 'openDelivery', W: 'openWorker', Y: 'openReceipt' };
+const entryRow = (k, r) => (k === 'E' || k === 'R' ? itemRow(r, k, true)
+  : `<button class="row" data-act="${OPEN_ACT[k]}" data-id="${esc(r.id)}"><span class="dot">${{ I: '🧾', O: '−', D: '🚚', W: '👷' }[k]}</span><span class="main"><span class="t"><span class="tt">${esc(whatIs(k, r))}</span></span><span class="s">${esc([r.by && `by ${r.by}`, fmtAbs(r.createdAt)].filter(Boolean).join(' · '))}</span></span></button>`);
+function reviewSheet() {
+  const list = toReview();
+  openSheet(`${head('New entries to check', '', `${list.length} since you last checked`)}
+    <p class="hint">What others entered. Open one to check it; if something is wrong, use <b>❓ Ask about this</b> on it — the person who entered it gets the question.</p>
+    ${list.length ? `<div class="card list">${list.slice(0, 100).map(([k, r]) => entryRow(k, r)).join('')}</div>
+      <button class="btn in" data-act="reviewDone" style="margin-top:14px">✓ I have checked these</button>` : '<p class="muted">Nothing new. ✓</p>'}`);
+  comeBack(reviewSheet);
+}
+function reviewDone() { update({ reviewed: perUser(S.reviewed, stampSec()) }); toast('Checked ✓'); bellSheet(); }
+
+/* the 🔔 */
+const bellCount = list => list.filter(n => !n.hidden && n.how !== 'info').length;
+function paintBell() {
+  const chip = $('#bellChip');
+  if (!chip) return;
+  const n = bellCount(notices());
+  chip.hidden = false;
+  chip.innerHTML = `🔔${n ? `<b>${n > 99 ? '99+' : n}</b>` : ''}`;
+  chip.setAttribute('aria-label', n ? `Notifications: ${n} need you` : 'Notifications');
+  try { if (n && navigator.setAppBadge) navigator.setAppBadge(n).catch(() => {}); else if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {}); } catch (e) { /* a number on the icon is a nicety */ }
+}
+const noticeRow = n => `<div class="nrow ${n.how}"><button class="nmain" data-act="${n.act}" ${Object.entries(n.data).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ')}><span class="nic">${n.icon}</span><span>${esc(n.text)}</span></button>
+  ${n.how === 'new' ? '' : `<button class="nnot" data-act="snooze" data-key="${esc(n.key)}" aria-label="Not now — hide for a week">Not now</button>`}</div>`;
+function bellSheet() {
+  const all = notices(), shown = all.filter(n => !n.hidden), hidden = all.length - shown.length;
+  const part = (how, title) => { const l = shown.filter(n => n.how === how); return l.length ? `<h3 class="subh">${title}</h3><div class="card list nlist">${l.map(noticeRow).join('')}</div>` : ''; };
+  const asks = S.link && (S.link.v || 2) >= 24 && signedIn();
+  openSheet(`${head('Notifications', '', `${bellCount(all) || 'Nothing'} need${bellCount(all) === 1 ? 's' : ''} you`)}
+    ${part('need', 'Needs you')}${part('new', 'New')}${part('info', 'Good to know')}
+    ${shown.length ? '' : '<p class="muted center" style="margin:18px 0">All clear. ✓</p>'}
+    ${asks ? `<div class="two" style="margin-top:14px"><button class="btn ghost" data-act="askNew">✉️ ${can('edit') ? 'Send someone a question' : 'Ask the admins'}</button><button class="btn ghost" data-act="messages">💬 Messages</button></div>` : ''}
+    ${hidden ? `<button class="btn small ghost" data-act="unsnooze" style="margin-top:12px">Show the ${plural(hidden, 'line')} hidden for now</button>` : ''}
+    ${signedIn() && notifyLine() ? `<p class="muted" style="margin-top:14px">${notifyLine()}</p>` : ''}
+    <p class="hint" style="margin-top:16px">Only what needs you is counted, and things of one kind come as one line. <b>Not now</b> hides a line for a week. The morning email keeps the daily summary.</p>`);
+  update({ bellSeen: perUser(S.bellSeen, stampSec()) }); // "new" lines were shown: they stop counting
+  paintBell();
+  comeBack(bellSheet);
+}
+/* turning notifications on (owner, 3 Nov 2026: "ask everyone to turn on notifications"): a phone asks only after a tap, so a banner
+   asks everyone signed in, once a week at most until they answer. Allowed: the 🔔's number shows on the app's icon (iPhone), and
+   phone notifications reach them once they are switched on for the company. Blocked: only the phone's settings can undo it. */
+const notifyState = () => (typeof Notification === 'undefined' ? 'none' : Notification.permission); // none · default · granted · denied
+function notifyBanner() {
+  if (!signedIn() || notifyState() !== 'default' || ((S.notifyAsk || {})[myUid()] || '') >= today()) return '';
+  return `<div class="banner new"><span>🔔 <b>Turn on notifications</b> so questions, approvals and alerts reach you on this phone.</span><span class="two-btn"><button class="btn small" data-act="notifyOn">Turn on</button><button class="btn small ghost" data-act="notifyLater">Not now</button></span></div>`;
+}
+async function notifyOn() {
+  try { await Notification.requestPermission(); } catch (e) { /* an old phone: nothing to ask */ }
+  toast(notifyState() === 'granted' ? 'Notifications are on ✓' : notifyState() === 'denied' ? 'Notifications are off. To turn them on later, allow them for this app in the phone’s settings.' : 'Not turned on');
+  render();
+}
+function notifyLater() { update({ notifyAsk: perUser(S.notifyAsk, plusDays(today(), SNOOZE_DAYS)) }); render(); }
+const notifyLine = () => ({ granted: '🔔 Notifications are on for this phone.', denied: '🔕 Notifications are blocked on this phone — allow them for this app in the phone’s settings.', none: '' }[notifyState()]
+  ?? '<button class="btn small" data-act="notifyOn">🔔 Turn on notifications for this phone</button>');
+function snooze(key) { update({ snooze: { ...Object.fromEntries(Object.entries(S.snooze || {}).filter(([, d]) => d >= today())), [key]: plusDays(today(), SNOOZE_DAYS) } }); bellSheet(); }
+function unsnooze() { update({ snooze: {} }); bellSheet(); }
+
+/* ---------- questions and alerts (owner, 3 Nov 2026): an admin asks someone about a payment, an invoice, a delivery — or raises a
+   problem — and they answer in the app; staff can raise a problem with the admins the same way ---------- */
+// A question (kind Q) is to one login (to: its id) or to the admins (to: 'admins'), maybe about an entry (about: kind, id and a line
+// saying what it is, as the one asked may not see the entry). Each answer is its own record (re: the question), so two people
+// writing at once never overwrite each other. state on a message: done = sorted, open = opened again; the newest one decides.
+// The sheet (script v24) sends a question only to who asked and who was asked (admins: all) and lets nobody change a message.
+const QUESTIONS_SCRIPT = 24;
+function threads() {
+  const all = live(S.questions || []);
+  return all.filter(q => q.re === undefined).map(q => {
+    const msgs = [q, ...all.filter(r => r.re === q.id)].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))), said = msgs.filter(m => m.state).pop();
+    return { q, msgs, last: msgs[msgs.length - 1], done: !!said && said.state === 'done' };
+  }).sort((a, b) => String(b.last.createdAt).localeCompare(String(a.last.createdAt)));
+}
+const threadOf = id => threads().find(t => t.q.id === id);
+const isMine = t => t.q.to === myUid() || t.q.uid === myUid() || (t.q.to === 'admins' && can('edit'));
+// whose turn: a question to the admins waits on them while the asker wrote last; one to a person waits on that person while
+// someone else wrote last, and on the asker once that person answered
+function waitsOnMe(t) {
+  if (t.done) return false;
+  const uid = myUid();
+  if (t.q.to === 'admins') return can('edit') && t.last.uid === t.q.uid && t.q.uid !== uid;
+  return (t.q.to === uid && t.last.uid !== uid) || (t.q.uid === uid && t.last.uid === t.q.to);
+}
+const canAsk = () => signedIn() && !!S.link && (S.link.v || 2) >= QUESTIONS_SCRIPT;
+const toName = t => (t.q.to === 'admins' ? 'the admins' : (peopleSeen().find(p => p.id === t.q.to) || { name: 'them' }).name);
+// who can be asked: the logins (admins load them), else everyone this phone has seen enter something
+function peopleSeen() {
+  const m = new Map(usersCache.filter(u => u.active !== false).map(u => [u.id, u.name]));
+  Object.keys(SYNC_KEYS).forEach(key => (S[key] || []).forEach(r => { if (r.uid && r.by && !m.has(r.uid)) m.set(r.uid, r.by); }));
+  return [...m].map(([id, name]) => ({ id, name })).filter(p => p.id !== myUid()).sort((a, b) => a.name.localeCompare(b.name));
+}
+// on an entry's page: the questions about it, and a button to ask
+function askInto(k, r) {
+  if (!r || !canAsk()) return;
+  const about = threads().filter(t => t.q.about && t.q.about.id === r.id);
+  $('#sheetIn').insertAdjacentHTML('beforeend', `${about.length ? `<h3 class="subh">Questions about this (${about.length})</h3><div class="card list">${about.map(threadRow).join('')}</div>` : ''}
+    <button class="btn ghost" data-act="ask" data-kind="${esc(k)}" data-id="${esc(r.id)}" style="margin-top:12px">❓ ${can('edit') ? 'Ask about this' : 'Ask the admins about this'}</button>`);
+}
+const threadRow = t => `<button class="row" data-act="thread" data-id="${esc(t.q.id)}"><span class="dot">${t.done ? '✓' : waitsOnMe(t) ? '❓' : '💬'}</span>
+  <span class="main"><span class="t"><span class="tt">${esc(t.q.text.slice(0, 70))}${t.q.text.length > 70 ? '…' : ''}</span>${t.done ? '<i class="tag">Sorted</i>' : waitsOnMe(t) ? '<i class="tag warn">Your turn</i>' : ''}</span>
+  <span class="s">${esc([t.q.uid === myUid() ? `To ${toName(t)}` : `From ${t.q.by || 'someone'}`, t.q.about && t.q.about.what, `${plural(t.msgs.length, 'message')}`, fmtAbs(t.last.createdAt)].filter(Boolean).join(' · '))}</span></span></button>`;
+async function askForm(k, id) {
+  if (!canAsk()) return alert(`Questions reach people once the Google Sheet script is updated to version ${QUESTIONS_SCRIPT} (Sheet tab → Show me how).`);
+  const r = k ? (S[KIND_KEY[k]] || []).find(x => x.id === id) : null, admin = can('edit');
+  if (admin && !usersCache.length && can('logins')) { try { usersCache = (await callServer(S.link, { op: 'users' })).users || []; } catch (e) { /* offline: the people this phone has seen */ } }
+  const people = admin ? peopleSeen() : [], pick = r && r.uid && r.uid !== myUid() ? r.uid : '';
+  openSheet(`${head(admin ? 'Ask a question' : 'Ask the admins', '', r ? whatIs(k, r) : 'A question or a problem')}
+    <form data-form="ask" data-kind="${esc(k || '')}" data-id="${esc(id || '')}">
+      ${admin ? `<label class="fld"><span>To</span><select name="to" required><option value="">Choose who…</option>${people.map(p => `<option value="${esc(p.id)}" ${p.id === pick ? 'selected' : ''}>${esc(p.name)}${p.id === pick ? ' (entered this)' : ''}</option>`).join('')}<option value="admins">The admins</option></select></label>` : '<p class="muted">Every admin sees it and can answer.</p>'}
+      <label class="fld"><span>Your question</span><textarea name="text" rows="4" maxlength="2000" required placeholder="${r ? 'e.g. Which site was this for? Please attach the receipt.' : 'e.g. The cement store roof is leaking.'}"></textarea></label>
+      <p class="err"></p>
+      <button class="btn primary">Send</button>
+    </form>`);
+  comeBack(() => askForm(k, id));
+}
+// what a question is about, in a line: short, and never the amount of money received or moved (an office manager may be asked)
+const aboutLine = (k, r) => (k === 'E' ? `Payment of ${money(r.amount, r.cur)} to ${r.paidTo}, ${fmtDate(r.at.slice(0, 10))}` : k === 'R' ? `Money received on ${fmtDate(r.at.slice(0, 10))}`
+  : k === 'T' ? `A cash ↔ bank move on ${fmtDate(r.at.slice(0, 10))}` : whatIs(k, r)).slice(0, 200);
+function newMsg(extra) {
+  const [[qid], seq] = nextIds('Q', 1, S.seq), by = myName() || S.lastBy || '';
+  update({ questions: [...(S.questions || []), { id: qid, ...extra, by, createdAt: stampSec() }], seq });
+  return qid;
+}
+function saveAsk(f) {
+  const v = Object.fromEntries(new FormData(f)), text = String(v.text || '').trim(), k = f.dataset.kind, r = k ? (S[KIND_KEY[k]] || []).find(x => x.id === f.dataset.id) : null;
+  const to = can('edit') ? v.to : 'admins';
+  if (!to) return formErr(f, 'to', 'Choose who to ask.');
+  if (!text) return formErr(f, 'text', 'Type the question.');
+  const qid = newMsg({ to, text, ...(r ? { about: { k, id: r.id, what: aboutLine(k, r) } } : {}) });
+  toast('Sent ✓ They see it in their 🔔'); threadSheet(qid); paintBell();
+}
+function threadSheet(id) {
+  const t = threadOf(id);
+  if (!t) return false;
+  const uid = myUid(), a = t.q.about, there = a && (S[KIND_KEY[a.k]] || []).some(x => x.id === a.id && !x.deleted && !x.stub);
+  const openAct = a && (a.k === 'E' || a.k === 'R' ? `data-act="open" data-kind="${esc(a.k)}"` : `data-act="${OPEN_ACT[a.k] || 'open'}"`);
+  openSheet(`${head(t.q.uid === uid ? `To ${toName(t)}` : `From ${t.q.by || 'someone'}`, '', t.done ? 'Sorted ✓' : waitsOnMe(t) ? 'Waiting for your answer' : 'Waiting for an answer')}
+    ${a ? (there ? `<button class="btn ghost" ${openAct} data-id="${esc(a.id)}" style="margin-bottom:12px">📎 About: ${esc(a.what)}</button>` : `<p class="note">About: ${esc(a.what)}</p>`) : ''}
+    <div class="msgs">${t.msgs.map(m => `<div class="msg ${m.uid === uid ? 'me' : ''}"><p>${esc(m.text)}</p><small>${esc([m.uid === uid ? 'You' : m.by, fmtAbs(m.createdAt), m.state === 'done' ? 'marked sorted' : m.state === 'open' ? 'opened again' : ''].filter(Boolean).join(' · '))}</small></div>`).join('')}</div>
+    <form data-form="reply" data-id="${esc(t.q.id)}">
+      <label class="fld"><span>${t.done ? 'Write to open it again' : 'Your answer'}</span><textarea name="text" rows="3" maxlength="2000" required></textarea></label>
+      <p class="err"></p>
+      <div class="two"><button class="btn primary">Send</button>${t.done ? '' : `<button type="button" class="btn in" data-act="qDone" data-id="${esc(t.q.id)}">✓ Sorted</button>`}</div>
+    </form>`);
+  comeBack(() => threadSheet(id));
+}
+function saveReply(f) {
+  const t = threadOf(f.dataset.id), text = String(new FormData(f).get('text') || '').trim();
+  if (!t) return;
+  if (!text) return formErr(f, 'text', 'Type your answer.');
+  newMsg({ re: t.q.id, text, ...(t.done ? { state: 'open' } : {}) });
+  toast('Sent ✓'); threadSheet(t.q.id); paintBell();
+}
+function qDone(id) { const t = threadOf(id); if (!t) return; newMsg({ re: t.q.id, text: '✓ Sorted', state: 'done' }); toast('Marked as sorted ✓'); threadSheet(id); paintBell(); }
+function messagesSheet() {
+  const list = threads().filter(isMine), open = list.filter(t => !t.done);
+  openSheet(`${head('Messages', '', `${open.length} open`)}
+    ${list.length ? `<div class="card list">${[...open, ...list.filter(t => t.done)].slice(0, 100).map(threadRow).join('')}</div>` : '<p class="muted">No questions yet.</p>'}
+    ${canAsk() ? `<button class="btn ghost" data-act="askNew" style="margin-top:14px">✉️ ${can('edit') ? 'Send someone a question' : 'Ask the admins'}</button>` : ''}`);
+  comeBack(messagesSheet);
+}
+
 /* ---------- events ---------- */
 const ACTIONS = {
   tab: b => { tab = b.dataset.tab; render(); scrollTo(0, 0); },
@@ -8144,6 +8409,8 @@ const ACTIONS = {
   account: () => accountSheet(),
   signOut: () => signOut(),
   approvals: () => approvalsSheet(),
+  bell: () => bellSheet(), notifyOn: () => notifyOn(), notifyLater: () => notifyLater(), snooze: b => snooze(b.dataset.key), unsnooze: () => unsnooze(), review: () => reviewSheet(), reviewDone: () => reviewDone(),
+  ask: b => askForm(b.dataset.kind, b.dataset.id), askNew: () => askForm('', ''), thread: b => threadSheet(b.dataset.id), qDone: b => qDone(b.dataset.id), messages: () => messagesSheet(),
   moveApp: () => moveApp(),
   decide: b => decide(b.dataset.id, !!b.dataset.ok),
   askDelete: b => askDelete(b.dataset.kind, b.dataset.id),
@@ -8326,7 +8593,7 @@ const ACTIONS = {
   notRegular: b => notRegular(b.dataset.key),
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
-const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
+const FORMS = { ask: saveAsk, reply: saveReply, expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
   signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, repay: saveRepay, item: saveItem, receive: saveReceive, stockOut: saveStockOut, count: saveCount, delivery: saveDelivery, dnReceipt: saveDnReceipt,
   stockFilter: filterStock, payFind: f => { $('#payList').innerHTML = payRows(f.dataset.id, f.dataset.w, f.elements.q.value); }, shopFind: f => { shopQ = f.elements.q.value; $('#shopList').innerHTML = shopRows(); }, stockMonth: f => stockReport(f.elements.month.value), left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
   idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList, subIdea: saveSubIdea, budgets: saveBudgets, exchange: saveExchange };
