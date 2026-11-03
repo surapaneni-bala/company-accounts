@@ -389,6 +389,13 @@ a.btn { display: flex; align-items: center; justify-content: center; text-align:
 .mrow:first-child { border-top: 0; }
 .mrow b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mrow .muted { font-size: 13px; text-align: right; }
+/* a name, a detail and an amount: when the detail is long (a warehouse line's cost, a delivery's "sent 60 bars") the detail goes
+   under the name instead of squeezing it, in a list narrower than 460px; a wider list keeps one line per thing */
+@container (max-width: 460px) {
+  .mrow:has(> .muted) { grid-template-columns: minmax(0, 1fr) auto; }
+  .mrow:has(> .muted) > .muted { grid-column: 1; grid-row: 2; text-align: left; margin-top: -6px; }
+  .mrow:has(> .muted) > b, .mrow:has(> .muted) > :last-child:not(.muted) { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+}
 .ilines { display: grid; gap: 10px; margin-bottom: 10px; }
 .iline { display: grid; gap: 8px; padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
 .iline input { width: 100%; min-width: 0; font: inherit; font-size: 16px; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); }
@@ -426,6 +433,44 @@ details.gone { margin-top: 16px; } details.gone summary { cursor: pointer; font-
 .ssp-big b { font-size: 32px; color: var(--in); font-variant-numeric: tabular-nums; }
 .ssp-big span { color: var(--muted); font-size: 14px; font-weight: 700; }
 .app-tile.buy { background: #6d28d9; background-image: radial-gradient(circle at 110% -10%, rgba(255,255,255,.2), transparent 50%); }
+.app-tile.stock { background: #b45309; background-image: linear-gradient(160deg, rgba(255,255,255,.14), transparent 55%); }
+/* the warehouse: goods received (a line per supplier line, a line per cost), goods out, counts, the shop */
+.rlines, .clines, .olines { display: grid; gap: 10px; margin-bottom: 10px; }
+.rline, .cline { display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: var(--paper); }
+.rline select, .rline input, .cline select, .cline input, .oline select, .oline input, .iline select.ipick { width: 100%; min-width: 0; font: inherit; font-size: 16px; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); }
+.rline :focus, .cline :focus, .oline :focus { outline: none; border-color: var(--ink); }
+.rnew { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
+.rnums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 44px; gap: 8px; align-items: end; }
+.rnums label span { display: block; font-size: 13px; font-weight: 800; color: var(--muted); margin: 0 0 4px 2px; }
+.cnums { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px; }
+.cnums:nth-child(2) { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) 44px; }
+.cnums:nth-child(2) [hidden] + .x { grid-column: 4; }
+.rline .x, .cline .x, .oline .x { border: 0; background: var(--card); border-radius: 10px; height: 46px; font-size: 22px; cursor: pointer; color: var(--muted); }
+.rhint, .chint, .ohint, .ihint { font-size: 13px; }
+.oline { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 44px; gap: 8px; }
+.oline .ohint { grid-column: 1 / -1; }
+.lc-table { display: grid; gap: 10px; }
+.lc-row { display: grid; gap: 2px; padding-bottom: 10px; border-bottom: 1px dashed var(--line); font-size: 15px; }
+.lc-row .muted { font-size: 13px; }
+.lc-each { color: var(--in); }
+.count-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.count-row:first-child { border-top: 0; }
+.count-row small { display: block; }
+.count-row input { width: 100%; font: inherit; font-size: 18px; font-weight: 700; text-align: right; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); }
+.shop-q { width: 100%; font: inherit; font-size: 18px; padding: 15px 16px; border: 2px solid var(--ink); border-radius: 16px; background: var(--card); color: var(--ink); margin-bottom: 12px; }
+.shop-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px; border-top: 1px solid var(--line); }
+.shop-row:first-child { border-top: 0; }
+.shop-row.in-cart { background: var(--in-soft); }
+.shop-what b { font-size: 16px; } .shop-what small { display: block; color: var(--muted); font-size: 14px; margin-top: 3px; }
+.shop-price { color: var(--ink); }
+.stepper-q { display: grid; grid-template-columns: 40px 56px 40px; gap: 4px; align-items: center; }
+.stepper-q button { height: 40px; border: 0; border-radius: 12px; background: var(--ink); color: #fff; font-size: 22px; font-weight: 800; cursor: pointer; }
+.stepper-q button:disabled { background: var(--line); color: var(--muted); cursor: default; }
+.stepper-q input { width: 100%; height: 40px; text-align: center; font: inherit; font-size: 16px; font-weight: 800; border: 2px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); padding: 0 2px; }
+.cart-bar { position: sticky; bottom: 0; margin: 14px -4px 0; padding: 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--card); border-top: 2px solid var(--line); }
+.cart-bar .btn { width: auto; flex: none; padding: 12px 18px; }
+.nw { white-space: nowrap; }
+@media (max-width: 340px) { .rnums { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rnums .x { grid-column: 2; justify-self: end; width: 44px; } .cnums:nth-child(2) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .stepper-q { grid-template-columns: 36px 48px 36px; } }
 /* buying: the idea box, the filters, an item's detail lines, inspection ticks, photo strips */
 .idea-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 6px; }
 .idea-box input { font: inherit; font-size: 17px; padding: 14px; border: 2px solid var(--ink); border-radius: var(--r-sm); background: var(--card); min-width: 0; }
@@ -626,7 +671,7 @@ dialog.lockbox::backdrop { background: var(--paper); }
 
 <script>
 'use strict';
-const APP_VERSION = '8590765875'; // filled in by tools/build.js
+const APP_VERSION = '92030d5600'; // filled in by tools/build.js
 const KEY = 'company-accounts-v1';
 const UNLOCK_MS = 5 * 60 * 1000;
 const BACKUP_NAG_DAYS = 7;
@@ -660,7 +705,7 @@ function save() {
 }
 // Every change goes through here. Changed records get a fresh time stamp (u); when this device
 // is connected to the Google Sheet they are also queued (dirty) for the next sync.
-const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I', needs: 'N', suppliers: 'U', trips: 'J', exchanges: 'X' };
+const SYNC_KEYS = { expenses: 'E', credits: 'R', projects: 'P', log: 'L', transfers: 'T', changes: 'C', workers: 'W', absences: 'A', files: 'F', regulars: 'G', banks: 'B', docs: 'V', clients: 'K', invoices: 'I', needs: 'N', suppliers: 'U', trips: 'J', exchanges: 'X', stock: 'M', receipts: 'Y', stockOut: 'O', deliveries: 'D' };
 const recId = (key, r) => key === 'log' ? r.lid : r.id;
 // an empty list of every kind of record (a new company, a new phone, a sign-in that starts again)
 const noRecords = () => Object.fromEntries(Object.keys(SYNC_KEYS).map(k => [k, []]));
@@ -727,6 +772,13 @@ function sumText(items) {
 function parseAmount(v) {
   const n = Number(String(v ?? '').replace(/[,\s$]/g, '').replace(/^SSP/i, ''));
   return Number.isFinite(n) && n > 0 && n < 1e12 ? Math.round(n * 100) / 100 : null;
+}
+// a count, a weight or a rate as typed: 0 or more, every decimal kept (parseAmount is for money: above 0, to the cent)
+function parseNum(v) {
+  const t = String(v ?? '').replace(/[,\s]/g, '');
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 && n < 1e12 ? n : null;
 }
 function fmtTime(at) { const [h, m] = at.slice(11, 16).split(':').map(Number); return `${h % 12 || 12}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`; }
 function fmtDate(date) { const [y, m, d] = date.split('-').map(Number); return `${d} ${MON[m - 1]} ${y}`; }
@@ -961,7 +1013,8 @@ function viewMenu() {
         <button class="app-tile acc" data-act="tab" data-tab="home"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span><span><b>Accounts</b><small>Cash, bank and projects</small></span></button>
         <button class="app-tile emp" data-act="tab" data-tab="staff">${staffWaiting ? `<span class="badge">${staffWaiting} waiting</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg></span><span><b>Employees</b><small>Salaries, advances and slips</small></span></button>
         <button class="app-tile doc" data-act="docs">${live(S.docs).some(v => docState(v).soon) ? `<span class="badge">${live(S.docs).filter(v => docState(v).soon).length} to renew</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg></span><span><b>Documents</b><small>Licences, vehicles, IDs</small></span></button>
-        ${can('settings') ? `<button class="app-tile inv" data-act="sales">${live(S.invoices).some(x => x.type === 'invoice' && invState(x).state === 'overdue') ? `<span class="badge">${live(S.invoices).filter(x => x.type === 'invoice' && invState(x).state === 'overdue').length} overdue</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span><span><b>Invoices</b><small>Quotations, clients, what is owed</small></span></button>` : ''}
+        ${can('staff') ? `<button class="app-tile inv" data-act="sales">${seesPaid() && invs().some(x => x.type === 'invoice' && invState(x).state === 'overdue') ? `<span class="badge">${invs().filter(x => x.type === 'invoice' && invState(x).state === 'overdue').length} overdue</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span><span><b>Invoices</b><small>${seesPaid() ? 'Quotations, clients, what is owed' : 'Quotations and clients'}</small></span></button>` : ''}
+        ${can('staff') ? `<button class="app-tile stock" data-act="stock">${stockBadge()}<span class="ai"><svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5v11H3z"/><path d="M7 20v-7h10v7M7 16h10"/></svg></span><span><b>Warehouse</b><small>Stock, imports, deliveries</small></span></button>` : ''}
         ${can('money') ? `<button class="app-tile ssp" data-act="ssp"><span class="ai"><svg viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg></span><span><b>SSP</b><small>Dollars changed, SSP spent and left</small></span></button>` : ''}
         ${can('settings') ? `<button class="app-tile buy" data-act="buying">${live(S.needs).some(n => n.pri === 1 && ['idea', 'tobuy'].includes(n.status)) ? `<span class="badge">${live(S.needs).filter(n => n.pri === 1 && ['idea', 'tobuy'].includes(n.status)).length} urgent</span>` : ''}<span class="ai"><svg viewBox="0 0 24 24"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg></span><span><b>Buying</b><small>Ideas, factories, trips, inspection</small></span></button>` : ''}
       </div>
@@ -1860,6 +1913,106 @@ function seesEntry(sees, e) {
   return sees.all === true || has(sees.p, e.project) || has(sees.l, placeKey(e.location)) || has(sees.u, e.uid);
 }
 
+/* ---------- the warehouse (owner, 2 Nov 2026): landed cost of what is imported, stock at average cost, sales ---------- */
+// to US dollars: amt in cur, rate = how many of cur make 1 US dollar that day (as on Accounts' SSP entries); null without a rate
+const toUsd = (amt, cur, rate) => (cur === 'USD' ? amt : rate > 0 ? amt / rate : null);
+// whole cents split over shares in proportion; the cents left over go to the largest remainders, so the parts always add up
+function splitCents(total, shares) {
+  const sum = shares.reduce((a, b) => a + b, 0);
+  if (!(sum > 0)) return null;
+  const raw = shares.map(s => total * s / sum), out = raw.map(Math.floor);
+  let left = total - out.reduce((a, b) => a + b, 0);
+  raw.map((r, i) => [r - out[i], i]).sort((a, b) => b[0] - a[0]).forEach(([, i]) => { if (left > 0) { out[i] += 1; left -= 1; } });
+  return out;
+}
+// One import (goods received, kind Y): the supplier's lines (qty, amt = what that line cost, in gcur at grate; kg = its weight)
+// and every other cost (freight, duty, clearing… each in its own currency at that day's rate), each spread over the lines by
+// weight, value or quantity. → per line { goods, extra, total } in cents and unit = landed cost of one, in dollars (4 places);
+// or { err, cost } (which cost line cannot be spread). Owner's rebars, 2 Nov 2026: the extra costs over the tons, per bar.
+function landedCost(y) {
+  const lines = y.lines || [], costs = y.costs || [];
+  const goods = lines.map(l => { const u = toUsd(l.amt, y.gcur || 'USD', y.grate); return u === null ? null : Math.round(u * 100); });
+  if (goods.includes(null)) return { err: `the rate: how many ${y.gcur} make 1 US dollar` };
+  const extra = lines.map(() => 0), costCents = [];
+  for (let i = 0; i < costs.length; i++) {
+    const c = costs[i], usd = toUsd(c.amt, c.cur, c.rate);
+    if (usd === null) return { err: `the rate of this cost: how many ${c.cur} made 1 US dollar that day`, cost: i };
+    const by = c.split || 'value', share = lines.map((l, j) => (by === 'kg' ? l.kg || 0 : by === 'qty' ? l.qty : goods[j]));
+    if (by === 'kg' && lines.some(l => !(l.kg > 0))) return { err: 'the weight of every line (or spread this cost by value instead)', cost: i };
+    const part = splitCents(Math.round(usd * 100), share);
+    if (!part) return { err: 'something to spread it over: the lines have no value yet', cost: i };
+    costCents.push(Math.round(usd * 100));
+    part.forEach((p, j) => { extra[j] += p; });
+  }
+  const out = lines.map((l, j) => ({ goods: goods[j], extra: extra[j], total: goods[j] + extra[j], unit: Math.round((goods[j] + extra[j]) / l.qty * 100) / 1e4, kg: l.kg || 0 }));
+  const sum = k => out.reduce((t, x) => t + x[k], 0);
+  return { lines: out, costs: costCents, goods: sum('goods'), extra: sum('extra'), total: sum('total'), kg: sum('kg') };
+}
+// the selling price of one: its landed cost plus the markup (10 % unless an admin set another), to the cent
+const sellPrice = (cost, markup = 10) => Math.round(cost * (1 + markup / 100) * 100) / 100;
+// The price an admin is offered for an item: its landed cost plus the markup, rounded UP to a clean price — 5 cents under $10,
+// 25 cents under $100, $1 under $1,000, $5 above — so the exact markup does not show through it (owner, 3 Nov 2026: "hide the
+// 10 % part"). The admin sets the price; it never changes by itself.
+function niceUp(p) {
+  const step = p < 10 ? 0.05 : p < 100 ? 0.25 : p < 1000 ? 1 : 5;
+  return Math.round(Math.ceil(Math.round(p / step * 1e6) / 1e6 - 1e-9) * step * 100) / 100;
+}
+const suggestPrice = (cost, markup = 10) => niceUp(cost * (1 + markup / 100));
+// how far below the list price a price is, in % (an office manager sells at the list price, or as far below it as an admin allows her)
+const belowList = (price, list) => (list > 0 && price < list ? Math.round((list - price) / list * 1e4) / 100 : 0);
+// an invoice that takes goods out of stock: an invoice (not a quotation), not cancelled, not waiting for an admin or refused
+const sells = x => x.type === 'invoice' && !x.deleted && !x.cancelled && x.ok !== 'waiting' && x.ok !== 'rejected';
+const OUT_RANK = { in: 0, sale: 1, use: 1, damage: 1, return: 1, count: 2 };
+// Every item's stock, replayed in date order (Odoo's and Zoho's "average cost"): a receipt makes the average
+// (on hand × average + received × its landed cost) ÷ (on hand + received); whatever goes out (sold, used, damaged, returned)
+// leaves at the average of that moment, so it never changes it; a stock count's difference goes in or out at the average.
+// receipts: lc = landed cost of one, per line (the admin's phone works it out when saving: landedCost); outs: kind use |
+// damage | return | count (count: qty is the difference found, + or −); invoices: lines naming an item (m), in USD or SSP at rate.
+// → { [item id]: { qty, avg, value (cents), sold, revenue, cogs (cents), used, usedValue, lost, lostValue, moves: [...] } }
+function stockBook(receipts, outs, invoices) {
+  const moves = [];
+  receipts.filter(y => !y.deleted).forEach(y => y.lines.forEach((l, i) => moves.push({ m: l.m, date: y.date, kind: 'in', qty: l.qty, cost: (y.lc || [])[i] || 0, ref: y.id, at: y.createdAt })));
+  outs.filter(o => !o.deleted).forEach(o => o.lines.forEach(l => moves.push({ m: l.m, date: o.date, kind: o.kind, qty: o.kind === 'count' ? l.qty : -l.qty, ref: o.id, project: o.project, at: o.createdAt })));
+  invoices.filter(sells).forEach(x => x.items.forEach(it => { if (it.m) { const usd = toUsd(it.qty * it.price, x.cur, x.rate); moves.push({ m: it.m, date: x.date, kind: 'sale', qty: -it.qty, ref: x.id, usd: usd === null ? null : Math.round(usd * 100), at: x.createdAt }); } }));
+  moves.sort((a, b) => a.date.localeCompare(b.date) || OUT_RANK[a.kind] - OUT_RANK[b.kind] || String(a.at || '').localeCompare(String(b.at || '')) || a.ref.localeCompare(b.ref));
+  const book = {};
+  moves.forEach(mv => {
+    const s = book[mv.m] || (book[mv.m] = { qty: 0, avg: 0, sold: 0, revenue: 0, cogs: 0, used: 0, usedValue: 0, lost: 0, lostValue: 0, moves: [] });
+    if (mv.kind === 'in') s.avg = s.qty > 0 ? Math.round((s.qty * s.avg + mv.qty * mv.cost) / (s.qty + mv.qty) * 1e4) / 1e4 : mv.cost;
+    const val = Math.round(mv.qty * (mv.kind === 'in' ? mv.cost : s.avg) * 100); // cents, + in, − out
+    s.qty = Math.round((s.qty + mv.qty) * 1e6) / 1e6;
+    if (mv.kind === 'sale') { s.sold += -mv.qty; s.cogs += -val; if (mv.usd !== null) s.revenue += mv.usd; }
+    if (mv.kind === 'use') { s.used += -mv.qty; s.usedValue += -val; }
+    if (mv.kind === 'damage' || mv.kind === 'return' || mv.kind === 'count') { s.lost += -mv.qty; s.lostValue += -val; }
+    s.moves.push({ ...mv, val, bal: s.qty, avg: s.avg });
+  });
+  Object.values(book).forEach(s => { s.value = Math.round(s.qty * s.avg * 100); s.short = s.qty < 0; });
+  return book;
+}
+
+// A sale's goods leave the warehouse on delivery notes (kind D), maybe in several loads. What an invoice still has to send:
+// [{ m, qty }] — never less than nothing (a note cannot carry more than was sold). And for the stock count: how many of each
+// item are sold but still on the shelf, waiting for their delivery note.
+function toSend(inv, deliveries) {
+  const sent = {};
+  deliveries.filter(d => !d.deleted && d.inv === inv.id).forEach(d => d.lines.forEach(l => { sent[l.m] = (sent[l.m] || 0) + l.qty; }));
+  const want = {};
+  inv.items.filter(it => it.m).forEach(it => { want[it.m] = (want[it.m] || 0) + it.qty; });
+  return Object.entries(want).map(([m, q]) => ({ m, qty: Math.max(0, Math.round((q - (sent[m] || 0)) * 1e6) / 1e6) })).filter(l => l.qty > 0);
+}
+function awaitingDelivery(invoices, deliveries) {
+  const out = {};
+  invoices.filter(sells).forEach(x => toSend(x, deliveries).forEach(l => { out[l.m] = (out[l.m] || 0) + l.qty; }));
+  return out;
+}
+// what a delivery note's receiver signed for, against what left: [{ m, sent, got }], and whether any arrived short
+function receivedOf(d) {
+  const got = {};
+  ((d.recv && d.recv.lines) || []).forEach(l => { got[l.m] = (got[l.m] || 0) + l.qty; });
+  const lines = d.lines.map(l => ({ m: l.m, sent: l.qty, got: d.recv ? got[l.m] || 0 : null }));
+  return { lines, short: !!d.recv && lines.some(l => l.got < l.sent) };
+}
+
 // Advances given in a month, in US dollars (the monthly limit is in dollars).
 function advancesUsd(pays, month) {
   const cents = pays.filter(p => p.pay === 'advance' && !p.deleted && p.at.slice(0, 7) === month)
@@ -1924,8 +2077,8 @@ const MAX_FILE = 8 * 1024 * 1024; // the sheet script refuses bigger files
 const PHOTO_SIDE = 1600; // photos are shrunk on the phone: quicker to upload, still sharp on a slip
 const PDF_Q = 0.8; // slips and statements: side by side at 2× it looks the same as 0.9, and is a quarter smaller (quicker to upload)
 const TAKEN_PHOTO = [1280, 0.8]; // the payment photo as taken: a person and money, not small print — a third smaller than other photos
-const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑', document: '📄', invoice: '🧾', quote: '📝' };
-const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document', invoice: 'Invoice', quote: 'Quotation' };
+const FILE_ICON = { voucher: '🧾', receipt: '🧾', slip: '🧾', photo: '📷', attachment: '📎', profile: '🙂', idphoto: '🪪', letterhead: '📄', stamp: '🔵', statement: '📑', document: '📄', invoice: '🧾', quote: '📝', delivery: '🚚' };
+const FILE_NAME = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document', invoice: 'Invoice', quote: 'Quotation' , delivery: 'Delivery note'};
 let outbox = [];          // files waiting to upload (their details; the bytes stay in IndexedDB)
 let uploading = false, uploadErr = '';
 let shown = null;         // the file on screen, kept in memory so "Send" opens the share sheet straight from the tap
@@ -3164,10 +3317,10 @@ const SYNC_TIMEOUT_MS = 45000, SLOWEST_BPS = 4000; // a request gets 45 s plus t
 const APP_URL = 'https://app.b-e-p-l.com/';
 // the order is the order records are sent in: an employee before a change request about them, files last
 // (the sheet only takes a file record whose entry it already has)
-const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', I: 'invoices', U: 'suppliers', J: 'trips', N: 'needs', X: 'exchanges', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
+const KIND_KEY = { E: 'expenses', R: 'credits', P: 'projects', G: 'regulars', B: 'banks', V: 'docs', K: 'clients', M: 'stock', Y: 'receipts', O: 'stockOut', I: 'invoices', D: 'deliveries', U: 'suppliers', J: 'trips', N: 'needs', X: 'exchanges', L: 'log', T: 'transfers', W: 'workers', A: 'absences', C: 'changes', F: 'files' };
 // Raised whenever the app learns a new kind of record. A phone that was on an older version skipped those
 // records (it didn't know them) but moved on past them, so after updating it downloads everything once.
-const KINDS_SEEN = 7; // 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I), 6 = the buying list (N), suppliers (U), trips (J), 7 = dollars changed into SSP (X)
+const KINDS_SEEN = 8; // 8 = the warehouse: stock items (M), goods received (Y), goods out (O), delivery notes (D) · 2 = change requests (C), 3 = employees (W) and files (F), 4 = days not worked (A), 5 = regular payments (G), bank accounts (B), documents (V), clients (K), invoices and quotations (I), 6 = the buying list (N), suppliers (U), trips (J), 7 = dollars changed into SSP (X)
 const VALID = {
   E: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && typeof d.paidTo === 'string' && typeof d.reason === 'string' && okRate(d),
   R: d => typeof d.id === 'string' && Number.isFinite(d.amount) && AT_RE.test(d.at) && CURS.includes(d.cur) && okRate(d),
@@ -3181,7 +3334,17 @@ const VALID = {
   B: d => typeof d.id === 'string' && typeof d.bank === 'string' && typeof d.number === 'string',
   V: d => typeof d.id === 'string' && typeof d.title === 'string' && ['company', 'vehicle', 'personal'].includes(d.kind),
   K: d => typeof d.id === 'string' && typeof d.name === 'string',
-  I: d => typeof d.id === 'string' && ['invoice', 'quote'].includes(d.type) && typeof d.no === 'string' && CURS.includes(d.cur) && DATE_RE.test(d.date) && Array.isArray(d.items) && d.items.every(it => it && typeof it.t === 'string' && Number.isFinite(it.qty) && Number.isFinite(it.price)),
+  // someone else's sale reaches an office manager as a stub: only the stock it took (stub: true; sheet script v23)
+  I: d => typeof d.id === 'string' && ['invoice', 'quote'].includes(d.type) && DATE_RE.test(d.date) && Array.isArray(d.items) && (d.stub === true
+    ? d.items.every(it => it && SAFE_ID.test(it.m) && Number.isFinite(it.qty))
+    : typeof d.no === 'string' && CURS.includes(d.cur) && d.items.every(it => it && typeof it.t === 'string' && Number.isFinite(it.qty) && Number.isFinite(it.price) && (it.m === undefined || SAFE_ID.test(it.m)))),
+  M: d => typeof d.id === 'string' && typeof d.name === 'string' && typeof d.unit === 'string' && (d.price === undefined || Number.isFinite(d.price)),
+  // an import reaches an office manager as a stub too: its items and how many, no cost
+  Y: d => typeof d.id === 'string' && DATE_RE.test(d.date) && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty) && l.qty > 0)
+    && (d.stub === true || (Array.isArray(d.costs) && Array.isArray(d.lc) && d.lc.length === d.lines.length && d.lines.every(l => Number.isFinite(l.amt)))),
+  O: d => typeof d.id === 'string' && DATE_RE.test(d.date) && ['use', 'damage', 'return', 'count'].includes(d.kind) && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty)),
+  D: d => typeof d.id === 'string' && typeof d.no === 'string' && DATE_RE.test(d.date) && (SAFE_ID.test(d.inv || '') || SAFE_ID.test(d.out || '')) && ['deliver', 'collect'].includes(d.how)
+    && Array.isArray(d.lines) && d.lines.every(l => l && SAFE_ID.test(l.m) && Number.isFinite(l.qty)) && ['out', 'done'].includes(d.status) && (d.status === 'out' || (!!d.recv && Array.isArray(d.recv.lines))),
   N: d => typeof d.id === 'string' && typeof d.t === 'string' && BUY_STATES.includes(d.status) && (d.specs === undefined || (Array.isArray(d.specs) && d.specs.every(x => Array.isArray(x) && (x.length === 2 || x.length === 3) && x.every(v => typeof v === 'string'))))
     && (d.quotes === undefined || (Array.isArray(d.quotes) && d.quotes.every(q => q && SAFE_ID.test(q.id) && SAFE_ID.test(q.sup) && Number.isFinite(q.price)))) && (d.order === undefined || (!!d.order && SAFE_ID.test(d.order.sup) && Number.isFinite(d.order.price) && Number.isFinite(d.order.qty))),
   U: d => typeof d.id === 'string' && typeof d.name === 'string',
@@ -3196,12 +3359,12 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 22; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 23; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // What an older script still keeps on the phones: the version that first stores it. From NEEDED_SCRIPT on, everything goes
 // up and a newer script only improves things — said quietly, never as a warning (owner, 23 Oct 2026: the message showed
 // "needed" while everything worked).
-const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [22, 'you can choose what else an office manager may see']];
-const NEEDED_SCRIPT = 20, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines']];
+const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry']];
+const NEEDED_SCRIPT = 23, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines'], [22, 'what you let an office manager see'], [23, 'the warehouse — stock, goods received, goods out and delivery notes']];
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
   if (id === 'settings') return 'company settings';
@@ -3400,7 +3563,7 @@ async function syncNow() {
     const accepted = new Set(res.kinds || OLD_SERVER_KINDS), notAllowed = new Set(res.refused || []);
     const refused = new Set([...push.filter(p => !accepted.has(p.k)).map(p => p.id), ...notAllowed]);
     const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link;
-    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins) }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
+    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins), ...(res.rate > 0 ? { rate: res.rate } : {}) }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
     S = { ...S, base: Object.fromEntries(Object.entries(S.base || {}).filter(([id]) => S.dirty.includes(id))) }; // sent: the next edit starts from the new copy
     // entries an office manager may no longer see (moved to another project or place): her old copies go, unless changed here
     const forget = new Set((res.forget || []).filter(id => !S.dirty.includes(id)));
@@ -3590,7 +3753,7 @@ function migrate(s) {
 // The sign-in lives in its own storage slot, so it never ends up in a backup file.
 const SESSION_KEY = KEY + '-login';
 const ROLES = { admin: 'Admin', manager: 'Office manager', store: 'Store keeper' };
-const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Staff and salaries · their own payments, and any you choose below · no company money · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
+const ROLE_HELP = { admin: 'Everything, including giving logins', manager: 'Staff and salaries · their own payments, and any you choose below · sells from stock at the list price (or the discount you allow) · no company money · edits wait for an admin', store: 'Adds expenses · sees only their own, no company money' };
 const RIGHTS = {
   admin: ['add', 'edit', 'delete', 'date', 'money', 'projects', 'settings', 'import', 'backup', 'restore', 'logins', 'phones', 'staff'],
   manager: ['add', 'suggest', 'date', 'backup', 'staff'], // suggest = edits and deletes wait for an admin's approval; no money (balances)
@@ -3734,7 +3897,12 @@ const lastSeen = u => (u.lastLogin ? ` · signed in ${fmtAbs(stamp(new Date(u.la
 const userRow = u => `<button class="row" data-act="userForm" data-id="${esc(u.id)}">
   <span class="dot">${u.active ? '👤' : '⛔'}</span>
   <span class="main"><span class="t"><span class="tt">${esc(u.name)}</span>${u.active ? '' : '<i class="tag warn">Blocked</i>'}${session.user.id === u.id ? '<i class="tag">You</i>' : ''}</span>
-  <span class="s">${esc(u.username)} · ${ROLES[u.role]}${u.sees ? ` · also sees ${esc(seesText(u.sees))}` : ''}${lastSeen(u)}</span></span></button>`;
+  <span class="s">${esc(u.username)} · ${ROLES[u.role]}${u.sees ? ` · also sees ${esc(seesText(u.sees))}` : ''}${u.off ? ` · may sell up to ${plain(u.off)} % below the list` : ''}${lastSeen(u)}</span></span></button>`;
+// how far below the list price this phone's login may sell from stock without an admin (admins: any price)
+const myOff = () => (can('edit') ? Infinity : signedIn() && session.user.off > 0 ? session.user.off : 0);
+// the discount an admin allows an office manager (owner, 3 Nov 2026): none unless given; the sheet holds her to it
+const offField = u => `<label class="fld off-fld" ${u && u.role === 'manager' ? '' : 'hidden'}><span>May sell below the list price <em>(optional — up to this %, e.g. 2; empty: the list price only, a lower price waits for you)</em></span>
+  <input name="off" inputmode="decimal" value="${u && u.off ? esc(u.off) : ''}" placeholder="0" autocomplete="off" ${(S.link && S.link.v || 0) < 23 ? 'disabled' : ''}></label>`;
 // What else an office manager may see (owner, 1 Nov 2026), in words: "every payment" or "Villa project, Juba, what Babu enters"
 const tidyPlace = s => String(s || '').trim().replace(/\s+/g, ' ');
 const placeName = key => tidyPlace((live(S.expenses).find(e => placeKey(e.location) === key) || { location: key }).location);
@@ -3770,6 +3938,7 @@ function userForm(id) {
       <label class="fld"><span>Username <em>(what they type to sign in)</em></span><input name="username" required maxlength="30" autocapitalize="off" autocorrect="off" spellcheck="false" value="${esc(u?.username)}" placeholder="e.g. mary"></label>
       <div class="fld"><span>What may they do?</span><div class="curseg roles">${Object.keys(ROLES).map(r => `<label><input type="radio" name="role" value="${esc(r)}" ${r === role ? 'checked' : ''}><span><b>${ROLES[r]}</b><small>${ROLE_HELP[r]}</small></span></label>`).join('')}</div></div>
       ${seesField(u)}
+      ${offField(u)}
       <label class="fld"><span>${u ? 'New password <em>(leave empty to keep theirs)</em>' : 'Password'}</span><input name="password" ${u ? '' : 'required'} minlength="8" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="At least 8 characters"></label>
       ${u ? `<label class="fld check"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> Login is open <em>(untick to block this person)</em></label>` : ''}
       <p class="err"></p>
@@ -3784,13 +3953,17 @@ async function saveUserForm(f) {
   const sees = v.role !== 'manager' ? null : v.seeAll ? { all: true, p: [], l: [], u: [] } : { all: false, p: fd.getAll('seeP'), l: fd.getAll('seeL'), u: fd.getAll('seeU') };
   const none = !sees || (!sees.all && !sees.p.length && !sees.l.length && !sees.u.length);
   const user = { name: clean(v.name), username: clean(v.username).toLowerCase(), role: v.role, ...(id ? { id, active: !!v.active } : {}), ...(v.password ? { password: v.password } : {}), ...((S.link.v || 0) >= 22 ? { sees: none ? null : sees } : {}) };
-  const seesChanged = (S.link.v || 0) >= 22 && was && JSON.stringify(was.sees || null) !== JSON.stringify(none ? null : sees);
+  const off = v.role === 'manager' && String(v.off || '').trim() ? parseNum(v.off) : 0;
+  if (off === null || off > 50) return formErr(f, 'off', 'Type the most below the list price as a %, from 0 to 50 — or leave it empty');
+  if ((S.link.v || 0) >= 23) user.off = off;
+  const seesChanged = ((S.link.v || 0) >= 22 && was && JSON.stringify(was.sees || null) !== JSON.stringify(none ? null : sees)) || ((S.link.v || 0) >= 23 && was && (was.off || 0) !== off);
   $('.err', f).textContent = 'Saving…';
   try { usersCache = (await callServer(S.link, { op: 'saveUser', user })).users; }
   catch (e) { return formErr(f, null, e.offline ? 'No internet. Managing logins needs internet.' : e.message); }
   const now = usersCache.find(x => x.username === user.username);
   const what = [id ? 'Login changed' : 'Login given', `${user.name} (${user.username}) · ${ROLES[user.role]}`, id && !user.active && 'blocked', id && v.password && 'new password',
-    (seesChanged || (!id && now && now.sees)) && (now && now.sees ? `also sees ${seesText(now.sees)}` : 'sees only their own payments')].filter(Boolean).join(' · ');
+    (seesChanged || (!id && now && now.sees)) && (now && now.sees ? `also sees ${seesText(now.sees)}` : 'sees only their own payments'),
+    seesChanged && now && now.role === 'manager' && (now.off ? `may sell up to ${plain(now.off)} % below the list` : 'sells at the list price only')].filter(Boolean).join(' · ');
   update({ log: logWith([['Logins', id || '—', what]]) });
   toast(!id ? `Login created ✓ Tell ${user.name}: username "${user.username}" and the password` : seesChanged ? `Saved ✓ ${user.name} signs in again to see the change` : 'Saved ✓');
   if (id === session.user.id && (user.role !== session.user.role || v.password)) return syncNow(); // own role or password changed: sign in again
@@ -3881,7 +4054,8 @@ const EDITABLE = {
 const editPart = c => (c.action ? {} : Object.fromEntries(Object.entries(c.after || {}).filter(([f]) => (EDITABLE[c.kind] || []).includes(f))));
 // (records without a date and amount are named by what they are: a sync error must never fail on them)
 const NAMED = { G: r => `Regular payment: ${r.name}`, B: r => `Bank account: ${r.bank}`, V: r => `Document: ${r.title}`, K: r => `Client: ${r.name}`, I: r => `${r.type === 'quote' ? 'Quotation' : 'Invoice'} ${r.no}`,
-  N: r => `Buying list: ${r.t}`, U: r => `Supplier: ${r.name}`, J: r => `Trip: ${r.to}`, X: r => `Change to SSP: ${money(r.usd, 'USD')} → ${money(r.ssp, 'SSP')}` };
+  N: r => `Buying list: ${r.t}`, U: r => `Supplier: ${r.name}`, J: r => `Trip: ${r.to}`, X: r => `Change to SSP: ${money(r.usd, 'USD')} → ${money(r.ssp, 'SSP')}`,
+  M: r => `Stock item: ${r.name}`, Y: r => `Goods received ${r.date}${r.ref ? ' · ' + r.ref : ''}`, O: r => `Goods out ${r.date} · ${(OUT_KIND[r.kind] || [r.kind])[0]}`, D: r => `Delivery note ${r.no}` };
 const whatIs = (kind, r) => (kind === 'P' ? `Project "${r.name}"` : kind === 'W' ? `Employee ${r.name}`
   : kind === 'A' ? `Day not worked: ${(workerOf(r.worker) || {}).name || r.worker}, ${fmtDate(r.date)}${r.note ? ` (${r.note})` : ''}` : NAMED[kind] ? NAMED[kind](r) : describe(kind, r));
 // what approving would really change, worked out from the entry itself — never from the text sent with the request
@@ -3907,16 +4081,18 @@ function requestChange(kind, old, rec, changes, by) {
   closeSheet(); render(); toast('Sent for approval ✓ It changes when an admin approves it.');
 }
 function approvalsBanner() {
-  const n = waiting().length;
+  const n = waiting().length + priceWaits().length;
   if (!n) return '';
-  if (can('edit')) return `<div class="banner"><span>✏️ ${n} change${n === 1 ? '' : 's'} waiting for your approval.</span><button class="btn small" data-act="approvals">Review</button></div>`;
-  const mine = waiting().filter(c => c.by === myName()).length;
-  return mine ? `<div class="banner new"><span>✏️ ${mine} of your changes ${mine === 1 ? 'is' : 'are'} waiting for an admin to approve.</span></div>` : '';
+  if (can('edit')) return `<div class="banner"><span>✏️ ${n} change${n === 1 ? '' : 's'} or price${n === 1 ? '' : 's'} waiting for your approval.</span><button class="btn small" data-act="approvals">Review</button></div>`;
+  const mine = waiting().filter(c => c.by === myName()).length + priceWaits().filter(x => x.by === myName()).length;
+  return mine ? `<div class="banner new"><span>✏️ ${mine} of your changes or prices ${mine === 1 ? 'is' : 'are'} waiting for an admin to approve.</span></div>` : '';
 }
 function approvalsSheet() {
-  const list = waiting().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
-  openSheet(`${head('Changes to approve', '', `${list.length} waiting`)}
-    ${list.length ? list.map(changeCard).join('') : '<p class="muted">Nothing is waiting. ✓</p>'}`);
+  const list = waiting().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))), prices = can('edit') ? priceWaits() : [];
+  openSheet(`${head('Changes to approve', '', `${list.length + prices.length} waiting`)}
+    ${prices.length ? `<h3 class="subh" style="margin-top:0">Prices below the list (${prices.length})</h3>${prices.map(priceCard).join('')}` : ''}
+    ${list.length ? `${prices.length ? `<h3 class="subh">Changes (${list.length})</h3>` : ''}${list.map(changeCard).join('')}` : prices.length ? '' : '<p class="muted">Nothing is waiting. ✓</p>'}`);
+  comeBack(approvalsSheet);
 }
 function changeCard(c) {
   const r = targetOf(c);
@@ -5085,23 +5261,29 @@ async function saveAlerts(f, test = false) {
   } catch (e) { formErr(f, 'email', e.offline ? 'No internet. Try again when it is on.' : e.message); }
 }
 
-/* ---------- invoices and quotations (admins only) ---------- */
+/* ---------- invoices and quotations (admins; office managers sell from stock, 2 Nov 2026) ---------- */
 // An invoice or a quotation (kind I) goes to a client (kind K). Its lines are quantity × unit price, and tax is a
 // percentage typed on it — none until someone types one (the tax line is "built but hidden"). The sheet numbers invoices
 // in one unbroken series, so making one needs the internet; quotations are numbered by the phone (QT-…) and work offline.
 // Once made it is never edited: a mistake is cancelled (kept, stamped) and a copy made. Payments are Money received
 // entries that name it (invoice), so what each client owes is always worked out, never typed (calc.js invoiceState).
-const invOf = id => S.invoices.find(x => x.id === id && !x.deleted);
+// someone else's sale reaches an office manager as a stub (only the stock it took, for the warehouse): never shown as an invoice
+const invOf = id => S.invoices.find(x => x.id === id && !x.deleted && !x.stub);
+const invs = () => live(S.invoices).filter(x => !x.stub);
+const seesPaid = () => can('money'); // what was paid and is owed comes from money received: admins only
 const clientOf = id => S.clients.find(x => x.id === id && !x.deleted);
 const invState = inv => invoiceState(inv, S.credits, today());
 const INV_STATE = { unpaid: ['Unpaid', 'warn'], part: ['Part paid', 'warn'], overdue: ['Overdue', 'bad'], paid: ['Paid', ''], cancelled: ['Cancelled', 'bad'] };
-const madeFrom = id => live(S.invoices).find(x => x.from === id && !x.cancelled); // the invoice made from a quotation
+const madeFrom = id => invs().find(x => x.from === id && !x.cancelled); // the invoice made from a quotation
 const lineAmount = it => Math.round(it.qty * it.price * 100) / 100;
 const plusDays = (d, n) => new Date(Date.parse(d) + n * 864e5).toISOString().slice(0, 10);
 const waChat = phone => `https://wa.me/${String(phone).replace(/\D/g, '')}`;
 // what invoices still ask for: all of them, or one client's ({ amount, cur } per invoice, for sumText)
-const owedBy = clientId => live(S.invoices).filter(x => x.type === 'invoice' && (!clientId || x.client === clientId)).map(x => ({ cur: x.cur, amount: invState(x).due })).filter(x => x.amount);
+const owedBy = clientId => invs().filter(x => x.type === 'invoice' && (!clientId || x.client === clientId)).map(x => ({ cur: x.cur, amount: invState(x).due })).filter(x => x.amount);
 function invTag(inv) {
+  if (inv.ok === 'waiting') return '<i class="tag warn">Price waiting</i>';
+  if (inv.ok === 'rejected') return '<i class="tag bad">Price refused</i>';
+  if (!seesPaid() && inv.type === 'invoice') return inv.cancelled ? '<i class="tag bad">Cancelled</i>' : '';
   if (inv.type === 'quote') return inv.cancelled ? '<i class="tag bad">Cancelled</i>' : madeFrom(inv.id) ? '<i class="tag">Invoiced</i>' : inv.due && inv.due < today() ? '<i class="tag">Expired</i>' : '';
   const [text, tone] = INV_STATE[invState(inv).state];
   return `<i class="tag ${tone}">${text}</i>`;
@@ -5109,13 +5291,14 @@ function invTag(inv) {
 function invRow(x) {
   const k = clientOf(x.client), st = invState(x);
   return `<button class="row in" data-act="openInvoice" data-id="${esc(x.id)}"><span class="dot">${x.type === 'quote' ? '📝' : '🧾'}</span>
-    <span class="main"><span class="t"><span class="tt">${esc(x.no)}</span>${invTag(x)}</span><span class="s">${esc([k ? k.name : '—', fmtDate(x.date), x.type === 'invoice' && st.due && !x.cancelled ? `${money(st.due, x.cur)} owed` : ''].filter(Boolean).join(' · '))}</span></span>
+    <span class="main"><span class="t"><span class="tt">${esc(x.no)}</span>${invTag(x)}</span><span class="s">${esc([k ? k.name : '—', fmtDate(x.date), seesPaid() && x.type === 'invoice' && st.due && !x.cancelled ? `${money(st.due, x.cur)} owed` : ''].filter(Boolean).join(' · '))}</span></span>
     <span class="amt">${money(st.total, x.cur)}</span></button>`;
 }
 const invList = (list, none) => (list.length ? `<div class="card list inset">${list.map(invRow).join('')}</div>` : `<p class="muted">${none}</p>`);
 
 function salesSheet() {
-  const all = live(S.invoices).sort((a, b) => b.date.localeCompare(a.date) || b.no.localeCompare(a.no));
+  const all = invs().sort((a, b) => b.date.localeCompare(a.date) || b.no.localeCompare(a.no));
+  if (!seesPaid()) return mySalesSheet(all);
   const open = all.filter(x => x.type === 'invoice' && ['unpaid', 'part', 'overdue'].includes(invState(x).state)).sort((a, b) => (a.due || '9').localeCompare(b.due || '9'));
   const quotes = all.filter(x => x.type === 'quote' && !x.cancelled && !madeFrom(x.id));
   const done = all.filter(x => !open.includes(x) && !quotes.includes(x)).slice(0, 50), owed = owedBy();
@@ -5126,6 +5309,18 @@ function salesSheet() {
     <h3 class="subh">Waiting for payment (${open.length})</h3>${invList(open, 'Nothing is owed.')}
     <h3 class="subh">Open quotations (${quotes.length})</h3>${invList(quotes, 'None.')}
     ${done.length ? `<details class="gone"><summary>Paid, cancelled and invoiced (${done.length})</summary>${invList(done, '')}</details>` : ''}`);
+  comeBack(salesSheet);
+}
+
+// an office manager's invoices and quotations (what was paid is the admins'): those waiting for a price, then the rest
+function mySalesSheet(all) {
+  const waitingP = all.filter(x => x.ok === 'waiting'), rest = all.filter(x => x.ok !== 'waiting');
+  openSheet(`${head('Invoices & quotations', 'in')}
+    <div class="two"><button class="btn in" data-act="newInvoice" data-type="invoice">＋ Invoice</button><button class="btn ghost" data-act="newInvoice" data-type="quote">＋ Quotation</button></div>
+    <button class="btn ghost" data-act="clients" style="margin-top:10px">👥 Clients (${live(S.clients).length})</button>
+    ${waitingP.length ? `<h3 class="subh">Price waiting for an admin (${waitingP.length})</h3>${invList(waitingP, '')}` : ''}
+    <h3 class="subh">Invoices (${rest.filter(x => x.type === 'invoice').length})</h3>${invList(rest.filter(x => x.type === 'invoice').slice(0, 60), 'None yet.')}
+    <h3 class="subh">Quotations (${rest.filter(x => x.type === 'quote').length})</h3>${invList(rest.filter(x => x.type === 'quote').slice(0, 40), 'None yet.')}`);
   comeBack(salesSheet);
 }
 
@@ -5143,14 +5338,14 @@ function clientsSheet() {
 function clientDetail(id) {
   const k = clientOf(id);
   if (!k) return false;
-  const invs = live(S.invoices).filter(x => x.client === id).sort((a, b) => b.date.localeCompare(a.date)), o = owedBy(id);
+  const theirs = invs().filter(x => x.client === id).sort((a, b) => b.date.localeCompare(a.date)), o = owedBy(id);
   openSheet(`${head(k.name, 'in', id)}
-    <p class="note">${o.length ? `Owes <b>${sumText(o)}</b>.` : 'Owes nothing.'}</p>
+    ${seesPaid() ? `<p class="note">${o.length ? `Owes <b>${sumText(o)}</b>.` : 'Owes nothing.'}</p>` : ''}
     <div class="two"><button class="btn in" data-act="newInvoice" data-type="invoice" data-client="${esc(id)}">＋ Invoice</button><button class="btn ghost" data-act="newInvoice" data-type="quote" data-client="${esc(id)}">＋ Quotation</button></div>
     <dl class="facts" style="margin-top:16px">${[['Phone', k.phone], ['Address', k.address], ['TIN', k.tin], ['Note', k.note]].filter(f => f[1]).map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>
     ${k.phone ? `<a class="btn ghost" href="${esc(waChat(k.phone))}" target="_blank" rel="noopener">💬 WhatsApp chat</a>` : ''}
-    <h3 class="subh">Invoices and quotations (${invs.length})</h3>${invList(invs, 'None yet.')}
-    <div class="two" style="margin-top:16px"><button class="btn ghost" data-act="editClient" data-id="${esc(id)}">✏️ Edit</button>${invs.length ? '' : `<button class="btn danger" data-act="delClient" data-id="${esc(id)}">🗑 Delete 🔒</button>`}</div>`);
+    <h3 class="subh">Invoices and quotations (${theirs.length})</h3>${invList(theirs, 'None yet.')}
+    ${can('edit') ? `<div class="two" style="margin-top:16px"><button class="btn ghost" data-act="editClient" data-id="${esc(id)}">✏️ Edit</button>${theirs.length ? '' : `<button class="btn danger" data-act="delClient" data-id="${esc(id)}">🗑 Delete 🔒</button>`}</div>` : ''}`);
   comeBack(() => clientDetail(id));
 }
 function clientForm(old) {
@@ -5183,7 +5378,7 @@ function saveClient(f) {
 }
 async function deleteClient(id) {
   const k = clientOf(id);
-  if (!k || live(S.invoices).some(x => x.client === id) || !await unlock('Enter the password to delete this client.')) return;
+  if (!k || invs().some(x => x.client === id) || !await unlock('Enter the password to delete this client.')) return;
   const by = confirmBy(`Delete the client "${k.name}"?`);
   if (!by) return;
   update({ clients: S.clients.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Client: ${k.name}`]], by) });
@@ -5191,23 +5386,50 @@ async function deleteClient(id) {
 }
 
 /* ---------- making one ---------- */
-const lineRow = (it = {}) => `<div class="iline"><input name="t" placeholder="What — e.g. Cement 42.5, 50 kg bags" value="${esc(it.t)}" maxlength="200" autocomplete="off" aria-label="Description">
+// a line may come from the warehouse: its item (m), name, unit and price (the list price in the invoice's money); how many are in
+// stock shows under it. An office manager sells at the list price — her price box is locked — unless an admin allows her a
+// discount (Logins); lower waits for an admin (the sheet checks it too).
+const priceLocked = () => !can('edit') && !(myOff() > 0);
+const stockPick = it => (live(S.stock).length ? `<select name="m" class="ipick" aria-label="From stock"><option value="">✎ Typed line (not from stock)</option>${items().map(m => `<option value="${esc(m.id)}" ${m.id === it.m ? 'selected' : ''}>📦 ${esc(m.name)}</option>`).join('')}</select>` : '');
+const listFor = (m, cur, rate) => (!m || !(m.price > 0) ? 0 : cur === 'USD' ? m.price : rate > 0 ? Math.round(m.price * rate) : 0);
+const lineRow = (it = {}) => `<div class="iline">${stockPick(it)}<input name="t" placeholder="What — e.g. Cement 42.5, 50 kg bags" value="${esc(it.t)}" maxlength="200" autocomplete="off" aria-label="Description">
   <div class="iline-n"><input name="qty" inputmode="decimal" placeholder="Qty" value="${esc(it.qty ?? '')}" autocomplete="off" aria-label="Quantity"><input name="unit" placeholder="Unit" value="${esc(it.unit)}" maxlength="20" autocomplete="off" aria-label="Unit, e.g. bags">
-  <input name="price" inputmode="decimal" placeholder="Unit price" value="${esc(it.price ?? '')}" autocomplete="off" aria-label="Unit price"><button type="button" class="x" data-act="delLine" aria-label="Remove line">×</button></div></div>`;
+  <input name="price" inputmode="decimal" placeholder="Unit price" value="${esc(it.price ?? '')}" autocomplete="off" aria-label="Unit price" ${it.keep ? 'data-typed="1"' : ''} ${it.m && priceLocked() ? 'readonly title="The list price — an admin sets prices"' : ''}><button type="button" class="x" data-act="delLine" aria-label="Remove line">×</button></div><small class="muted ihint"></small></div>`;
+// a line picked from stock: its name, unit and list price; again whenever the money or the rate changes (unless a price was typed)
+function pickStockLine(row, fresh) {
+  const f = row.closest('form'), m = itemOf($('[name=m]', row).value), cur = formCur(f), rate = cur === 'SSP' ? parseAmount(f.elements.rate && f.elements.rate.value) : null;
+  if (!m) return;
+  if (fresh) { $('[name=t]', row).value = m.name; $('[name=unit]', row).value = m.unit; delete $('[name=price]', row).dataset.typed; }
+  const list = listFor(m, cur, rate), price = $('[name=price]', row);
+  price.readOnly = priceLocked();
+  if (price.readOnly) delete price.dataset.typed; // locked: always the list price
+  if (!price.dataset.typed) price.value = list || '';
+}
 // src: a quotation to invoice, or an earlier one to copy; client: made from a client's page
-function invoiceForm(type, src, client) {
-  const last = live(S.invoices).filter(x => x.type === type).pop() || {}, ks = live(S.clients).sort((a, b) => a.name.localeCompare(b.name));
-  const d = src ? { ...src } : { client: client || '', cur: defCur(), items: [{}], tax: last.tax || 0, notes: last.notes || '', bank: last.bank || '', project: '' };
+// pre: the shop's cart (lines from stock) or one stock item's id
+function invoiceForm(type, src, client, pre) {
+  const last = invs().filter(x => x.type === type).pop() || {}, ks = live(S.clients).sort((a, b) => a.name.localeCompare(b.name)), one = typeof pre === 'string' && itemOf(pre);
+  const preLines = Array.isArray(pre) ? pre : one ? [{ m: one.id, t: one.name, unit: one.unit, price: one.price }] : null;
+  const d = src ? { ...src } : { client: client || '', cur: 'USD', items: preLines || [{}], tax: last.tax || 0, notes: last.notes || '', bank: last.bank || '', project: '' };
+  const dline = (d.items || []).find(it => it.dlv), lines = (d.items || []).filter(it => !it.dlv).map(it => (src ? { ...it, keep: true } : it)); // the delivery charge is asked on its own
+  if (!src && !can('edit') && S.link && S.link.rate) d.rate = S.link.rate; // an office manager sells in SSP at the company's rate
   const fromQuote = src && src.type === 'quote' && type === 'invoice';
   openSheet(`${head(type === 'quote' ? 'New quotation' : 'New invoice', 'in')}
     ${fromQuote ? `<p class="note">From quotation ${esc(src.no)}. Check the lines, then make the invoice.</p>` : ''}
-    <form data-form="invoice" data-type="${type}" data-from="${esc(fromQuote ? src.id : '')}">
-      <label class="fld"><span>Client</span><select name="client">${ks.map(k => `<option value="${esc(k.id)}" ${k.id === d.client ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}<option value="__new" ${ks.length ? '' : 'selected'}>＋ New client…</option></select></label>
-      <div class="newk" ${ks.length ? 'hidden' : ''}>${textField('kname', 'New client’s name', 'Company or person', '', false)}<label class="fld"><span>Their phone (WhatsApp) <em>(optional)</em></span><input name="kphone" type="tel" maxlength="30" autocomplete="off"></label></div>
+    ${Array.isArray(pre) ? `<p class="note">🛒 ${pre.length} item${pre.length === 1 ? '' : 's'} from the cart. Choose the customer, say how the goods go, and make it.</p>` : ''}
+    <form data-form="invoice" data-type="${type}" data-from="${esc(fromQuote ? src.id : '')}" data-cart="${Array.isArray(pre) ? '1' : ''}">
+      <label class="fld"><span>Client</span><select name="client">${ks.length && !d.client ? '<option value="" selected disabled>Choose the customer…</option>' : ''}${ks.map(k => `<option value="${esc(k.id)}" ${k.id === d.client ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}<option value="__new" ${ks.length ? '' : 'selected'}>＋ New client…</option></select></label>
+      <div class="newk" ${ks.length ? 'hidden' : ''}>${textField('kname', 'New client’s name', 'Company or person', '', false)}<label class="fld"><span>Their phone (WhatsApp) <em>(optional)</em></span><input name="kphone" type="tel" maxlength="30" autocomplete="off"></label>
+        ${textField('kaddr', 'Their address', 'Town, street', '', false)}${textField('ktin', 'Tax number (TIN)', '', '', false)}</div>
       <label class="fld"><span>Date</span><input type="date" name="date" value="${today()}" required></label>
       <label class="fld"><span>${type === 'quote' ? 'Valid until' : 'Pay by'}</span><input type="date" name="due" value="${plusDays(today(), type === 'quote' ? 30 : 14)}"></label>
       ${curChips(d.cur)}
-      <div class="fld"><span>Lines</span><div class="ilines">${(d.items.length ? d.items : [{}]).map(lineRow).join('')}</div><button type="button" class="btn small ghost" data-act="addLine">＋ Add a line</button></div>
+      ${rateField(d.cur, d.rate).replace('<label class="fld ratef"', '<label class="fld ratef" data-stock-rate')}
+      <div class="fld"><span>Lines</span><div class="ilines">${(lines.length ? lines : [{}]).map(lineRow).join('')}</div><button type="button" class="btn small ghost" data-act="addLine">＋ Add a line</button></div>
+      <div class="fld"><span>The goods</span><div class="curseg"><label><input type="radio" name="dl" value="collect" ${d.dl === 'deliver' || dline ? '' : 'checked'}><span><b>🙋 They collect</b><small>from the warehouse</small></span></label>
+        <label><input type="radio" name="dl" value="deliver" ${d.dl === 'deliver' || dline ? 'checked' : ''}><span><b>🚚 We deliver</b><small>to their site</small></span></label></div></div>
+      <div class="dl-only">${textField('addr', 'Deliver to', 'e.g. Gudele block 3', d.addr || '', false)}
+        <label class="fld"><span>Delivery charge <em>(optional — empty: free delivery)</em></span><input name="dcharge" inputmode="decimal" value="${esc(dline ? dline.price : '')}" placeholder="0" autocomplete="off"></label></div>
       <label class="fld"><span>Tax % <em>(optional — empty for none)</em></span><input name="tax" inputmode="decimal" value="${d.tax || ''}" placeholder="e.g. 18" autocomplete="off"></label>
       <p class="note itotal"></p>
       <label class="fld"><span>Pay into <em>(printed on it)</em></span><select name="bank"><option value="">— no bank details —</option>${bankList().map(b => `<option value="${esc(b.id)}" ${b.id === d.bank ? 'selected' : ''}>${esc(`${b.bank} · ${b.cur} · ${b.number}`)}</option>`).join('')}</select></label>
@@ -5217,45 +5439,129 @@ function invoiceForm(type, src, client) {
       <p class="err"></p>
       <button class="btn in">Make the ${type === 'quote' ? 'quotation' : 'invoice'} (PDF)</button>
     </form>`);
-  refreshInvoice($('#sheet form'));
+  const f = $('#sheet form');
+  if (!can('edit') && S.link && S.link.rate > 0) { f.elements.rate.value = S.link.rate; f.elements.rate.readOnly = true; }
+  refreshInvoice(f);
   showMySigField();
 }
 // the lines typed, and which one is not complete; empty lines are skipped
 function invoiceLines(f) {
-  const rows = $$('.iline', f).map(el => ({ t: clean($('[name=t]', el).value), q: $('[name=qty]', el).value.trim(), unit: clean($('[name=unit]', el).value), p: $('[name=price]', el).value.trim(), el }))
-    .filter(r => r.t || r.q || r.p);
-  const items = rows.map(r => ({ t: r.t, qty: parseAmount(r.q), unit: r.unit, price: parseAmount(r.p) }));
+  const rows = $$('.iline', f).map(el => ({ m: $('[name=m]', el) && itemOf($('[name=m]', el).value) ? $('[name=m]', el).value : '', t: clean($('[name=t]', el).value), q: $('[name=qty]', el).value.trim(), unit: clean($('[name=unit]', el).value), p: $('[name=price]', el).value.trim(), el }))
+    .filter(r => r.m || r.t || r.q || r.p);
+  const items = rows.map(r => ({ t: r.t, qty: parseAmount(r.q), unit: r.unit, price: parseAmount(r.p), ...(r.m ? { m: r.m } : {}) }));
   const bad = rows.find((r, i) => !items[i].t || items[i].qty === null || items[i].price === null);
   return { items, bad };
 }
 function refreshInvoice(f) {
-  const { items } = invoiceLines(f), ok = items.filter(it => it.t && it.qty && it.price), tax = parseAmount(f.elements.tax.value) || 0, cur = formCur(f);
+  const { items, } = invoiceLines(f), tax = parseAmount(f.elements.tax.value) || 0, cur = formCur(f), dl = f.elements.dl.value, charge = dl === 'deliver' ? parseAmount(f.elements.dcharge.value) || 0 : 0;
+  const ok = [...items.filter(it => it.t && it.qty && it.price), ...(charge > 0 ? [{ qty: 1, price: charge }] : [])];
   const t = invoiceTotals({ items: ok, tax });
+  // from stock: how many are there, and how far below the list price it is (an office manager: 1 % at most, or an admin approves)
+  const b = book(), rate = cur === 'SSP' ? parseAmount(f.elements.rate.value) : null, stockLines = $$('.iline', f).filter(el => $('[name=m]', el) && itemOf($('[name=m]', el).value));
+  $$('.iline', f).forEach(el => {
+    const m = $('[name=m]', el) && itemOf($('[name=m]', el).value), hint = $('.ihint', el);
+    if (!m) { hint.textContent = ''; return; }
+    const list = listFor(m, cur, rate), price = parseAmount($('[name=price]', el).value), qty = parseAmount($('[name=qty]', el).value), have = b[m.id] ? b[m.id].qty : 0, off = price !== null ? belowList(price, list) : 0;
+    const over = off > myOff() + 1e-9;
+    hint.innerHTML = `${plain(have)} ${esc(m.unit)} in stock${qty > have ? ' — <b class="out-c">not enough</b>' : ''} · ${priceLocked() ? 'the list price' : `list ${list ? money(list, cur) : cur === 'SSP' ? '— type the rate above' : 'no price yet'}`}${off ? ` · <b class="${over ? 'out-c' : ''}">${plain(off)} % below</b>${over ? ' — an admin must approve it' : ''}` : ''}`;
+  });
+  const rateBox = $('[data-stock-rate]', f);
+  rateBox.hidden = !(cur === 'SSP' && stockLines.length); $('input', rateBox).required = !rateBox.hidden;
+  $('.dl-only', f).hidden = dl !== 'deliver';
   $('.itotal', f).innerHTML = ok.length ? `${ok.length} line${ok.length === 1 ? '' : 's'} · ${tax ? `${money(t.sub, cur)} + tax ${plain(tax)}% ${money(t.tax, cur)} = ` : ''}<b>${money(t.total, cur)}</b>` : 'Type each line: what, quantity, unit price.';
   $('.newk', f).hidden = f.elements.client.value !== '__new';
 }
 async function saveInvoice(f) {
   const type = f.dataset.type, v = Object.fromEntries(new FormData(f)), cur = formCur(f), { items, bad } = invoiceLines(f);
-  const tax = v.tax.trim() ? parseAmount(v.tax) : 0, newName = clean(v.kname);
+  const tax = v.tax.trim() ? parseAmount(v.tax) : 0, newName = clean(v.kname), dl = v.dl === 'deliver' ? 'deliver' : 'collect';
   if (v.client === '__new' ? !newName : !clientOf(v.client)) return formErr(f, v.client === '__new' ? 'kname' : 'client', 'Who is it for?');
   if (!items.length) return formErr(f, null, 'Add at least one line: what, quantity and unit price.');
   if (bad) { $('[name=t]', bad.el).focus(); return formErr(f, null, 'Each line needs what it is, a quantity and a unit price.'); }
   if (tax === null || tax > 100) return formErr(f, 'tax', 'Type the tax as a percentage, like 18 — or leave it empty');
   if (!DATE_RE.test(v.date)) return formErr(f, 'date', 'Choose the date');
   if (v.due && v.due < v.date) return formErr(f, 'due', 'It cannot be due before its date');
+  const charge = dl === 'deliver' && String(v.dcharge || '').trim() ? parseAmount(v.dcharge) : 0;
+  if (charge === null) return formErr(f, 'dcharge', 'Type the delivery charge, like 25 — or leave it empty for free delivery');
+  // from stock: the list price as the item has it now (never what the form says), enough in stock, and the price rule
+  const stockLines = items.filter(it => it.m), rate = cur === 'SSP' && stockLines.length ? parseAmount(v.rate) : null;
+  if (stockLines.length && cur === 'SSP' && !(rate > 0)) return formErr(f, 'rate', RATE_ERR);
+  stockLines.forEach(it => { it.list = listFor(itemOf(it.m), cur, rate); });
+  const noPrice = stockLines.find(it => !(it.list > 0));
+  if (noPrice) return formErr(f, null, `${itemOf(noPrice.m).name} has no selling price yet — an admin sets it in the Warehouse.`);
+  const src = f.dataset.from && invOf(f.dataset.from), mine = signedIn() ? session.user.id : '';
+  const usedQuote = src && invs().some(x => x.from === src.id && !x.cancelled && x.ok !== 'waiting' && x.ok !== 'rejected'), approvedQuote = src && src.type === 'quote' && src.ok === 'approved' && src.uid === mine && src.cur === cur && !usedQuote ? src : null;
+  const quotedQty = m => (approvedQuote ? approvedQuote.items.filter(q => q.m === m).reduce((t, q) => t + q.qty, 0) : 0), soldQty = m => stockLines.filter(it => it.m === m).reduce((t, it) => t + it.qty, 0);
+  const offOk = it => belowList(it.price, it.list) <= myOff() + 1e-9 || (approvedQuote && soldQty(it.m) <= quotedQty(it.m) + 1e-9 && approvedQuote.items.some(q => q.m === it.m) && it.price >= Math.max(...approvedQuote.items.filter(q => q.m === it.m).map(q => q.price)) - 1e-9);
+  const typedLines = items.filter(it => !it.m), lowRate = !can('edit') && cur === 'SSP' && stockLines.length && S.link && S.link.rate > 0 && rate < S.link.rate * (1 - myOff() / 100) - 1e-9;
+  const noRate = !can('edit') && cur === 'SSP' && stockLines.length > 0 && !(S.link && S.link.rate > 0); // the sheet has told this phone no company rate yet
+  const needsApproval = !can('edit') && (stockLines.some(it => !offOk(it)) || typedLines.length > 0 || lowRate || noRate);
+  if (type === 'invoice') {
+    const b = book(), want = {};
+    stockLines.forEach(it => { want[it.m] = (want[it.m] || 0) + it.qty; });
+    const over = Object.entries(want).find(([m, q]) => q > (b[m] ? b[m].qty : 0) + 1e-9);
+    if (over) { const m = itemOf(over[0]), have = b[m.id] ? b[m.id].qty : 0; if (!can('edit')) return formErr(f, null, `Only ${plain(have)} ${m.unit} of ${m.name} are in stock.`); if (!confirm(`Only ${plain(have)} ${m.unit} of ${m.name} are in stock, and this sells ${plain(over[1])}.\n\nMake it anyway?`)) return; }
+  }
+  if (can('edit') && seesCost()) { // an admin selling below what it cost is asked first
+    const b = book(), under = stockLines.find(it => b[it.m] && b[it.m].avg > 0 && toUsd(it.price, cur, rate) < b[it.m].avg - 0.005);
+    if (under && !confirm(`${itemOf(under.m).name} sells here for less than it cost (${usd4(b[under.m].avg)} landed). Make it anyway?`)) return;
+  }
+  const why = [...stockLines.filter(it => !offOk(it)).map(it => `${itemOf(it.m).name}: ${money(it.price, cur)} (list ${money(it.list, cur)}, ${plain(belowList(it.price, it.list))} % below)`),
+    ...typedLines.map(it => `"${it.t}" is typed, not from stock`), ...(lowRate ? [`The rate ${plain(rate)} is below the company's ${plain(S.link.rate)}`] : []), ...(noRate ? ['No company SSP rate has reached this phone yet'] : [])];
+  if (needsApproval && !confirm(`An admin must approve this first:\n${why.join('\n')}\n\nSend it to an admin? It is made only when they approve.`)) return;
   let no;
   $('.err', f).textContent = 'Making it…';
-  if (type === 'invoice') { // the next number in the company's one series, from the sheet
+  if (needsApproval) { const [[q], seq] = nextIds(type === 'quote' ? 'QT' : 'REQ', 1, S.seq); update({ seq }); no = q; } // numbered when approved
+  else if (type === 'invoice') { // the next number in the company's one series, from the sheet
     if (!S.link) return formErr(f, null, 'Invoices are numbered by the Google Sheet. Connect this phone to it first.');
     try { no = (await callServer(S.link, { op: 'number' })).no; }
     catch (e) { return formErr(f, null, e.offline ? 'Making an invoice needs the internet: the Google Sheet gives it the next number, so numbers never repeat or skip.' : e.message); }
   } else { const [[q], seq] = nextIds('QT', 1, S.seq); update({ seq }); no = q; }
-  const client = v.client === '__new' ? newClient({ name: newName, phone: clean(v.kphone), address: '', tin: '', note: '' }) : v.client;
-  const by = myName() || S.lastBy || '', [[id], seq] = nextIds('I', 1, S.seq);
-  const inv = { id, type, no, client, date: v.date, due: v.due || '', cur, items, tax: tax || 0, bank: bankOf(v.bank) ? v.bank : '', project: v.project || '', notes: String(v.notes || '').trim().slice(0, 600),
+  const client = v.client === '__new' ? newClient({ name: newName, phone: clean(v.kphone), address: clean(v.kaddr), tin: clean(v.ktin), note: '' }) : v.client;
+  if (f.dataset.cart) cart = {}; // sold: the shop's cart starts empty again
+  const by = myName() || S.lastBy || '', [[id], seq] = nextIds('I', 1, S.seq), addr = dl === 'deliver' ? clean(v.addr) : '';
+  const lines = [...items, ...(charge > 0 ? [{ t: `Delivery${addr ? ` to ${addr}` : ''}`, qty: 1, unit: 'trip', price: charge, dlv: true }] : [])];
+  const inv = { id, type, no, client, date: v.date, due: v.due || '', cur, items: lines, tax: tax || 0, bank: bankOf(v.bank) ? v.bank : '', project: v.project || '', notes: String(v.notes || '').trim().slice(0, 600),
+    ...(stockLines.length ? { dl, ...(addr ? { addr } : {}) } : {}), ...(rate ? { rate } : {}),
+    ...(needsApproval ? { ok: 'waiting' } : approvedQuote && !can('edit') ? { ok: 'approved', okBy: approvedQuote.okBy } : {}),
     ...(f.dataset.from ? { from: f.dataset.from } : {}), check: newCheck(), by, createdAt: stampSec() };
-  update({ invoices: [...S.invoices, inv], seq, log: logWith([['Made', id, `${type === 'quote' ? 'Quotation' : 'Invoice'} ${no} for ${clientOf(client).name}: ${money(invoiceTotals(inv).total, cur)}`]], by) });
+  update({ invoices: [...S.invoices, inv], seq, log: logWith([['Made', id, `${type === 'quote' ? 'Quotation' : 'Invoice'} ${no} for ${clientOf(client).name}: ${money(invoiceTotals(inv).total, cur)}${needsApproval ? ' — price waiting for an admin' : ''}`]], by) });
+  if (needsApproval) { toast('Sent to an admin ✓ It is made when they approve the price'); return invoiceDetail(id); }
   await makeInvoicePdf(inv, await approvalFrom(f));
+}
+// An admin approves an office manager's price below the list (the invoice then takes its number and its PDF is made), or refuses it
+async function approvePrice(id) {
+  const x = invOf(id);
+  if (!x || x.ok !== 'waiting' || !can('edit') || !await unlock('Enter the password to approve the price.')) return;
+  let no = x.no;
+  if (x.type === 'invoice') {
+    try { no = (await callServer(S.link, { op: 'number' })).no; }
+    catch (e) { return alert(e.offline ? 'Approving an invoice needs the internet: the Google Sheet gives it its number.' : e.message); }
+  }
+  const by = myName() || S.lastBy || '', done = { ...x, no, ok: 'approved', okBy: by };
+  update({ invoices: S.invoices.map(y => (y.id === id ? done : y)), log: logWith([['Approved', id, `Price on ${no} for ${(clientOf(x.client) || {}).name || ''} (asked by ${x.by})`]], by) });
+  const sig = await mySignature();
+  await makeInvoicePdf(done, sig ? { sig, name: myName(), date: fmtDate(today()) } : null);
+}
+async function refusePrice(id) {
+  const x = invOf(id);
+  if (!x || x.ok !== 'waiting' || !can('edit') || !await unlock('Enter the password to refuse the price.')) return;
+  const why = clean(prompt('Why is the price refused? (they see it)', 'Too far below the list price'));
+  if (!why) return;
+  const by = myName() || S.lastBy || '';
+  update({ invoices: S.invoices.map(y => (y.id === id ? { ...y, ok: 'rejected', okBy: by, why } : y)), log: logWith([['Refused', id, `Price on ${x.no}: ${why}`]], by) });
+  toast('Refused ✓'); invoiceDetail(id);
+}
+// the price requests an admin decides on (Changes to approve)
+const priceWaits = () => invs().filter(x => x.ok === 'waiting');
+function priceCard(x) {
+  const k = clientOf(x.client), t = invoiceTotals(x);
+  return `<section class="card pad" style="margin-bottom:12px">
+    <p style="margin:0 0 6px"><b>${x.type === 'quote' ? 'Quotation' : 'Invoice'} for ${esc(k ? k.name : '—')}: ${money(t.total, x.cur)}</b></p>
+    <ul style="margin:0 0 8px;padding-left:20px">${x.items.filter(it => !it.dlv).map(it => { const list = it.m ? listFor(itemOf(it.m), x.cur, x.rate) : 0, off = belowList(it.price, list);
+      return `<li>${esc(it.t)}: ${plain(it.qty)} × ${money(it.price, x.cur)} — ${it.m ? `list ${list ? money(list, x.cur) : '?'}${off ? `, <b>${plain(off)} % below</b>` : ''}` : '<b>typed, not from stock</b>'}</li>`; }).join('')}</ul>
+    ${x.cur === 'SSP' && x.rate ? `<p class="muted" style="margin:0 0 6px">At ${plain(x.rate)} SSP for 1 USD${S.link && S.link.rate ? ` (the company's newest: ${plain(S.link.rate)})` : ''}.</p>` : ''}
+    <p class="muted" style="margin:0 0 10px">Asked by ${esc(x.by)} · ${esc(fmtAbs(String(x.createdAt).slice(0, 16)))}</p>
+    <div class="two"><button class="btn in" data-act="approvePrice" data-id="${esc(x.id)}">✓ Approve</button><button class="btn danger" data-act="refusePrice" data-id="${esc(x.id)}">✗ Refuse</button></div></section>`;
 }
 // the PDF, kept with it (and sent up to Drive), then offered for sending
 async function makeInvoicePdf(inv, approval) {
@@ -5274,7 +5580,7 @@ function invoiceSpec(inv, approval) {
       rows: inv.items.map(it => [it.t, plain(it.qty), it.unit || '', slipMoney(it.price, inv.cur), slipMoney(lineAmount(it), inv.cur)]) }],
     summary: [...(t.tax ? [['Subtotal', slipMoney(t.sub, inv.cur)], [`Tax ${plain(inv.tax)}%`, slipMoney(t.tax, inv.cur)]] : []), [isQ ? 'Total' : 'Total due', slipMoney(t.total, inv.cur), true]],
     verdict: null,
-    notes: [['Amount in words', [amountInWords(t.total, inv.cur)]], ...(b ? [['Pay into', bankLines(b).map(([kk, vv]) => (kk ? `${kk}: ${vv}` : vv))]] : []), ...(inv.notes ? [['Notes', inv.notes.split('\n')]] : [])],
+    notes: [['Amount in words', [amountInWords(t.total, inv.cur)]], ...(inv.dl ? [['Delivery', [inv.dl === 'deliver' ? `Delivered by us${inv.addr ? ` to ${inv.addr}` : ''}, with a delivery note to sign.` : 'Collected by the client from our warehouse, with a delivery note to sign.']]] : []), ...(b ? [['Pay into', bankLines(b).map(([kk, vv]) => (kk ? `${kk}: ${vv}` : vv))]] : []), ...(inv.notes ? [['Notes', inv.notes.split('\n')]] : [])],
     approvals: true, preparedBy: inv.by || '', preparedSign: approval && approval.name === inv.by ? approval : null, approval };
 }
 
@@ -5286,20 +5592,26 @@ function invoiceDetail(id) {
   const pdfFile = filesFor(id).filter(f => f.type === inv.type).pop(), pays = live(S.credits).filter(c => c.invoice === id).sort(byAt);
   const status = inv.cancelled ? `Cancelled on ${fmtAbs(String(inv.cancelled).slice(0, 16))}${inv.cancelledBy ? ` by ${inv.cancelledBy}` : ''}${inv.cancelReason ? ` — ${inv.cancelReason}` : ''}.`
     : isQ ? (made ? `Invoiced as ${made.no}.` : inv.due && inv.due < today() ? `Expired on ${fmtDate(inv.due)}.` : '')
-    : st.state === 'paid' ? '✅ Paid in full.' : `${INV_STATE[st.state][0]}: ${money(st.due, inv.cur)} still owed${inv.due ? ` · pay by ${fmtDate(inv.due)}` : ''}.`;
+    : !seesPaid() || inv.ok === 'waiting' || inv.ok === 'rejected' ? '' : st.state === 'paid' ? '✅ Paid in full.' : `${INV_STATE[st.state][0]}: ${money(st.due, inv.cur)} still owed${inv.due ? ` · pay by ${fmtDate(inv.due)}` : ''}.`;
+  const held = inv.ok === 'waiting' || inv.ok === 'rejected', send = !isQ && sells(inv) ? toSend(inv, S.deliveries) : [], dns = live(S.deliveries).filter(d => d.inv === id);
   openSheet(`${head(`${isQ ? 'Quotation' : 'Invoice'} ${inv.no}`, 'in', k ? k.name : '')}
     <div class="dbig in">${money(t.total, inv.cur)}</div>
     ${status ? `<p class="note">${esc(status)}</p>` : ''}
-    <div class="two">${pdfFile ? `<button class="btn ghost" data-act="showFile" data-id="${esc(pdfFile.id)}">📄 Open or send</button>` : `<button class="btn ghost" data-act="remakeInvoice" data-id="${esc(id)}">📄 Make the PDF</button>`}
-      ${!isQ && !inv.cancelled && st.due ? `<button class="btn in" data-act="payInvoice" data-id="${esc(id)}">💵 Record payment</button>` : ''}
-      ${isQ && !inv.cancelled && !made ? `<button class="btn in" data-act="quoteToInvoice" data-id="${esc(id)}">🧾 Make the invoice</button>` : ''}</div>
+    ${inv.ok === 'waiting' ? `<p class="note">⏳ A price is lower than ${esc(inv.by || 'its maker')} may give, or a line is not from stock: it waits for an admin. It is numbered and made when they approve.</p>${can('edit') ? priceCard(inv) : ''}` : ''}
+    ${inv.ok === 'rejected' ? `<p class="note">✗ The price was refused by ${esc(inv.okBy || 'an admin')}${inv.why ? `: ${esc(inv.why)}` : ''}. Copy it as new with another price.</p>` : ''}
+    <div class="two">${held ? '' : pdfFile ? `<button class="btn ghost" data-act="showFile" data-id="${esc(pdfFile.id)}">📄 Open or send</button>` : `<button class="btn ghost" data-act="remakeInvoice" data-id="${esc(id)}">📄 Make the PDF</button>`}
+      ${seesPaid() && !isQ && !inv.cancelled && !held && st.due ? `<button class="btn in" data-act="payInvoice" data-id="${esc(id)}">💵 Record payment</button>` : ''}
+      ${isQ && !inv.cancelled && !made && !held ? `<button class="btn in" data-act="quoteToInvoice" data-id="${esc(id)}">🧾 Make the invoice</button>` : ''}</div>
     <dl class="facts" style="margin-top:16px">${[['Client', k && k.name], ['Date', fmtDate(inv.date)], [isQ ? 'Valid until' : 'Pay by', inv.due && fmtDate(inv.due)], ['Pay into', b && `${b.bank} · ${b.number}`], ['Project', inv.project && projName(inv.project)], ['Check code', inv.check]]
       .filter(x => x[1]).map(([a, v]) => `<div><dt>${a}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
     <h3 class="subh">Lines</h3><div class="card list inset">${inv.items.map(it => `<div class="mrow"><span>${esc(it.t)}</span><span class="muted">${plain(it.qty)} ${esc(it.unit || '')} × ${money(it.price, inv.cur)}</span><b>${money(lineAmount(it), inv.cur)}</b></div>`).join('')}</div>
     ${t.tax ? `<p class="muted">${money(t.sub, inv.cur)} + tax ${plain(inv.tax)}% ${money(t.tax, inv.cur)} = ${money(t.total, inv.cur)}</p>` : ''}
-    ${isQ ? '' : `<h3 class="subh">Payments (${pays.length})</h3>${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}`}
+    ${!isQ && sells(inv) && inv.items.some(it => it.m) ? `<h3 class="subh">Delivery — ${inv.dl === 'deliver' ? `we deliver${inv.addr ? ` to ${esc(inv.addr)}` : ''}` : 'they collect'}</h3>
+      ${send.length ? `<p class="note">Still to send: ${send.map(l => `${plain(l.qty)} ${esc((itemOf(l.m) || {}).name || '')}`).join(', ')}.</p><button class="btn out" data-act="deliveryForm" data-inv="${esc(id)}">🚚 Make a delivery note</button>` : '<p class="muted">Everything has left on a delivery note. ✓</p>'}
+      ${dns.length ? `<div class="card list inset" style="margin-top:10px">${dns.map(deliveryRow).join('')}</div>` : ''}` : ''}
+    ${isQ || !seesPaid() ? '' : `<h3 class="subh">Payments (${pays.length})</h3>${pays.length ? `<div class="card list inset">${pays.map(x => itemRow(x, 'R', true)).join('')}</div>` : '<p class="muted">Nothing received yet.</p>'}`}
     ${k && k.phone ? `<a class="btn ghost" style="margin-top:14px" href="${esc(waChat(k.phone))}" target="_blank" rel="noopener">💬 WhatsApp chat with ${esc(k.name)}</a>` : ''}
-    <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="copyInvoice" data-id="${esc(id)}">📋 Copy as new</button>${!inv.cancelled && !pays.length ? `<button class="btn danger" data-act="cancelInvoice" data-id="${esc(id)}">🚫 Cancel 🔒</button>` : ''}</div>`);
+    <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="copyInvoice" data-id="${esc(id)}">📋 Copy as new</button>${can('edit') && !inv.cancelled && !pays.length && !dns.length ? `<button class="btn danger" data-act="cancelInvoice" data-id="${esc(id)}">🚫 Cancel 🔒</button>` : ''}</div>`);
   comeBack(() => invoiceDetail(id));
 }
 function payInvoice(id) {
@@ -6442,6 +6754,808 @@ async function inspPdf(supId, blank) {
     approvals: true, noStamp: true, signLabels: ['Inspected by', 'For the supplier', 'Approved by'], preparedBy: by }, pdfName(blank ? 'Inspection checklist' : 'Inspection report', u.name));
 }
 
+/* ---------- the warehouse (owner, 2 Nov 2026): stock items, goods received with their landed cost, goods out, counts ---------- */
+// Everything is worked out from the records, never typed twice: what is on hand and at what average landed cost (calc.js
+// stockBook), what an import cost (landedCost), what a sale still has to send (toSend). Admins see costs, values and profit;
+// an office manager sees quantities and selling prices, records goods used and counts, and sells from stock (invoices.js).
+const STOCK_UNITS = ['pcs', 'bars', 'bags', 'boxes', 'cartons', 'sets', 'rolls', 'sheets', 'lengths', 'm', 'm²', 'm³', 'kg', 'tons', 'litres', 'pairs'];
+// what an import's costs are for; each is spread over the lines by weight, value or quantity (the first is the usual way)
+const COST_TYPES = [['freight', 'Freight / shipping', 'kg'], ['duty', 'Customs duty', 'value'], ['tax', 'Taxes at import (VAT…)', 'value'], ['clearing', 'Clearing agent', 'value'],
+  ['port', 'Port / border charges', 'kg'], ['transport', 'Transport to the warehouse', 'kg'], ['handling', 'Loading / offloading', 'kg'], ['insurance', 'Insurance', 'value'], ['bank', 'Bank / transfer charges', 'value'], ['other', 'Other', 'value']];
+const COST_NAME = Object.fromEntries(COST_TYPES.map(([k, n]) => [k, n]));
+const SPLIT_NAME = { kg: 'by weight', value: 'by value', qty: 'by quantity' };
+const OUT_KIND = { use: ['Used', 'Used on a project or site'], damage: ['Damaged / lost', 'Broken, spoilt, stolen or missing'], return: ['Returned', 'Sent back to the supplier'], count: ['Stock count', 'The difference a count found'] };
+const DEFAULT_MARKUP = 10;
+const itemOf = id => S.stock.find(x => x.id === id && !x.deleted);
+const receiptOf = id => S.receipts.find(x => x.id === id && !x.deleted);
+const items = () => live(S.stock).sort((a, b) => String(a.cat || '').localeCompare(String(b.cat || '')) || a.name.localeCompare(b.name));
+const book = () => stockBook(S.receipts, S.stockOut, S.invoices);
+const usd4 = n => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+// what one sells for, also in SSP at the last rate typed (a manager selling in SSP sees both)
+const priceText = m => (m.price > 0 ? `${money(m.price, 'USD')}${S.lastRate ? ` ≈ ${money(Math.round(m.price * S.lastRate), 'SSP')}` : ''}` : 'no price yet');
+const nw = t => `<span class="nw">${t}</span>`; // a price stays on one line
+const seesCost = () => can('money');
+const stockNav = active => `<nav class="subnav" aria-label="Warehouse">${[['stock', '📦', 'Stock'], ['stockIn', '🚢', 'Received'], ['stockOutList', '🚚', 'Out'], ...(seesCost() ? [['stockReport', '📈', 'Report']] : [])]
+  .map(([a, i, t]) => `<button type="button" data-act="${a}"${a === active ? ' aria-current="page"' : ''}><span aria-hidden="true">${i}</span>${t}</button>`).join('')}</nav>`;
+const itemOptions = (sel, extra = '') => `<option value="">Choose…</option>${items().map(m => `<option value="${esc(m.id)}" ${m.id === sel ? 'selected' : ''}>${esc(m.name)}${m.code ? ` (${esc(m.code)})` : ''}</option>`).join('')}${extra}`;
+// the sheet script must be new enough to keep these records (they stay on this phone until then)
+const stockScriptNote = () => (S.link && (S.link.v || 2) < 23 ? `<p class="note">The warehouse needs the Google Sheet script version 23 (this sheet runs ${S.link.v || 2}). Until then what you enter stays on this phone. ${can('settings') ? '<button class="link" data-act="howUpdate">Show me how</button>' : 'Tell the owner.'}</p>` : '');
+
+// on the menu tile: deliveries arrived short (admins), loads not confirmed for two days, items running low
+function stockBadge() {
+  if (!live(S.stock).length) return '';
+  const b = book(), low = live(S.stock).filter(m => m.min > 0 && (b[m.id] ? b[m.id].qty : 0) <= m.min).length;
+  const late = live(S.deliveries).filter(d => d.status === 'out' && d.date <= plusDays(today(), -2)).length, short = can('edit') ? live(S.deliveries).filter(d => dnState(d) === 'short' && d.recv.at.slice(0, 10) >= plusDays(today(), -7)).length : 0;
+  const t = short ? `${short} short` : late ? `${late} not confirmed` : low ? `${low} low` : '';
+  return t ? `<span class="badge">${t}</span>` : '';
+}
+
+/* ---------- selling, like a shop (owner, 2 Nov 2026): find it, see its price and stock, add how many, check out ---------- */
+let cart = {}; // item id → how many; kept while the app is open, emptied once the invoice is made
+let shopQ = '';
+const cartLines = () => Object.entries(cart).filter(([m, q]) => itemOf(m) && q > 0);
+const cartTotal = () => cartLines().reduce((t, [m, q]) => t + Math.round(q * (itemOf(m).price || 0) * 100), 0) / 100;
+function shopSheet() {
+  if (!live(S.stock).length) return toast('Nothing is in the warehouse yet');
+  openSheet(`${head('Sell', 'in', 'Find it, add how many, check out')}
+    <form data-form="shopFind"><input name="q" class="shop-q" placeholder="🔍 Search: rebar 12, cement, RB12…" value="${esc(shopQ)}" autocomplete="off" aria-label="Search the stock"></form>
+    <div id="shopList">${shopRows()}</div>
+    <div class="cart-bar" id="cartBar">${cartBar()}</div>`);
+  comeBack(shopSheet);
+}
+function shopRows() {
+  const b = book(), q = shopQ.trim().toLowerCase(), words = q.split(/\s+/).filter(Boolean);
+  const list = items().filter(m => words.every(w => [m.name, m.code, m.cat].some(v => String(v || '').toLowerCase().includes(w))));
+  if (!list.length) return '<p class="muted">Nothing matches. Try fewer words.</p>';
+  return `<div class="card list inset">${list.slice(0, 60).map(m => { const have = b[m.id] ? b[m.id].qty : 0, n = cart[m.id] || 0;
+    return `<div class="shop-row${n ? ' in-cart' : ''}"><div class="shop-what"><b>${esc(m.name)}</b>${m.code ? ` <i class="tag">${esc(m.code)}</i>` : ''}
+      <small>${m.price > 0 ? `<b class="shop-price">${money(m.price, 'USD')}</b> / ${esc(m.unit)}${S.lastRate ? ` · ${nw(`≈ ${money(Math.round(m.price * S.lastRate), 'SSP')}`)}` : ''}` : 'no price yet'} · <span class="nw ${have > 0 ? '' : 'out-c'}">${plain(have)} in stock</span></small></div>
+      <div class="stepper-q"><button type="button" data-act="cartStep" data-id="${esc(m.id)}" data-d="-1" aria-label="One less" ${n ? '' : 'disabled'}>−</button><input data-cart="${esc(m.id)}" inputmode="decimal" value="${n || ''}" placeholder="0" aria-label="How many ${esc(m.name)}"><button type="button" data-act="cartStep" data-id="${esc(m.id)}" data-d="1" aria-label="One more" ${m.price > 0 ? '' : 'disabled'}>＋</button></div></div>`; }).join('')}</div>`;
+}
+const cartBar = () => { const n = cartLines().length; return n ? `<span>🛒 <b>${n}</b> item${n === 1 ? '' : 's'} · <b>${money(cartTotal(), 'USD')}</b></span><button class="btn in" data-act="checkout">Check out →</button>` : '<span class="muted">🛒 Add something to sell</span>'; };
+function cartSet(id, n) {
+  const m = itemOf(id), have = (book()[id] || { qty: 0 }).qty;
+  if (!m) return;
+  n = Math.max(0, Math.round((Number.isFinite(n) ? n : 0) * 1e6) / 1e6);
+  if (n > have && n > (cart[id] || 0)) toast(`Only ${plain(have)} ${m.unit} in stock`);
+  cart = { ...cart, [id]: n };
+  if (!n) { const { [id]: _, ...rest } = cart; cart = rest; }
+  $('#cartBar').innerHTML = cartBar();
+  const row = $(`[data-cart="${id}"]`);
+  if (row && document.activeElement !== row) row.value = n || '';
+  if (row) { row.closest('.shop-row').classList.toggle('in-cart', !!n); $('[data-d="-1"]', row.closest('.shop-row')).disabled = !n; }
+}
+function checkout(type = 'invoice') {
+  const lines = cartLines().map(([m, qty]) => { const it = itemOf(m); return { m, t: it.name, unit: it.unit, qty, price: it.price }; });
+  if (!lines.length) return toast('The cart is empty');
+  invoiceForm(type, null, '', lines);
+}
+
+/* ---------- the stock list ---------- */
+let stockQ = '';
+function stockSheet() {
+  const b = book(), list = items(), admin = seesCost(), wait = awaitingDelivery(S.invoices, S.deliveries);
+  const low = list.filter(m => m.min > 0 && (b[m.id] ? b[m.id].qty : 0) <= m.min);
+  const atCost = list.reduce((t, m) => t + Math.max(0, b[m.id] ? b[m.id].value : 0), 0), atPrice = list.reduce((t, m) => t + Math.round(Math.max(0, b[m.id] ? b[m.id].qty : 0) * (m.price || 0) * 100), 0);
+  openSheet(`${head('Warehouse', 'stock')}${stockNav('stock')}${stockScriptNote()}
+    ${admin ? `<div class="ssp-big"><small>STOCK WORTH</small><b>${money(atCost / 100, 'USD')}</b><span>at landed cost · ${money(atPrice / 100, 'USD')} at selling prices · ${list.length} item${list.length === 1 ? '' : 's'}</span></div>` : ''}
+    <div class="two">${admin ? '<button class="btn primary" data-act="receiveForm">🚢 Goods received</button>' : ''}<button class="btn ghost" data-act="outForm">➖ Goods out</button>
+      <button class="btn in" data-act="sellStock">🧾 Sell from stock</button><button class="btn ghost" data-act="countSheet">📋 Count the stock</button></div>
+    ${admin && pricesToCheck().length ? `<p class="note" style="margin-top:12px">💲 ${pricesToCheck().length} price${pricesToCheck().length === 1 ? ' is' : 's are'} below the landed cost + markup. <button class="link" data-act="prices">Check the prices</button></p>` : ''}
+    ${low.length ? `<p class="note" style="margin-top:12px">⚠️ Running low: ${low.map(m => `<b>${esc(m.name)}</b> (${plain(b[m.id] ? b[m.id].qty : 0)})`).join(', ')}</p>` : ''}
+    <form data-form="stockFilter" class="qadd" style="margin-top:12px"><input name="q" placeholder="Find an item, a code or a shelf" value="${esc(stockQ)}" autocomplete="off" aria-label="Find an item"></form>
+    <div id="stockList">${stockRows(list, b, wait)}</div>
+    ${admin ? '<div class="two" style="margin-top:12px"><button class="btn ghost" data-act="itemForm">＋ New stock item</button><button class="btn ghost" data-act="prices">💲 Selling prices</button></div>' : ''}
+    <div class="two" style="margin-top:10px"><button class="btn ghost" data-act="stockPdf">📄 Stock list (PDF)</button><button class="btn ghost" data-act="countPdf">🖨 Count sheet to print</button></div>`);
+  comeBack(stockSheet);
+}
+function stockRows(list, b, wait) {
+  const q = stockQ.trim().toLowerCase(), shown = q ? list.filter(m => [m.name, m.code, m.bin, m.cat].some(v => String(v || '').toLowerCase().includes(q))) : list;
+  if (!list.length) return empty('Nothing in the warehouse yet', seesCost() ? 'Tap <b>Goods received</b> when an import arrives: its items are made as you type them.' : 'An admin enters goods as they arrive.');
+  if (!shown.length) return '<p class="muted">Nothing matches.</p>';
+  const groups = [...new Set(shown.map(m => m.cat || 'Other'))];
+  return groups.map(g => `<h3 class="subh">${esc(g)}</h3><div class="card list inset">${shown.filter(m => (m.cat || 'Other') === g).map(m => {
+    const s = b[m.id] || { qty: 0, avg: 0 }, low = m.min > 0 && s.qty <= m.min;
+    return `<button class="row" data-act="openItem" data-id="${esc(m.id)}"><span class="dot">📦</span>
+      <span class="main"><span class="t"><span class="tt">${esc(m.name)}</span>${m.code ? `<i class="tag">${esc(m.code)}</i>` : ''}${low ? '<i class="tag warn">Low</i>' : ''}${s.short ? '<i class="tag bad">Below zero</i>' : ''}</span>
+      <span class="s">${esc([`${priceText(m)} each`, seesCost() && s.avg ? `cost ${usd4(s.avg)}` : '', wait[m.id] ? `${plain(wait[m.id])} sold, not yet sent` : '', m.bin && `shelf ${m.bin}`].filter(Boolean).join(' · '))}</span></span>
+      <span class="amt">${plain(s.qty)}<small>${esc(m.unit)}</small></span></button>`;
+  }).join('')}</div>`).join('');
+}
+function filterStock(f) { stockQ = f.elements.q.value; $('#stockList').innerHTML = stockRows(items(), book(), awaitingDelivery(S.invoices, S.deliveries)); }
+
+/* ---------- one item: how many, its price, its cost (admins), every move ---------- */
+function itemDetail(id) {
+  const m = itemOf(id);
+  if (!m) return false;
+  const s = book()[id] || { qty: 0, avg: 0, value: 0, moves: [], sold: 0, revenue: 0, cogs: 0 }, admin = seesCost(), wait = awaitingDelivery(S.invoices, S.deliveries)[id] || 0;
+  const markup = m.markup === undefined ? DEFAULT_MARKUP : m.markup, suggest = s.avg ? suggestPrice(s.avg, markup) : 0;
+  const what = mv => mv.kind === 'in' ? 'Received' : mv.kind === 'sale' ? `Sold${(invOf(mv.ref) || {}).no ? ' · ' + invOf(mv.ref).no : ''}` : (OUT_KIND[mv.kind] || [mv.kind])[0];
+  openSheet(`${head(m.name, 'stock', [m.code, m.cat].filter(Boolean).join(' · '))}
+    <div class="dbig${s.short ? ' out' : ''}">${plain(s.qty)} <small style="font-size:.45em">${esc(m.unit)}</small></div>
+    <p class="note">Sells for <b>${priceText(m)}</b> each.${admin && s.avg ? `<br>Landed cost <b>${usd4(s.avg)}</b> each (average) · with ${plain(markup)} % on top, rounded up: <b>${money(suggest, 'USD')}</b>.<br>In stock worth ${money(s.value / 100, 'USD')} at cost.` : ''}</p>
+    ${admin && suggest && suggest > (m.price || 0) + 0.004 ? `<p class="note">⚠️ The price is below the landed cost + ${plain(markup)} %. <button class="link" data-act="setPrice" data-id="${esc(id)}" data-price="${suggest}">Sell for ${money(suggest, 'USD')} instead 🔒</button></p>` : ''}
+    ${wait ? `<p class="note">🚚 ${plain(wait)} ${esc(m.unit)} are sold but still here, waiting for their delivery note.</p>` : ''}
+    <div class="two"><button class="btn in" data-act="sellStock" data-id="${esc(id)}">🧾 Sell</button><button class="btn ghost" data-act="outForm" data-id="${esc(id)}">➖ Goods out</button>${admin ? `<button class="btn ghost" data-act="itemForm" data-id="${esc(id)}">✏️ Edit 🔒</button>` : ''}</div>
+    <dl class="facts" style="margin-top:16px">${[['Unit', m.unit], ['Shelf / place', m.bin], ['Reorder at', m.min ? `${plain(m.min)} ${m.unit}` : ''], ['Sold so far', s.sold ? `${plain(s.sold)} ${m.unit}` : ''],
+      ...(admin && s.sold ? [['Earned on them', `${money(s.revenue / 100, 'USD')} for goods that cost ${money(s.cogs / 100, 'USD')} — ${money((s.revenue - s.cogs) / 100, 'USD')} profit`]] : []), ['Note', m.note]]
+      .filter(x => x[1]).map(([a, v]) => `<div><dt>${a}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    <h3 class="subh">Every move (${s.moves.length})</h3>
+    ${s.moves.length ? `<div class="card list inset">${[...s.moves].reverse().slice(0, 80).map(mv => `<button class="mrow" data-act="openMove" data-kind="${mv.kind}" data-id="${esc(mv.ref)}" style="width:100%;border:0;background:none;text-align:left;cursor:pointer;font:inherit">
+      <span>${esc(fmtDate(mv.date))} · ${esc(what(mv))}</span><span class="muted">${admin ? usd4(mv.kind === 'in' ? mv.cost : mv.avg) + ' · ' : ''}left ${plain(mv.bal)}</span><b class="${mv.qty < 0 ? 'out-c' : 'in-c'}">${mv.qty > 0 ? '+' : '−'}${plain(Math.abs(mv.qty))}</b></button>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}
+    ${attachButton(id, '📷 Add a photo of it', 'photo', 'image/*')}
+    ${filesBlock(id)}`);
+  comeBack(() => itemDetail(id));
+}
+function openMove(b) {
+  const k = b.dataset.kind, id = b.dataset.id;
+  if (k === 'in') return receiptDetail(id);
+  if (k === 'sale') return invoiceDetail(id) === false ? toast('That sale is not on this phone') : null;
+  return outDetail(id);
+}
+
+async function itemForm(id) {
+  const old = id && itemOf(id);
+  if (!seesCost() || !await unlock(old ? 'Enter the password to change this item.' : 'Enter the password to add a stock item.')) return;
+  const d = old || { unit: 'pcs', markup: DEFAULT_MARKUP };
+  openSheet(`${head(old ? 'Edit stock item' : 'New stock item', 'stock', old ? old.id : '')}
+    <form data-form="item" data-id="${esc(old ? old.id : '')}">
+      ${textField('name', 'What it is', 'e.g. Rebar 12 mm × 12 m', d.name)}
+      <div class="two"><label class="fld"><span>Unit</span><input name="unit" list="dl-unit" value="${esc(d.unit)}" maxlength="20" required autocomplete="off"></label>
+        <label class="fld"><span>Code <em>(optional)</em></span><input name="code" value="${esc(d.code || '')}" maxlength="30" placeholder="e.g. RB12" autocomplete="off"></label></div>
+      <label class="fld"><span>Category</span><input name="cat" list="dl-cat" value="${esc(d.cat || '')}" maxlength="60" placeholder="e.g. Steel" autocomplete="off"></label>
+      <div class="two"><label class="fld"><span>Shelf / place <em>(optional)</em></span><input name="bin" value="${esc(d.bin || '')}" maxlength="40" placeholder="e.g. Yard A" autocomplete="off"></label>
+        <label class="fld"><span>Reorder at <em>(optional)</em></span><input name="min" inputmode="decimal" value="${esc(d.min || '')}" placeholder="e.g. 50" autocomplete="off"></label></div>
+      <label class="fld"><span>Sells for, in US dollars, each <em>(only admins set it; it never changes by itself)</em></span><input name="price" inputmode="decimal" value="${esc(d.price || '')}" placeholder="${suggestFor(d) || 'set when goods come in'}" autocomplete="off">
+        ${suggestFor(d) ? `<small class="muted">Landed cost ${usd4(book()[d.id].avg)} + markup, rounded up: <button type="button" class="link" data-act="useSuggest" data-price="${suggestFor(d)}">use ${money(suggestFor(d), 'USD')}</button></small>` : ''}</label>
+      <label class="fld"><span>Markup for the suggested price, % <em>(admins only see it)</em></span><input name="markup" inputmode="decimal" value="${esc(d.markup === undefined ? DEFAULT_MARKUP : d.markup)}" autocomplete="off"></label>
+      ${textField('note', 'Note', '', d.note || '', false)}
+      <p class="err"></p>
+      <button class="btn primary">${old ? 'Save changes' : 'Add the item'}</button>
+    </form>${stockLists()}`);
+}
+// the price an admin is offered for an item: its average landed cost + markup, rounded up (calc.js suggestPrice); 0 before any cost
+const suggestFor = m => { const s = m && m.id && book()[m.id]; return s && s.avg > 0 ? suggestPrice(s.avg, m.markup === undefined ? DEFAULT_MARKUP : m.markup) : 0; };
+const stockLists = () => `<datalist id="dl-unit">${STOCK_UNITS.map(u => `<option value="${esc(u)}">`).join('')}</datalist><datalist id="dl-cat">${[...new Set([...live(S.stock).map(m => m.cat).filter(Boolean), ...BUY_CATS.map(c => c[0])])].map(c => `<option value="${esc(c)}">`).join('')}</datalist>`;
+function itemFields(v) {
+  const markup = String(v.markup ?? '').trim() === '' ? DEFAULT_MARKUP : parseNum(v.markup), min = String(v.min || '').trim() ? parseNum(v.min) : 0;
+  const rec = { name: clean(v.name), unit: clean(v.unit) || 'pcs', code: clean(v.code), cat: clean(v.cat), bin: clean(v.bin), min, markup, note: clean(v.note) };
+  return { rec, price: String(v.price || '').trim() ? parseAmount(v.price) : undefined };
+}
+function saveItem(f) {
+  const old = itemOf(f.dataset.id), { rec, price } = itemFields(Object.fromEntries(new FormData(f)));
+  if (!rec.name) return formErr(f, 'name', 'Type what it is');
+  if (rec.markup === null || rec.markup > 1000) return formErr(f, 'markup', 'Type the markup as a percentage, like 10');
+  if (rec.min === null) return formErr(f, 'min', 'Type how few should make you reorder, like 50 — or leave it empty');
+  if (price === null) return formErr(f, 'price', 'Type what one sells for, like 13.50 — or leave it empty until goods come in');
+  const clash = live(S.stock).find(m => m.id !== (old && old.id) && (m.name.toLowerCase() === rec.name.toLowerCase() || (rec.code && m.code && m.code.toLowerCase() === rec.code.toLowerCase())));
+  if (clash) return formErr(f, clash.name.toLowerCase() === rec.name.toLowerCase() ? 'name' : 'code', `${clash.name} already has this ${clash.name.toLowerCase() === rec.name.toLowerCase() ? 'name' : 'code'}`);
+  const by = myName() || S.lastBy || '';
+  const full = { ...rec, ...(price !== undefined ? { price } : old && old.price ? { price: old.price } : {}) };
+  if (old) {
+    const { price: _p, fixed: _f, ...rest } = old, moved = old.price > 0 && Math.abs((full.price || 0) - old.price) >= 0.005;
+    update({ stock: S.stock.map(x => (x.id === old.id ? { ...rest, ...full, ...(moved ? { prev: { price: old.price, until: today() } } : {}), editedAt: stampSec(), editedBy: by } : x)), log: logWith([['Edited', old.id, `Stock item ${rec.name}${(full.price || 0) !== (old.price || 0) ? `: sells for ${money(full.price || 0, 'USD')} (was ${money(old.price || 0, 'USD')})` : ''}`]], by) });
+    toast('Saved ✓'); return itemDetail(old.id);
+  }
+  const id = newItem(full, by);
+  toast(`${rec.name} added ✓`); itemDetail(id);
+}
+function newItem(rec, by) {
+  const [[id], seq] = nextIds('M', 1, S.seq);
+  update({ stock: [...S.stock, { id, ...rec, by, createdAt: stampSec() }], seq, log: logWith([['Added', id, `Stock item: ${rec.name} (${rec.unit})`]], by) });
+  return id;
+}
+// Prices are an admin's (owner, 3 Nov 2026): set by hand and never changed by themselves, so a price says nothing of what the item
+// cost. An item's first goods give it its first price — the suggestion (landed cost + markup, rounded up) — so it can be sold
+// at once; after that, a cost that rises puts it on the admins' "prices to check".
+function firstPrices(ids, by) {
+  const named = [];
+  const stock = S.stock.map(m => {
+    if (!ids.includes(m.id) || m.price > 0) return m;
+    const p = suggestFor(m);
+    if (!p) return m;
+    named.push(`${m.name}: ${money(p, 'USD')}`);
+    return { ...m, price: p };
+  });
+  if (named.length) update({ stock, log: logWith([['Prices', '—', `First selling prices: ${named.join('; ')}`]], by) });
+}
+// items whose price is now below their landed cost + markup (a dearer import came in): for the admins to look at
+const pricesToCheck = () => live(S.stock).filter(m => m.price > 0 && suggestFor(m) > m.price + 0.004);
+async function setPrice(id, price, all, back) {
+  const list = all ? pricesToCheck().map(m => [m, suggestFor(m)]) : [[itemOf(id), +price]];
+  if (!seesCost() || !list.length || !list.every(([m, p]) => m && p > 0) || !await unlock('Enter the password to change selling prices.')) return;
+  const by = myName() || S.lastBy || '', to = new Map(list.map(([m, p]) => [m.id, p]));
+  update({ stock: S.stock.map(m => (to.has(m.id) ? { ...m, price: to.get(m.id), ...(m.price > 0 ? { prev: { price: m.price, until: today() } } : {}), editedAt: stampSec(), editedBy: by } : m)),
+    log: logWith([['Prices', '—', `Selling prices set: ${list.map(([m, p]) => `${m.name} ${money(p, 'USD')} (was ${money(m.price || 0, 'USD')})`).join('; ')}`]], by) });
+  toast('Price set ✓');
+  if (all || back === 'prices') pricesSheet(); else itemDetail(id);
+}
+function pricesSheet() {
+  if (!seesCost()) return;
+  const check = pricesToCheck(), rest = items().filter(m => !check.includes(m));
+  const row = m => { const s = book()[m.id] || { avg: 0 }, sug = suggestFor(m); return `<div class="mrow"><span>${esc(m.name)}<br><small class="muted">${s.avg ? `landed ${usd4(s.avg)} · +${plain(m.markup === undefined ? DEFAULT_MARKUP : m.markup)} % → ${money(sug, 'USD')}` : 'no cost yet'}</small></span>
+    <span>${sug && Math.abs(sug - (m.price || 0)) > 0.004 ? `<button class="btn small ghost" data-act="setPrice" data-back="prices" data-id="${esc(m.id)}" data-price="${sug}">${money(sug, 'USD')}</button>` : ''}</span><b>${m.price ? money(m.price, 'USD') : '—'}</b></div>`; };
+  openSheet(`${head('Selling prices', 'stock', 'Set by admins; they never change by themselves')}
+    <p class="hint">Office managers see only the price. The suggestion is the landed cost plus the item's markup, rounded up to a clean price — so the markup does not show through.</p>
+    ${check.length ? `<h3 class="subh">To check — the cost went up (${check.length})</h3><div class="card list inset">${check.map(row).join('')}</div><button class="btn primary" data-act="setAllPrices" style="margin-top:10px">Set all ${check.length} to the suggestion 🔒</button>` : '<p class="note">Every price is at or above its landed cost + markup. ✓</p>'}
+    <h3 class="subh">All prices</h3><div class="card list inset">${rest.map(row).join('') || '<p class="muted pad">None yet.</p>'}</div>`);
+  comeBack(pricesSheet);
+}
+
+/* ---------- goods received: an import, every cost in its currency, the landed cost of one ---------- */
+const recvLine = (l = {}) => `<div class="rline">
+  <select name="m" aria-label="Item">${itemOptions(l.m, `<option value="__new" ${l.m === '__new' ? 'selected' : ''}>＋ A new item…</option>`)}</select>
+  <div class="rnew" ${l.m === '__new' ? '' : 'hidden'}><input name="nname" placeholder="New item — e.g. Rebar 12 mm × 12 m" value="${esc(l.nname || '')}" maxlength="160" autocomplete="off" aria-label="New item's name"><input name="nunit" list="dl-unit" placeholder="Unit" value="${esc(l.nunit || 'pcs')}" maxlength="20" autocomplete="off" aria-label="Unit"></div>
+  <div class="rnums"><label><span>How many</span><input name="qty" inputmode="decimal" value="${esc(l.qty ?? '')}" autocomplete="off"></label>
+    <label><span>Line total</span><input name="amt" inputmode="decimal" value="${esc(l.amt ?? '')}" autocomplete="off"></label>
+    <label><span>Weight</span><input name="kg" inputmode="decimal" value="${esc(l.w ?? '')}" autocomplete="off"></label>
+    <button type="button" class="x" data-act="delRecvLine" aria-label="Remove this line">×</button></div>
+  <small class="muted rhint"></small></div>`;
+const costLine = (c = {}) => `<div class="cline">
+  <div class="cnums"><select name="ct" aria-label="What the cost was for">${COST_TYPES.map(([k, n]) => `<option value="${k}" ${k === (c.t || 'freight') ? 'selected' : ''}>${n}</option>`).join('')}</select>
+    <input name="cwhat" placeholder="Detail (optional) — e.g. truck Kampala → Juba" value="${esc(c.what || '')}" maxlength="120" autocomplete="off" aria-label="Detail"></div>
+  <div class="cnums"><input name="camt" inputmode="decimal" placeholder="Amount" value="${esc(c.amt ?? '')}" autocomplete="off" aria-label="Amount">
+    <select name="ccur" aria-label="Currency">${BUY_CURS.map(k => `<option ${k === (c.cur || 'USD') ? 'selected' : ''}>${k}</option>`).join('')}</select>
+    <input name="crate" inputmode="decimal" placeholder="1 USD =" value="${esc(c.rate || (c.cur && c.cur !== 'USD' ? '' : ''))}" autocomplete="off" aria-label="How many made 1 US dollar that day" ${(c.cur || 'USD') === 'USD' ? 'hidden' : ''}>
+    <button type="button" class="x" data-act="delCostLine" aria-label="Remove this cost">×</button></div>
+  <div class="cnums"><select name="csplit" aria-label="How it is spread">${Object.entries(SPLIT_NAME).map(([k, n]) => `<option value="${k}" ${k === (c.split || 'kg') ? 'selected' : ''}>Spread ${n}</option>`).join('')}</select>
+    <select name="cpay" aria-label="In Accounts">${payOptions(c.pay)}</select></div>
+  <small class="muted chint"></small></div>`;
+// a cost's payment in Accounts: not there, add it now (cash or bank), or one already entered (so nothing is typed twice)
+function payOptions(sel) {
+  const recent = live(S.expenses).filter(e => !e.worker && !e.regular && e.at >= plusDays(today(), -150)).sort((a, b) => byAt(b, a)).slice(0, 60), kept = sel && S.expenses.find(e => e.id === sel && !e.deleted);
+  if (kept && !recent.includes(kept)) recent.unshift(kept);
+  return `<option value="">Not in Accounts</option><option value="cash" ${sel === 'cash' ? 'selected' : ''}>＋ Add to Accounts: paid in cash</option><option value="bank" ${sel === 'bank' ? 'selected' : ''}>＋ Add to Accounts: paid from the bank</option>
+    ${recent.length ? `<optgroup label="Already in Accounts">${recent.map(e => `<option value="${esc(e.id)}" ${e.id === sel ? 'selected' : ''}>${esc(`${fmtDate(e.at.slice(0, 10))} · ${money(e.amount, e.cur)} · ${e.paidTo}`)}</option>`).join('')}</optgroup>` : ''}`;
+}
+async function receiveForm(id) {
+  const old = id && receiptOf(id);
+  if (!seesCost() || !await unlock(old ? 'Enter the password to change goods received.' : 'Enter the password to enter goods received.')) return;
+  const sups = live(S.suppliers).map(u => u.name), d = old || { date: today(), gcur: 'USD', lines: [{}], costs: [{ t: 'freight' }] }, ton = !old || (old.lines.every(l => !l.kg || l.kg >= 100));
+  const lines = d.lines.map(l => ({ ...l, w: l.kg ? (ton ? l.kg / 1000 : l.kg) : '' }));
+  openSheet(`${head(old ? 'Change goods received' : 'Goods received', 'stock', old ? old.ref || old.id : 'An import, a delivery from a supplier')}
+    ${stockScriptNote()}
+    <form data-form="receive" data-id="${esc(old ? old.id : '')}">
+      <div class="two"><label class="fld"><span>Arrived on</span><input type="date" name="date" value="${esc(d.date)}" max="${today()}" required></label>
+        <label class="fld"><span>Their invoice / container no.</span><input name="ref" value="${esc(d.ref || '')}" maxlength="60" placeholder="e.g. PI-2026-118" autocomplete="off"></label></div>
+      <div class="two"><label class="fld"><span>Supplier</span><input name="from" list="dl-sup" value="${esc(d.sup ? (live(S.suppliers).find(u => u.id === d.sup) || {}).name || d.from || '' : d.from || '')}" maxlength="80" placeholder="Who sold it" autocomplete="off"></label>
+        <label class="fld"><span>From <em>(country)</em></span><input name="origin" value="${esc(d.origin || '')}" maxlength="40" placeholder="e.g. Uganda" autocomplete="off"></label></div>
+      <datalist id="dl-sup">${sups.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+      <div class="two"><label class="fld"><span>The supplier's invoice is in</span><select name="gcur">${BUY_CURS.map(k => `<option ${k === (d.gcur || 'USD') ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
+        <label class="fld grate" ${(d.gcur || 'USD') === 'USD' ? 'hidden' : ''}><span>How many made 1 US dollar</span><input name="grate" inputmode="decimal" value="${esc(d.grate || '')}" autocomplete="off"></label></div>
+      <div class="fld"><span>Weights are in</span><div class="curseg"><label><input type="radio" name="wu" value="t" ${ton ? 'checked' : ''}><span><b>Tons</b><small>as on a steel invoice</small></span></label><label><input type="radio" name="wu" value="kg" ${ton ? '' : 'checked'}><span><b>kg</b></span></label></div></div>
+      <h3 class="subh">What came in <small class="muted">— each line as on their invoice; the weight only if costs are spread by weight</small></h3>
+      <div class="rlines">${lines.map(recvLine).join('')}</div>
+      <button type="button" class="btn small ghost" data-act="addRecvLine">＋ Another line</button>
+      <h3 class="subh">Every other cost <small class="muted">— freight, duty, clearing… each in the money it was paid in, at that day's rate</small></h3>
+      <div class="clines">${d.costs.map(costLine).join('')}</div>
+      <button type="button" class="btn small ghost" data-act="addCostLine">＋ Another cost</button>
+      <div class="lc-out card pad" style="margin-top:16px"></div>
+      ${textField('note', 'Note', '', d.note || '', false)}
+      <p class="err"></p>
+      <button class="btn primary">${old ? 'Save the changes' : 'Save — the goods are in stock'}</button>
+    </form>${stockLists()}`);
+  refreshReceive($('#sheet form'));
+}
+// what the form says, as an import (y) for landedCost; bad = the first line or cost not filled in, with why
+function readReceive(f) {
+  const v = Object.fromEntries(new FormData(f)), wu = v.wu === 'kg' ? 1 : 1000, gcur = BUY_CURS.includes(v.gcur) ? v.gcur : 'USD';
+  const rows = $$('.rline', f).map(el => ({ el, m: $('[name=m]', el).value, nname: clean($('[name=nname]', el).value), nunit: clean($('[name=nunit]', el).value) || 'pcs',
+    qty: parseNum($('[name=qty]', el).value), amt: parseNum($('[name=amt]', el).value), kgText: $('[name=kg]', el).value.trim() }))
+    .filter(r => r.m || r.nname || r.qty || r.amt);
+  rows.forEach(r => { const w = r.kgText ? parseNum(r.kgText) : 0; r.kg = w === null ? null : Math.round(w * wu * 1000) / 1000; });
+  const costs = $$('.cline', f).map(el => ({ el, t: $('[name=ct]', el).value, what: clean($('[name=cwhat]', el).value), amtText: $('[name=camt]', el).value.trim(), cur: $('[name=ccur]', el).value,
+    rate: parseNum($('[name=crate]', el).value) || undefined, split: $('[name=csplit]', el).value, pay: $('[name=cpay]', el).value }))
+    .filter(c => c.amtText);
+  costs.forEach(c => { c.amt = parseNum(c.amtText); });
+  const y = { gcur, grate: gcur === 'USD' ? undefined : parseNum(v.grate) || undefined, lines: rows.map(r => ({ m: r.m, qty: r.qty, amt: r.amt, kg: r.kg || 0 })),
+    costs: costs.map(c => ({ t: c.t, amt: c.amt, cur: c.cur, rate: c.cur === 'USD' ? undefined : c.rate, split: c.split })) };
+  const badLine = rows.find(r => !(r.m && r.m !== '__new' ? itemOf(r.m) : r.nname) || !(r.qty > 0) || r.amt === null || r.kg === null);
+  const badCost = costs.find(c => c.amt === null || (c.cur !== 'USD' && !(c.rate > 0)));
+  return { v, rows, costs, y, badLine, badCost };
+}
+function refreshReceive(f) {
+  $$('.rline', f).forEach(el => { $('.rnew', el).hidden = $('[name=m]', el).value !== '__new'; });
+  $$('.cline', f).forEach(el => { $('[name=crate]', el).hidden = $('[name=ccur]', el).value === 'USD'; });
+  $('.grate', f).hidden = f.elements.gcur.value === 'USD';
+  const { rows, costs, y } = readReceive(f), out = $('.lc-out', f), cur = y.gcur;
+  rows.forEach(r => { const h = $('.rhint', r.el); h.textContent = r.qty > 0 && r.amt > 0 ? `${cost(Math.round(r.amt / r.qty * 1e4) / 1e4, cur)} each as invoiced${r.kg ? ` · ${plain(Math.round(r.kg / r.qty * 1000) / 1000)} kg each` : ''}` : ''; });
+  costs.forEach(c => { const h = $('.chint', c.el), usd = c.amt === null ? null : toUsd(c.amt, c.cur, c.rate); h.textContent = c.cur !== 'USD' && usd !== null ? `= ${money(Math.round(usd * 100) / 100, 'USD')}` : c.cur !== 'USD' && c.amt ? `Type how many ${c.cur} made 1 US dollar that day` : ''; });
+  const ready = rows.length && rows.every(r => r.qty > 0 && r.amt !== null && r.kg !== null) && costs.every(c => c.amt !== null);
+  if (!ready) { out.innerHTML = '<p class="muted" style="margin:0">Type each line (how many, and what the line cost) and each cost: the landed cost of one appears here.</p>'; return; }
+  const r = landedCost(y);
+  if (r.err) { out.innerHTML = `<p class="err" style="margin:0">To spread ${r.cost !== undefined ? `the ${esc((COST_NAME[costs[r.cost].t] || '').toLowerCase())} cost` : 'the costs'}, type ${esc(r.err)}.</p>`; return; }
+  const name = (row) => (row.m && row.m !== '__new' ? (itemOf(row.m) || {}).name : row.nname) || '—';
+  const markupOf = row => { const m = row.m && itemOf(row.m); return m && m.markup !== undefined ? m.markup : DEFAULT_MARKUP; };
+  const sellsFor = (row, unit) => { const m = row.m && itemOf(row.m), sug = suggestPrice(unit, markupOf(row));
+    return m && m.price > 0 ? `sells for <b>${money(m.price, 'USD')}</b>${sug > m.price + 0.004 ? ` <span class="out-c">— below the suggested ${money(sug, 'USD')}</span>` : ''}` : `will sell for <b>${money(sug, 'USD')}</b> (+${plain(markupOf(row))} %, rounded up)`; };
+  out.innerHTML = `<h3 style="margin:0 0 8px">Landed cost</h3>
+    <div class="lc-table">${r.lines.map((l, i) => `<div class="lc-row"><b>${esc(name(rows[i]))}</b><span class="muted">${plain(rows[i].qty)} · goods ${money(l.goods / 100, 'USD')} + costs ${money(l.extra / 100, 'USD')} = ${money(l.total / 100, 'USD')}</span>
+      <span class="lc-each"><b>${usd4(l.unit)}</b> each · ${sellsFor(rows[i], l.unit)}</span></div>`).join('')}</div>
+    <p class="muted" style="margin:10px 0 0">Goods ${money(r.goods / 100, 'USD')} + costs ${money(r.extra / 100, 'USD')} = <b>${money(r.total / 100, 'USD')}</b>${r.kg ? ` · ${plain(Math.round(r.kg) / 1000)} tons · ${usd4(Math.round(r.total / r.kg * 1e4) / 1e6)} a kg` : ''}${r.goods ? ` · the costs add ${plain(Math.round(r.extra / r.goods * 1000) / 10)} % to the goods` : ''}.</p>`;
+}
+async function saveReceive(f) {
+  const old = receiptOf(f.dataset.id), { v, rows, costs, y, badLine, badCost } = readReceive(f);
+  if (!DATE_RE.test(v.date) || v.date > today()) return formErr(f, 'date', 'Choose the day it arrived');
+  if (!rows.length) return formErr(f, null, 'Add at least one line: the item, how many and what the line cost.');
+  if (badLine) { $('input,select', badLine.el).focus(); return formErr(f, null, !(badLine.m && badLine.m !== '__new') && !badLine.nname ? 'Choose the item on each line (or type the new one).' : 'Each line needs how many came (above 0), what the line cost and, if typed, a weight in numbers.'); }
+  if (y.gcur !== 'USD' && !(y.grate > 0)) return formErr(f, 'grate', `Type how many ${y.gcur} made 1 US dollar`);
+  if (badCost) { $('[name=camt]', badCost.el).focus(); return formErr(f, null, badCost.amt === null ? 'Type each cost as a number.' : `Type how many ${badCost.cur} made 1 US dollar the day that cost was paid.`); }
+  const badPay = costs.find(c => ['cash', 'bank'].includes(c.pay) && !CURS.includes(c.cur));
+  if (badPay) return formErr(f, null, `A cost in ${badPay.cur} cannot go into Accounts (it keeps US dollars and SSP). Choose "Not in Accounts" for it.`);
+  const r = landedCost(y);
+  if (r.err) return formErr(f, null, `To spread the costs, type ${r.err}.`);
+  const by = myName() || S.lastBy || '';
+  // new items first (each line points at its item), then the import, then the payments it made in Accounts
+  rows.forEach(row => { if (row.m === '__new') { const same = live(S.stock).find(m => m.name.toLowerCase() === row.nname.toLowerCase()); row.m = same ? same.id : newItem({ name: row.nname, unit: row.nunit, markup: DEFAULT_MARKUP }, by); } });
+  const sup = live(S.suppliers).find(u => u.name.toLowerCase() === clean(v.from).toLowerCase());
+  let id = old && old.id;
+  if (!old) { const [[nid], seq] = nextIds('Y', 1, S.seq); update({ seq }); id = nid; }
+  const payIds = [];
+  const outCosts = costs.map(c => {
+    let pay = c.pay && !['cash', 'bank'].includes(c.pay) ? c.pay : '';
+    if (['cash', 'bank'].includes(c.pay)) {
+      const [[eid], s2] = nextIds('E', 1, S.seq);
+      const e = { id: eid, cur: c.cur, amount: c.amt, rate: c.cur === 'SSP' ? c.rate : undefined, paidTo: c.what || COST_NAME[c.t], reason: `${COST_NAME[c.t]} — goods received ${clean(v.ref) || v.date}`, location: '', project: '', mode: c.pay === 'bank' ? 'Bank' : 'Cash', at: `${v.date}T12:00`, manualDate: true, imp: id, by, createdAt: stampSec(), batch: null };
+      update({ expenses: [...S.expenses, e], seq: s2 });
+      payIds.push(eid); pay = eid;
+    }
+    return { t: c.t, ...(c.what ? { what: c.what } : {}), amt: c.amt, cur: c.cur, ...(c.cur !== 'USD' ? { rate: c.rate } : {}), split: c.split, ...(pay ? { pay } : {}) };
+  });
+  const rec = { date: v.date, ref: clean(v.ref), ...(sup ? { sup: sup.id } : { from: clean(v.from) }), origin: clean(v.origin), gcur: y.gcur, ...(y.gcur !== 'USD' ? { grate: y.grate } : {}),
+    lines: rows.map(row => ({ m: row.m, qty: row.qty, amt: row.amt, ...(row.kg ? { kg: row.kg } : {}) })), costs: outCosts, lc: r.lines.map(l => l.unit), note: clean(v.note) };
+  const text = `${rows.length} line${rows.length === 1 ? '' : 's'} · landed ${money(r.total / 100, 'USD')}${payIds.length ? ` · ${payIds.length} cost${payIds.length === 1 ? '' : 's'} added to Accounts` : ''}`;
+  const differ = outCosts.filter(c => c.pay).map(c => ({ c, e: S.expenses.find(e => e.id === c.pay && !e.deleted) })).filter(({ c, e }) => e && (e.cur !== c.cur || Math.abs(e.amount - c.amt) > 0.004));
+  if (differ.length) alert(`In Accounts these payments are not what the costs now say:\n${differ.map(({ c, e }) => `${COST_NAME[c.t]}: ${cost(c.amt, c.cur)} here, ${money(e.amount, e.cur)} in Accounts`).join('\n')}\n\nCorrect the payment in Accounts too (open it from History).`);
+  if (old) update({ receipts: S.receipts.map(x => { if (x.id !== old.id) return x; const { sup: _s, from: _f, ...base } = x; return { ...base, ...rec, editedAt: stampSec(), editedBy: by }; }), log: logWith([['Edited', id, `Goods received ${rec.ref || rec.date}: ${text}`]], by) });
+  else update({ receipts: [...S.receipts, { id, ...rec, by, createdAt: stampSec() }], log: logWith([['Received', id, `Goods received ${rec.ref || rec.date}: ${text}`]], by) });
+  firstPrices(rec.lines.map(l => l.m), by);
+  toast(old ? 'Saved ✓' : 'In stock ✓');
+  receiptDetail(id);
+}
+function receiptDetail(id) {
+  const y = receiptOf(id);
+  if (!y) return false;
+  const admin = seesCost() && !y.stub, r = admin ? landedCost(y) : null, sup = y.sup && live(S.suppliers).find(u => u.id === y.sup);
+  openSheet(`${head('Goods received', 'stock', [fmtDate(y.date), y.ref].filter(Boolean).join(' · '))}
+    <dl class="facts">${[['Arrived on', fmtDate(y.date)], ['Their invoice / container', y.ref], ['Supplier', sup ? sup.name : y.from], ['From', y.origin], ...(admin ? [['Invoiced in', y.gcur === 'USD' ? 'US dollars' : `${y.gcur} · ${plain(y.grate)} for 1 USD`]] : []), ['Entered by', y.by]]
+      .filter(x => x[1]).map(([a, v]) => `<div><dt>${a}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    <h3 class="subh">What came in</h3>
+    <div class="card list inset">${y.lines.map((l, i) => { const m = itemOf(l.m) || { name: 'An item no longer in the list', unit: '' }; return `<button class="mrow" data-act="openItem" data-id="${esc(l.m)}" style="width:100%;border:0;background:none;text-align:left;cursor:pointer;font:inherit">
+      <span>${esc(m.name)}</span><span class="muted">${admin ? `${r && !r.err ? `${money(r.lines[i].total / 100, 'USD')} landed · ` : ''}${usd4(y.lc[i])} each` : esc(m.unit)}</span><b>${plain(l.qty)}</b></button>`; }).join('')}</div>
+    ${admin ? `<h3 class="subh">Costs (${y.costs.length})</h3>${y.costs.length ? `<div class="card list inset">${y.costs.map(c => { const usd = toUsd(c.amt, c.cur, c.rate), e = c.pay && S.expenses.find(x => x.id === c.pay && !x.deleted);
+      return `<div class="mrow"><span>${esc(COST_NAME[c.t] || c.t)}${c.what ? ` — ${esc(c.what)}` : ''}<br><small class="muted">${esc(SPLIT_NAME[c.split])}${e ? ` · in Accounts: ${esc(fmtDate(e.at.slice(0, 10)))} ${esc(money(e.amount, e.cur))}` : ' · not in Accounts'}</small></span>
+        <span class="muted">${c.cur === 'USD' ? '' : `${esc(cost(c.amt, c.cur))} at ${plain(c.rate)}`}</span><b>${money(Math.round(usd * 100) / 100, 'USD')}</b></div>`; }).join('')}</div>` : '<p class="muted">None.</p>'}
+      ${r && !r.err ? `<p class="note">Goods ${money(r.goods / 100, 'USD')} + costs ${money(r.extra / 100, 'USD')} = <b>${money(r.total / 100, 'USD')}</b> landed${r.kg ? ` · ${usd4(Math.round(r.total / r.kg * 1e4) / 1e6)} a kg` : ''}.</p>` : ''}
+      <div class="two"><button class="btn ghost" data-act="landedPdf" data-id="${esc(id)}">📄 Landed cost sheet (PDF)</button><button class="btn ghost" data-act="receiveForm" data-id="${esc(id)}">✏️ Change 🔒</button></div>
+      ${attachButton(id, '📎 Add their invoice, packing list, customs papers…')}
+      ${filesBlock(id)}
+      <button class="btn danger" data-act="deleteReceipt" data-id="${esc(id)}" style="margin-top:16px">🗑 Delete 🔒</button>` : ''}`);
+  comeBack(() => receiptDetail(id));
+}
+async function deleteReceipt(id) {
+  const y = receiptOf(id);
+  if (!y || !await unlock('Enter the password to delete goods received.')) return;
+  const b = book(), short = y.lines.filter(l => (b[l.m] ? b[l.m].qty : 0) - l.qty < 0).map(l => (itemOf(l.m) || {}).name);
+  const by = confirmBy(`Delete these goods received${y.ref ? ` (${y.ref})` : ''}?${short.length ? `\n\n⚠️ Without them there would be fewer than nothing of: ${short.join(', ')} — they were sold or used.` : ''}\n\nPayments it added to Accounts stay (delete them there if they are wrong).`);
+  if (!by) return;
+  update({ receipts: S.receipts.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Goods received ${y.ref || y.date}`]], by) });
+
+  toast('Deleted ✓'); closeAll(); stockSheet();
+}
+function receivedList() {
+  const ys = live(S.receipts).sort((a, b) => b.date.localeCompare(a.date)), admin = seesCost();
+  openSheet(`${head('Goods received', 'stock')}${stockNav('stockIn')}
+    ${admin ? '<button class="btn primary" data-act="receiveForm">🚢 Goods received</button>' : ''}
+    ${ys.length ? `<div class="card list inset" style="margin-top:14px">${ys.map(y => { const r = admin && !y.stub ? landedCost(y) : null; return `<button class="row in" data-act="openReceipt" data-id="${esc(y.id)}"><span class="dot">🚢</span>
+      <span class="main"><span class="t"><span class="tt">${esc(y.ref || 'Goods received')}</span></span><span class="s">${esc([fmtDate(y.date), (y.sup && (live(S.suppliers).find(u => u.id === y.sup) || {}).name) || y.from, `${y.lines.length} line${y.lines.length === 1 ? '' : 's'}`].filter(Boolean).join(' · '))}</span></span>
+      ${r && !r.err ? `<span class="amt">${money(r.total / 100, 'USD')}<small>landed</small></span>` : ''}</button>`; }).join('')}</div>` : `<div style="height:12px"></div>${empty('Nothing received yet', 'Each import or delivery from a supplier is entered here, with all its costs.')}`}`);
+  comeBack(receivedList);
+}
+
+/* ---------- goods out: used, damaged, returned ---------- */
+const outLine = (l = {}) => `<div class="oline"><select name="m" aria-label="Item">${itemOptions(l.m)}</select><input name="qty" inputmode="decimal" placeholder="How many" value="${esc(l.qty ?? '')}" autocomplete="off" aria-label="How many"><button type="button" class="x" data-act="delOutLine" aria-label="Remove">×</button><small class="muted ohint"></small></div>`;
+function outForm(itemId) {
+  if (!live(S.stock).length) return toast('Nothing is in the warehouse yet');
+  openSheet(`${head('Goods out', 'out', 'Used, damaged or returned')}
+    <form data-form="stockOut">
+      <div class="fld"><span>What happened?</span><div class="curseg roles">${['use', 'damage', 'return'].map((k, i) => `<label><input type="radio" name="kind" value="${k}" ${i ? '' : 'checked'}><span><b>${OUT_KIND[k][0]}</b><small>${OUT_KIND[k][1]}</small></span></label>`).join('')}</div></div>
+      <div class="olines">${outLine({ m: itemId })}</div>
+      <button type="button" class="btn small ghost" data-act="addOutLine">＋ Another item</button>
+      <div class="use-only">${projectSelect('', true)}</div>
+      ${textField('to', 'Taken by / sent to', 'e.g. Site foreman Juma', '', false)}
+      <label class="fld"><span>On</span><input type="date" name="date" value="${today()}" max="${today()}" required></label>
+      ${textField('note', 'Why / note', 'e.g. For the slab of the second floor', '', false)}
+      <p class="err"></p>
+      <button class="btn out">Take them out of stock</button>
+    </form>`);
+  refreshOut($('#sheet form'));
+}
+function refreshOut(f) {
+  const b = book();
+  $$('.oline', f).forEach(el => { const m = itemOf($('[name=m]', el).value); $('.ohint', el).textContent = m ? `${plain(b[m.id] ? b[m.id].qty : 0)} ${m.unit} in stock` : ''; });
+  $('.use-only', f).hidden = f.elements.kind.value !== 'use';
+}
+function saveStockOut(f) {
+  const v = Object.fromEntries(new FormData(f)), b = book(), kind = v.kind;
+  const lines = $$('.oline', f).map(el => ({ m: $('[name=m]', el).value, qty: parseNum($('[name=qty]', el).value), el })).filter(l => l.m || l.qty);
+  if (!lines.length) return formErr(f, null, 'Choose an item and how many.');
+  const bad = lines.find(l => !itemOf(l.m) || !(l.qty > 0));
+  if (bad) { $('select', bad.el).focus(); return formErr(f, null, 'Each line needs its item and how many (above 0).'); }
+  const want = {};
+  lines.forEach(l => { want[l.m] = (want[l.m] || 0) + l.qty; });
+  const over = Object.entries(want).find(([m, q]) => q > (b[m] ? b[m].qty : 0) + 1e-9);
+  if (over) { const m = itemOf(over[0]); if (!can('edit')) return formErr(f, null, `Only ${plain(b[m.id] ? b[m.id].qty : 0)} ${m.unit} of ${m.name} are in stock.`); if (!confirm(`Only ${plain(b[m.id] ? b[m.id].qty : 0)} ${m.unit} of ${m.name} are in stock. Take ${plain(over[1])} out anyway?`)) return; }
+  if (!DATE_RE.test(v.date) || v.date > today()) return formErr(f, 'date', 'Choose the day');
+  if (kind === 'use' && !v.project && !clean(v.to)) return formErr(f, 'to', 'Say which project, or who took them');
+  const by = myName() || S.lastBy || '', [[id], seq] = nextIds('O', 1, S.seq);
+  const rec = { id, date: v.date, kind, lines: Object.entries(want).map(([m, qty]) => ({ m, qty })), project: kind === 'use' ? v.project || '' : '', to: clean(v.to), note: clean(v.note), by, createdAt: stampSec() };
+  update({ stockOut: [...S.stockOut, rec], seq, log: logWith([['Goods out', id, `${OUT_KIND[kind][0]}: ${rec.lines.map(l => `${plain(l.qty)} ${itemOf(l.m).unit} ${itemOf(l.m).name}`).join(', ')}${rec.project ? ` — ${projName(rec.project)}` : ''}${rec.to ? ` — ${rec.to}` : ''}`]], by) });
+  toast('Out of stock ✓');
+  outDetail(id);
+}
+function outDetail(id) {
+  const o = S.stockOut.find(x => x.id === id && !x.deleted);
+  if (!o) return false;
+  const b = book(), dn = live(S.deliveries).find(d => d.out === id);
+  openSheet(`${head(OUT_KIND[o.kind][0], o.kind === 'count' ? 'stock' : 'out', fmtDate(o.date))}
+    <dl class="facts">${[['On', fmtDate(o.date)], ['Project', o.project && projName(o.project)], ['Taken by / sent to', o.to], ['Note', o.note], ['Recorded by', o.by]].filter(x => x[1]).map(([a, v]) => `<div><dt>${a}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    <div class="card list inset">${o.lines.map(l => { const m = itemOf(l.m) || { name: l.m, unit: '' }, val = seesCost() && b[l.m] ? Math.round(Math.abs(l.qty) * ((b[l.m].moves.find(mv => mv.ref === id && mv.m === l.m) || {}).avg || 0) * 100) / 100 : null;
+      return `<div class="mrow"><span>${esc(m.name)}</span><span class="muted">${l.counted !== undefined ? `counted ${plain(l.counted)} · ` : ''}${val !== null ? money(val, 'USD') + ' at cost' : ''}</span><b class="${o.kind === 'count' && l.qty > 0 ? 'in-c' : 'out-c'}">${o.kind === 'count' && l.qty > 0 ? '+' : '−'}${plain(Math.abs(l.qty))} ${esc(m.unit)}</b></div>`; }).join('')}</div>
+    ${o.kind === 'use' ? (dn ? `<button class="btn ghost" data-act="openDelivery" data-id="${esc(dn.id)}" style="margin-top:12px">🚚 Delivery note ${esc(dn.no)}</button>` : `<button class="btn ghost" data-act="deliveryForm" data-out="${esc(id)}" style="margin-top:12px">🚚 Make a delivery note to the site</button>`) : ''}
+    ${attachButton(id, '📷 Add a photo')}
+    ${filesBlock(id)}
+    ${can('delete') ? `<button class="btn danger" data-act="deleteOut" data-id="${esc(id)}" style="margin-top:16px">🗑 Delete 🔒</button>` : ''}`);
+  comeBack(() => outDetail(id));
+}
+async function deleteOut(id) {
+  const o = S.stockOut.find(x => x.id === id && !x.deleted);
+  if (!o || !await unlock('Enter the password to delete it.')) return;
+  const by = confirmBy(`Delete this record (${OUT_KIND[o.kind][0]}, ${fmtDate(o.date)})? The goods count as in stock again.`);
+  if (!by) return;
+  update({ stockOut: S.stockOut.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Goods out (${OUT_KIND[o.kind][0]}) ${o.date}`]], by) });
+  toast('Deleted ✓'); closeAll(); stockSheet();
+}
+function outList() {
+  const outs = live(S.stockOut).sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 60);
+  const dns = live(S.deliveries).sort((a, b) => b.date.localeCompare(a.date)), onWay = dns.filter(d => d.status === 'out');
+  const toGo = live(S.invoices).filter(x => !x.stub && sells(x) && toSend(x, S.deliveries).length);
+  openSheet(`${head('Goods out', 'stock')}${stockNav('stockOutList')}
+    <div class="two"><button class="btn ghost" data-act="outForm">➖ Goods out</button><button class="btn in" data-act="sellStock">🧾 Sell from stock</button></div>
+    ${toGo.length ? `<h3 class="subh">Sold, waiting for a delivery note (${toGo.length})</h3><div class="card list inset">${toGo.map(x => `<button class="row" data-act="deliveryForm" data-inv="${esc(x.id)}"><span class="dot">📦</span>
+      <span class="main"><span class="t"><span class="tt">${esc(x.no)}</span><i class="tag warn">To send</i></span><span class="s">${esc([(clientOf(x.client) || {}).name, fmtDate(x.date), toSend(x, S.deliveries).map(l => `${plain(l.qty)} ${(itemOf(l.m) || {}).name || ''}`).join(', ')].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : ''}
+    ${onWay.length ? `<h3 class="subh">On the way — not yet confirmed (${onWay.length})</h3><div class="card list inset">${onWay.map(deliveryRow).join('')}</div>` : ''}
+    <h3 class="subh">Delivery notes (${dns.length})</h3>${dns.length ? `<div class="card list inset">${dns.slice(0, 40).map(deliveryRow).join('')}</div>` : '<p class="muted">None yet.</p>'}
+    <h3 class="subh">Used, damaged, returned, counted</h3>
+    ${outs.length ? `<div class="card list inset">${outs.map(o => `<button class="row out" data-act="openOut" data-id="${esc(o.id)}"><span class="dot">${o.kind === 'count' ? '📋' : '−'}</span>
+      <span class="main"><span class="t"><span class="tt">${esc(OUT_KIND[o.kind][0])}</span></span><span class="s">${esc([fmtDate(o.date), o.project && projName(o.project), o.to, o.lines.map(l => `${plain(Math.abs(l.qty))} ${(itemOf(l.m) || {}).name || ''}`).join(', '), o.by && 'by ' + o.by].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>` : '<p class="muted">Nothing yet.</p>'}`);
+  comeBack(outList);
+}
+
+/* ---------- the stock count: what should be on the shelves, what is ---------- */
+// should be there = on hand + sold but not yet sent (still on the shelf); the differences found go in or out at the average cost
+function countSheet() {
+  const b = book(), wait = awaitingDelivery(S.invoices, S.deliveries), list = items(), blind = !can('edit');
+  if (!list.length) return toast('Nothing is in the warehouse yet');
+  openSheet(`${head('Count the stock', 'stock', fmtDate(today()))}
+    <p class="hint">Count what is on the shelves and type it. Leave an item empty if you did not count it.${blind ? ' Count every item: what the records say is shown to the admins with your count.' : ' Sold goods not yet sent are still here: they are in "should be".'}</p>
+    <form data-form="count">
+      ${[...new Set(list.map(m => m.cat || 'Other'))].map(g => `<h3 class="subh">${esc(g)}</h3><div class="card pad">${list.filter(m => (m.cat || 'Other') === g).map(m => {
+        const should = Math.round(((b[m.id] ? b[m.id].qty : 0) + (wait[m.id] || 0)) * 1e6) / 1e6;
+        return `<label class="count-row"><span><b>${esc(m.name)}</b><small class="muted">${blind ? esc(m.unit) : `should be ${plain(should)} ${esc(m.unit)}`}${m.bin ? ` · ${esc(m.bin)}` : ''}</small></span><input name="c-${esc(m.id)}" data-should="${should}" inputmode="decimal" placeholder="${blind ? '' : plain(should)}" autocomplete="off" aria-label="Counted ${esc(m.name)}"></label>`;
+      }).join('')}</div>`).join('')}
+      ${textField('to', 'Counted by', 'Who counted', myName() || S.lastBy || '', true)}
+      <p class="note count-sum">Type what you counted.</p>
+      <p class="err"></p>
+      <button class="btn primary">Save the count</button>
+    </form>`);
+}
+function countDiffs(f) {
+  return $$('input[data-should]', f).filter(i => i.value.trim()).map(i => ({ m: i.name.slice(2), counted: parseNum(i.value), should: +i.dataset.should, el: i }));
+}
+const COUNT_EPS = 1e-6; // a difference smaller than this is the same count
+function refreshCount(f) {
+  const rows = countDiffs(f), diff = rows.filter(r => r.counted !== null && Math.abs(r.counted - r.should) > COUNT_EPS);
+  if (!can('edit')) { $('.count-sum', f).textContent = rows.length ? `${rows.length} item${rows.length === 1 ? '' : 's'} counted.` : 'Type what you counted.'; return; }
+  $('.count-sum', f).innerHTML = !rows.length ? 'Type what you counted.' : diff.length ? `${rows.length} counted · <b>${diff.length} different</b>: ${diff.map(r => `${esc((itemOf(r.m) || {}).name)} ${r.counted > r.should ? '+' : '−'}${plain(Math.abs(Math.round((r.counted - r.should) * 1e6) / 1e6))}`).join(', ')}` : `${rows.length} counted · everything matches ✓`;
+}
+function saveCount(f) {
+  const rows = countDiffs(f), bad = rows.find(r => r.counted === null || r.counted < 0), who = clean(f.elements.to.value);
+  if (!rows.length) return formErr(f, null, 'Type what you counted of at least one item.');
+  if (bad) { bad.el.focus(); return formErr(f, null, 'Type each count as a number (0 or more).'); }
+  if (!who) return formErr(f, 'to', 'Who counted?');
+  const diff = rows.filter(r => Math.abs(r.counted - r.should) > COUNT_EPS), by = myName() || S.lastBy || '';
+  if (!diff.length) { update({ log: logWith([['Counted', '—', `Stock count by ${who}: ${rows.length} item${rows.length === 1 ? '' : 's'}, all as expected`]], by) }); toast(can('edit') ? 'Everything matches ✓' : 'Count saved ✓'); return stockSheet(); }
+  if (!confirm(can('edit') ? `${diff.length} item${diff.length === 1 ? '' : 's'} differ:\n${diff.map(r => `${(itemOf(r.m) || {}).name}: should be ${plain(r.should)}, counted ${plain(r.counted)}`).join('\n')}\n\nThe stock is corrected to what was counted.` : `Save your count of ${rows.length} item${rows.length === 1 ? '' : 's'}? The admins see it with what the records say.`)) return;
+  const [[id], seq] = nextIds('O', 1, S.seq);
+  const rec = { id, date: today(), kind: 'count', lines: diff.map(r => ({ m: r.m, qty: Math.round((r.counted - r.should) * 1e6) / 1e6, counted: r.counted })), to: who, note: `${rows.length} counted, ${diff.length} different`, by, createdAt: stampSec() };
+  update({ stockOut: [...S.stockOut, rec], seq, log: logWith([['Counted', id, `Stock count by ${who}: ${diff.map(r => `${(itemOf(r.m) || {}).name} ${r.counted > r.should ? '+' : '−'}${plain(Math.abs(Math.round((r.counted - r.should) * 1e6) / 1e6))}`).join(', ')}`]], by) });
+  toast('Count saved ✓');
+  if (can('edit')) outDetail(id); else stockSheet();
+}
+
+/* ---------- the report (admins): what was sold and earned, used on projects, lost; what the stock is worth ---------- */
+function stockReport(month = today().slice(0, 7)) {
+  if (!seesCost()) return;
+  const b = book(), list = items(), inMonth = mv => !month || mv.date.slice(0, 7) === month;
+  const per = list.map(m => {
+    const mv = (b[m.id] ? b[m.id].moves : []).filter(inMonth), sum = (k, f) => mv.filter(x => x.kind === k).reduce((t, x) => t + f(x), 0);
+    const sold = -sum('sale', x => x.qty), cogs = -sum('sale', x => x.val), rev = sum('sale', x => x.usd || 0), used = -sum('use', x => x.qty), usedV = -sum('use', x => x.val);
+    const lost = mv.filter(x => ['damage', 'return', 'count'].includes(x.kind)).reduce((t, x) => t - x.val, 0);
+    return { m, sold, cogs, rev, used, usedV, lost };
+  });
+  const tot = k => per.reduce((t, p) => t + p[k], 0), months = [...new Set(Object.values(b).flatMap(s => s.moves.map(x => x.date.slice(0, 7))))].sort().reverse();
+  const byProject = {};
+  Object.values(b).forEach(s => s.moves.filter(x => x.kind === 'use' && inMonth(x)).forEach(x => { byProject[x.project || ''] = (byProject[x.project || ''] || 0) - x.val; }));
+  openSheet(`${head('Stock report', 'stock', month ? monthName(month) : 'Since the start')}${stockNav('stockReport')}
+    <form data-form="stockMonth"><label class="fld"><span>Period</span><select name="month"><option value="">Since the start</option>${[...new Set([today().slice(0, 7), ...months])].map(x => `<option value="${x}" ${x === month ? 'selected' : ''}>${monthName(x)}</option>`).join('')}</select></label></form>
+    <div class="stats"><div><small>Sold for</small><span class="in"><b>${money(tot('rev') / 100, 'USD')}</b></span></div><div><small>They cost</small><span><b>${money(tot('cogs') / 100, 'USD')}</b></span></div><div><small>Profit</small><span class="${tot('rev') >= tot('cogs') ? 'in' : 'out'}"><b>${money((tot('rev') - tot('cogs')) / 100, 'USD')}</b></span></div></div>
+    <h3 class="subh">Sold</h3>
+    ${per.some(p => p.sold) ? `<div class="card list inset">${per.filter(p => p.sold).map(p => `<button class="mrow" data-act="openItem" data-id="${esc(p.m.id)}" style="width:100%;border:0;background:none;text-align:left;cursor:pointer;font:inherit"><span>${esc(p.m.name)}<br><small class="muted">${plain(p.sold)} ${esc(p.m.unit)} · cost ${money(p.cogs / 100, 'USD')}</small></span><span class="muted">${p.rev ? `${plain(Math.round((p.rev - p.cogs) / p.rev * 1000) / 10)} % margin` : ''}</span><b>${money(p.rev / 100, 'USD')}</b></button>`).join('')}</div>` : '<p class="muted">Nothing sold.</p>'}
+    <h3 class="subh">Used on projects (at cost)</h3>
+    ${Object.keys(byProject).length ? `<div class="card list inset">${Object.entries(byProject).map(([p, v]) => `<div class="mrow"><span>${esc(projName(p))}</span><span></span><b>${money(v / 100, 'USD')}</b></div>`).join('')}</div>` : '<p class="muted">Nothing used.</p>'}
+    <h3 class="subh">Damaged, returned, counted short (at cost)</h3>
+    ${per.some(p => p.lost) ? `<div class="card list inset">${per.filter(p => p.lost).map(p => `<div class="mrow"><span>${esc(p.m.name)}</span><span></span><b class="${p.lost > 0 ? 'out-c' : 'in-c'}">${p.lost > 0 ? '−' : '+'}${money(Math.abs(p.lost) / 100, 'USD')}</b></div>`).join('')}</div>` : '<p class="muted">Nothing lost. ✓</p>'}
+    <button class="btn ghost" data-act="stockPdf" style="margin-top:14px">📄 Stock list with costs (PDF)</button>`);
+  comeBack(() => stockReport(month));
+}
+
+/* ---------- papers: the stock list, a count sheet to print, an import's landed cost ---------- */
+const stockDoc = (title, no, extra = {}) => ({ title, no, date: fmtDate(today()), stampDate: today().split('-').reverse().join('-'), ref: no, info: [['Company', S.company || ''], ['Date', fmtDate(today())]], summary: [], noStamp: true, ...extra });
+async function shareDoc(spec, name) {
+  toast('Making the PDF…');
+  try { const blob = await renderStatement(spec); shown = { blob, name }; readySheet(spec.title, spec.no, blob, name); } catch (e) { alert(`The PDF could not be made: ${e.message}`); }
+}
+function stockPdf() {
+  const b = book(), list = items(), admin = seesCost();
+  const cols = admin ? [{ h: 'Item', w: 360, wrap: true }, { h: 'On hand', w: 150, right: true }, { h: 'Cost each', w: 170, right: true }, { h: 'Value', w: 190, right: true }, { h: 'Sells for', w: 190, right: true }]
+    : [{ h: 'Item', w: 480, wrap: true }, { h: 'Shelf', w: 170 }, { h: 'On hand', w: 190, right: true }, { h: 'Sells for', w: 220, right: true }];
+  const groups = [...new Set(list.map(m => m.cat || 'Other'))];
+  const value = list.reduce((t, m) => t + Math.max(0, b[m.id] ? b[m.id].value : 0), 0);
+  shareDoc(stockDoc('STOCK LIST', `STOCK ${today()}`, {
+    sections: groups.map(g => ({ title: g, cols, rows: list.filter(m => (m.cat || 'Other') === g).map(m => { const s = b[m.id] || { qty: 0, avg: 0, value: 0 };
+      return admin ? [`${m.name}${m.code ? ` (${m.code})` : ''}`, `${plain(s.qty)} ${m.unit}`, usd4(s.avg), slipMoney(s.value / 100, 'USD'), slipMoney(m.price || 0, 'USD')] : [`${m.name}${m.code ? ` (${m.code})` : ''}`, m.bin || '', `${plain(s.qty)} ${m.unit}`, slipMoney(m.price || 0, 'USD')]; }) })),
+    summary: admin ? [['Stock at landed cost', slipMoney(value / 100, 'USD'), true]] : [] }), `Stock list ${today()}.pdf`);
+}
+function countPdf() {
+  const b = book(), wait = awaitingDelivery(S.invoices, S.deliveries), list = items();
+  shareDoc(stockDoc('STOCK COUNT SHEET', `COUNT ${today()}`, {
+    info: [['Company', S.company || ''], ['Date', fmtDate(today())], ['Counted by', ''], ['Checked by', '']],
+    sections: [...new Set(list.map(m => m.cat || 'Other'))].map(g => ({ title: g, cols: [{ h: 'Item', w: 420, wrap: true }, { h: 'Shelf', w: 160 }, { h: 'Should be', w: 160, right: true }, { h: 'Counted', w: 160, right: true }, { h: 'Diff.', w: 160, right: true }],
+      rows: list.filter(m => (m.cat || 'Other') === g).map(m => [`${m.name}${m.code ? ` (${m.code})` : ''}`, m.bin || '', can('edit') ? `${plain(Math.round(((b[m.id] ? b[m.id].qty : 0) + (wait[m.id] || 0)) * 1e6) / 1e6)} ${m.unit}` : m.unit, '', '']) })),
+    approvals: true, signLabels: ['Counted by', 'Checked by', 'Approved by'] }), `Stock count sheet ${today()}.pdf`);
+}
+function landedPdf(id) {
+  const y = receiptOf(id);
+  if (!y || !seesCost()) return;
+  const r = landedCost(y), sup = y.sup && live(S.suppliers).find(u => u.id === y.sup);
+  if (r.err) return toast(`Cannot work it out: ${r.err}`);
+  shareDoc({ title: 'LANDED COST', no: y.ref || y.id, date: fmtDate(y.date), stampDate: y.date.split('-').reverse().join('-'), ref: y.id, noStamp: true,
+    info: [['Supplier', (sup && sup.name) || y.from || '—'], ['Arrived on', fmtDate(y.date)], ['Their invoice / container', y.ref || '—'], ['Invoiced in', y.gcur === 'USD' ? 'US dollars' : `${y.gcur} at ${plain(y.grate)} for 1 USD`]],
+    sections: [{ title: 'Goods', cols: [{ h: 'Item', w: 300, wrap: true }, { h: 'Qty', w: 110, right: true }, { h: 'Goods', w: 160, right: true }, { h: 'Costs', w: 160, right: true }, { h: 'Landed', w: 160, right: true }, { h: 'Each', w: 170, right: true }],
+      rows: y.lines.map((l, i) => [(itemOf(l.m) || {}).name || l.m, plain(l.qty), slipMoney(r.lines[i].goods / 100, 'USD'), slipMoney(r.lines[i].extra / 100, 'USD'), slipMoney(r.lines[i].total / 100, 'USD'), usd4(r.lines[i].unit)]) },
+    { title: 'Costs', sub: 'Each in the money it was paid in, at that day\'s rate, spread over the goods as shown', cols: [{ h: 'Cost', w: 330, wrap: true }, { h: 'Paid', w: 230, right: true }, { h: 'Rate', w: 120, right: true }, { h: 'US dollars', w: 190, right: true }, { h: 'Spread', w: 190 }],
+      rows: y.costs.map(c => [`${COST_NAME[c.t] || c.t}${c.what ? ` — ${c.what}` : ''}`, cost(c.amt, c.cur), c.cur === 'USD' ? '' : plain(c.rate), slipMoney(Math.round(toUsd(c.amt, c.cur, c.rate) * 100) / 100, 'USD'), SPLIT_NAME[c.split]]) }],
+    summary: [['Goods', slipMoney(r.goods / 100, 'USD')], ['Costs', slipMoney(r.extra / 100, 'USD')], ['Landed', slipMoney(r.total / 100, 'USD'), true], ...(r.kg ? [['A kg', usd4(Math.round(r.total / r.kg * 1e4) / 1e6)]] : [])],
+    approvals: true, preparedBy: y.by || '' }, `Landed cost ${fileSafe(y.ref || y.date)}.pdf`);
+}
+
+/* ---------- delivery notes (owner, 2 Nov 2026): every load leaves on one, and comes back signed ---------- */
+// Made when the goods leave (for a sale, or goods used on a project's site): what is on the vehicle, who takes it, the vehicle,
+// what the client pays for delivery and what it costs us, a photo of the load. Its PDF goes with the driver (printed or on
+// WhatsApp). Once there, who received what is added — most drivers have no app: they bring back (or send on WhatsApp) a photo of
+// the slip the receiver signed and of the goods delivered; or the receiver signs on the phone. Nothing on the note changes after
+// it is made (the sheet allows only its receipt to be added), it can never carry more than was sold, and the receiver signs for
+// what arrived — less than was sent shows as SHORT to the admins.
+const deliveryOf = id => S.deliveries.find(x => x.id === id && !x.deleted);
+const DN_STATE = { out: ['On the way', 'warn'], done: ['Received', ''], short: ['Short', 'bad'] };
+const dnState = d => (d.status === 'out' ? 'out' : receivedOf(d).short ? 'short' : 'done');
+function deliveryRow(d) {
+  const [text, tone] = DN_STATE[dnState(d)];
+  return `<button class="row" data-act="openDelivery" data-id="${esc(d.id)}"><span class="dot">🚚</span>
+    <span class="main"><span class="t"><span class="tt">${esc(d.no)}</span><i class="tag ${tone}">${text}</i></span><span class="s">${esc([d.to, fmtDate(d.date), d.how === 'collect' ? `collected by ${d.driver || '?'}` : `${d.driver || '?'}${d.vehicle ? ` · ${d.vehicle}` : ''}`].filter(Boolean).join(' · '))}</span></span></button>`;
+}
+// what the note is for: a sale (its client, address, delivery charge) or goods used on a project (its site)
+function deliveryFor({ inv, out }) {
+  if (inv) {
+    const x = invOf(inv), k = x && clientOf(x.client);
+    if (!x) return null;
+    const charge = x.items.filter(it => it.dlv).reduce((t, it) => t + lineAmount(it), 0);
+    return { inv, title: `${x.no} · ${k ? k.name : ''}`, to: k ? k.name : '', phone: k ? k.phone || '' : '', addr: x.addr || '', how: x.dl === 'collect' ? 'collect' : 'deliver', lines: toSend(x, S.deliveries), charge, cur: x.cur };
+  }
+  const o = S.stockOut.find(y => y.id === out && !y.deleted);
+  return o ? { out, title: `${OUT_KIND[o.kind][0]} · ${o.project ? projName(o.project) : o.to || fmtDate(o.date)}`, to: o.project ? projName(o.project) : o.to || '', addr: '', how: 'deliver', lines: o.lines.map(l => ({ m: l.m, qty: Math.abs(l.qty) })), charge: 0, cur: 'USD' } : null;
+}
+function deliveryForm(b) {
+  const src = deliveryFor({ inv: b.dataset ? b.dataset.inv : b.inv, out: b.dataset ? b.dataset.out : b.out });
+  if (!src) return toast('Not found on this phone');
+  if (!src.lines.length) return toast('Everything on it has a delivery note already ✓');
+  openSheet(`${head('Delivery note', 'out', src.title)}
+    <form data-form="delivery" data-inv="${esc(src.inv || '')}" data-out="${esc(src.out || '')}">
+      <div class="fld"><span>How does it go?</span><div class="curseg"><label><input type="radio" name="how" value="deliver" ${src.how === 'deliver' ? 'checked' : ''}><span><b>🚚 We deliver</b><small>our driver or a hired truck</small></span></label>
+        <label><input type="radio" name="how" value="collect" ${src.how === 'collect' ? 'checked' : ''}><span><b>🙋 They collect</b><small>from the warehouse</small></span></label></div></div>
+      <h3 class="subh">What goes <small class="muted">— less if it goes in several loads</small></h3>
+      <div class="card pad">${src.lines.map(l => { const m = itemOf(l.m) || { name: l.m, unit: '' }; return `<label class="count-row"><span><b>${esc(m.name)}</b><small class="muted">up to ${plain(l.qty)} ${esc(m.unit)}</small></span><input name="q-${esc(l.m)}" data-max="${l.qty}" inputmode="decimal" value="${l.qty}" autocomplete="off" aria-label="How many ${esc(m.name)}"></label>`; }).join('')}</div>
+      ${textField('to', 'To', 'Client or site', src.to)}
+      ${textField('addr', 'Address / site', 'e.g. Gudele block 3, near the church', src.addr, false)}
+      <label class="fld"><span class="who-label">Driver / who takes it</span><input name="driver" required maxlength="80" placeholder="Name" autocomplete="off"></label>
+      <div class="two"><label class="fld"><span>Their phone</span><input name="phone" type="tel" maxlength="30" autocomplete="off"></label><label class="fld"><span>Vehicle number</span><input name="vehicle" maxlength="30" placeholder="e.g. SSD 123 A" autocomplete="off"></label></div>
+      ${src.charge ? `<p class="note">Delivery charged on the invoice: <b>${money(src.charge, src.cur)}</b>.</p>` : src.inv ? '<p class="muted">No delivery charge on the invoice.</p>' : ''}
+      <div class="deliver-only"><div class="two"><label class="fld"><span>What the delivery costs us <em>(optional)</em></span><div class="amt-in"><b class="cur-sym">${SYM[defCur()].trim()}</b><input name="cost" inputmode="decimal" placeholder="0" autocomplete="off"></div><small class="amt-preview"></small></label>
+        <label class="fld"><span>In Accounts</span><select name="pay"><option value="">Not in Accounts</option><option value="cash">＋ Add it: paid in cash</option><option value="bank">＋ Add it: paid from the bank</option></select></label></div>
+        ${curChips(defCur(), 'Delivery cost in')}${rateField(defCur())}</div>
+      <label class="fld"><span>Photo of the loaded goods <em>(optional — on the vehicle, before it leaves)</em></span><input type="file" name="loadphoto" accept="image/*"></label>
+      <label class="fld"><span>Leaves on</span><input type="date" name="date" value="${today()}" min="${plusDays(today(), -7)}" max="${today()}" required></label>
+      ${textField('note', 'Note', '', '', false)}
+      <p class="err"></p>
+      <button class="btn out">Make the delivery note (PDF)</button>
+    </form>`);
+  refreshDelivery($('#sheet form'));
+}
+function refreshDelivery(f) {
+  const how = f.elements.how.value;
+  $('.deliver-only', f).hidden = how !== 'deliver';
+  $('.who-label', f).textContent = how === 'deliver' ? 'Driver / who delivers' : 'Who collects (their name)';
+}
+async function saveDelivery(f) {
+  const v = Object.fromEntries(new FormData(f)), src = deliveryFor({ inv: f.dataset.inv, out: f.dataset.out });
+  if (!src) return closeSheet();
+  const lines = $$('input[data-max]', f).map(i => ({ m: i.name.slice(2), qty: parseNum(i.value || '0'), max: +i.dataset.max, el: i }));
+  const bad = lines.find(l => l.qty === null || l.qty < 0 || l.qty > l.max + 1e-9);
+  if (bad) { bad.el.focus(); return formErr(f, null, `Up to ${plain(bad.max)} of each — no more than was sold and is not yet sent.`); }
+  const go = lines.filter(l => l.qty > 0);
+  if (!go.length) return formErr(f, null, 'Type how many of at least one item go.');
+  const driver = clean(v.driver), how = v.how === 'collect' ? 'collect' : 'deliver';
+  if (!driver) return formErr(f, 'driver', how === 'deliver' ? 'Who delivers it?' : 'Who collects it?');
+  if (!clean(v.to)) return formErr(f, 'to', 'Who or where is it for?');
+  if (!DATE_RE.test(v.date) || v.date > today() || v.date < plusDays(today(), -7)) return formErr(f, 'date', 'The day it leaves: today, or up to a week back');
+  const costCur = formCur(f), costAmt = how === 'deliver' && String(v.cost || '').trim() ? parseAmount(v.cost) : null, rate = costAmt ? rateFrom(f, costCur) : undefined;
+  if (how === 'deliver' && String(v.cost || '').trim() && costAmt === null) return formErr(f, 'cost', 'Type what the delivery costs, like 15 — or leave it empty');
+  if (costAmt && rate === null) return formErr(f, 'rate', RATE_ERR);
+  const by = myName() || S.lastBy || '', [[id], s1] = nextIds('D', 1, S.seq), [[no], seq] = nextIds('DN', 1, s1);
+  let pay = '';
+  update({ seq });
+  if (costAmt && ['cash', 'bank'].includes(v.pay)) {
+    const [[eid], s2] = nextIds('E', 1, S.seq);
+    update({ expenses: [...S.expenses, { id: eid, cur: costCur, amount: costAmt, ...(rate ? { rate } : {}), paidTo: driver, reason: `Delivery ${no} to ${clean(v.to)}`, location: clean(v.addr), project: '', mode: v.pay === 'bank' ? 'Bank' : 'Cash', at: `${v.date}T12:00`, manualDate: true, dn: id, by, createdAt: stampSec(), batch: null }], seq: s2 });
+    pay = eid;
+  }
+  const d = { id, no, date: v.date, ...(src.inv ? { inv: src.inv } : { out: src.out }), to: clean(v.to), addr: clean(v.addr), how, driver, phone: clean(v.phone), vehicle: clean(v.vehicle).toUpperCase(),
+    ...(src.charge ? { charge: src.charge, cur: src.cur } : {}), ...(costAmt ? { cost: costAmt, cur: src.charge ? src.cur : costCur } : {}), ...(pay ? { pay } : {}),
+    lines: go.map(l => ({ m: l.m, qty: l.qty })), status: 'out', check: newCheck(), note: clean(v.note), by, createdAt: stampSec() };
+  if (d.cost && d.charge && costCur !== src.cur) d.costCur = costCur; // the cost was paid in the other currency (shown as typed)
+  update({ deliveries: [...S.deliveries, d], log: logWith([['Delivery', id, `${no} to ${d.to}: ${go.map(l => `${plain(l.qty)} ${(itemOf(l.m) || {}).name || ''}`).join(', ')} · ${how === 'deliver' ? `delivered by ${driver}${d.vehicle ? ` (${d.vehicle})` : ''}` : `collected by ${driver}`}`]], by) });
+  const photo = f.elements.loadphoto.files[0];
+  if (photo) { try { const p = await prepareFile(photo); await keepFile({ for: id, type: 'photo', name: `${no} loaded.jpg`, mime: p.mime }, p.data); } catch (e) { alert(`The photo: ${e.message}`); } }
+  await deliveryPdf(d);
+}
+function deliverySpec(d) {
+  const x = d.inv && invOf(d.inv), o = d.out && S.stockOut.find(y => y.id === d.out), collect = d.how === 'collect';
+  return { title: 'DELIVERY NOTE', no: d.no, date: fmtDate(d.date), check: d.check, stampDate: d.date.split('-').reverse().join('-'), ref: d.id,
+    info: [[collect ? 'Collected by' : 'Deliver to', collect ? d.driver : d.to], [collect ? 'For' : 'Address', collect ? d.to : d.addr || '—'], [x ? 'Invoice' : 'For', x ? `${x.no} of ${fmtDate(x.date)}` : o && o.project ? projName(o.project) : '—'],
+      [collect ? 'Their phone' : 'Driver', collect ? d.phone || '—' : `${d.driver}${d.phone ? ` · ${d.phone}` : ''}`], ...(collect ? [] : [['Vehicle', d.vehicle || '—']])],
+    sections: [{ title: 'Goods', cols: [{ h: 'Item', w: 460, wrap: true }, { h: 'Sent', w: 170, right: true }, { h: 'Unit', w: 140 }, { h: 'Received', w: 290 }],
+      rows: d.lines.map(l => { const m = itemOf(l.m) || { name: l.m, unit: '' }; return [`${m.name}${m.code ? ` (${m.code})` : ''}`, plain(l.qty), m.unit, '']; }) }],
+    summary: [], verdict: null,
+    notes: [['Delivery', [collect ? 'Collected from the warehouse by the person named above.' : `Delivered by the company${d.charge ? ` · delivery charged ${slipMoney(d.charge, d.cur)} on the invoice` : ''}.`]],
+      ['To the receiver', ['Check every item before you sign. If anything is missing or damaged, write how many you received above, then sign with your name, phone, the date and the time.', 'Receiver\'s name: ____________________   Phone: ______________   Date & time: ______________']],
+      ...(d.note ? [['Note', [d.note]]] : [])],
+    approvals: true, signLabels: ['Dispatched by', collect ? 'Collected by' : 'Delivered by', 'Received by (signature)'], preparedBy: d.by || '', checkedBy: d.driver };
+}
+async function deliveryPdf(d) {
+  toast('Making the delivery note…');
+  try {
+    const blob = await renderStatement(deliverySpec(d)), name = `${d.no} ${fileSafe(d.to)}.pdf`;
+    await keepFile({ for: d.id, type: 'delivery', no: d.no, name, mime: 'application/pdf', check: d.check }, await blob.arrayBuffer());
+    readySheet('DELIVERY NOTE', d.no, blob, name);
+  } catch (e) { alert(`The PDF could not be made: ${e.message}\n\nOpen the delivery note to try again.`); deliveryDetail(d.id); }
+}
+function deliveryDetail(id) {
+  const d = deliveryOf(id);
+  if (!d) return false;
+  const st = dnState(d), [text] = DN_STATE[st], rec = receivedOf(d), x = d.inv && invOf(d.inv), pdf = filesFor(id).filter(f => f.type === 'delivery' && !f.removed).shift();
+  openSheet(`${head(`Delivery note ${d.no}`, st === 'short' ? 'out' : 'in', d.to)}
+    <p class="note">${st === 'out' ? `🚚 On the way since ${esc(fmtDate(d.date))}. When it arrives: record who received what, with the signed slip.` : st === 'short' ? `⚠️ Received <b>short</b> by ${esc(d.recv.name)} on ${esc(fmtAbs(d.recv.at))}${d.recv.note ? ` — ${esc(d.recv.note)}` : ''}.` : `✅ Received by ${esc(d.recv.name)}${d.recv.phone ? ` (${esc(d.recv.phone)})` : ''} on ${esc(fmtAbs(d.recv.at))}.`}</p>
+    <div class="two">${pdf ? `<button class="btn ghost" data-act="showFile" data-id="${esc(pdf.id)}">📄 Open or send the note</button>` : `<button class="btn ghost" data-act="remakeDelivery" data-id="${esc(id)}">📄 Make the PDF</button>`}
+      ${st === 'out' && can('staff') ? `<button class="btn in" data-act="receiveDelivery" data-id="${esc(id)}">✍️ Record receipt</button>` : ''}</div>
+    <dl class="facts" style="margin-top:16px">${[['Status', text], ['Left on', fmtDate(d.date)], ['For', x ? x.no : d.out ? 'Goods used on a project' : ''], ['To', d.to], ['Address', d.addr], [d.how === 'collect' ? 'Collected by' : 'Delivered by', `${d.driver}${d.phone ? ` · ${d.phone}` : ''}`], ['Vehicle', d.vehicle],
+      ['Delivery charged', d.charge ? money(d.charge, d.cur) : ''], ['Delivery cost', d.cost ? money(d.cost, d.costCur || d.cur) : ''], ['Made by', d.by]]
+      .filter(f => f[1]).map(([a, v]) => `<div><dt>${a}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    ${d.recv && d.recv.geo ? `<a class="btn ghost" href="https://maps.google.com/?q=${d.recv.geo.lat},${d.recv.geo.lng}" target="_blank" rel="noopener">📍 Where it was signed (±${Math.round(d.recv.geo.acc)} m)</a>` : ''}
+    <h3 class="subh">Goods</h3>
+    <div class="card list inset">${rec.lines.map(l => { const m = itemOf(l.m) || { name: l.m, unit: '' }; return `<div class="mrow"><span>${esc(m.name)}</span><span class="muted">sent ${plain(l.sent)} ${esc(m.unit)}</span><b class="${l.got !== null && l.got < l.sent ? 'out-c' : ''}">${l.got === null ? '—' : `got ${plain(l.got)}`}</b></div>`; }).join('')}</div>
+    ${x ? `<button class="btn ghost" data-act="openInvoice" data-id="${esc(x.id)}" style="margin-top:12px">🧾 Invoice ${esc(x.no)}</button>` : ''}
+    ${filesList(filesFor(id), 'Papers and photos')}
+    ${attachButton(id, '📷 Add a photo')}
+    ${can('delete') ? `<button class="btn danger" data-act="deleteDelivery" data-id="${esc(id)}" style="margin-top:16px">🗑 Delete 🔒</button>` : ''}`);
+  comeBack(() => deliveryDetail(id));
+}
+async function remakeDelivery(id) { const d = deliveryOf(id); if (d) await deliveryPdf(d); }
+async function deleteDelivery(id) {
+  const d = deliveryOf(id);
+  if (!d || !await unlock('Enter the password to delete a delivery note.')) return;
+  const by = confirmBy(`Delete delivery note ${d.no}? The goods on it count as not yet sent. It stays in Drive (folder CHANGES) and in the Change Log.`);
+  if (!by) return;
+  update({ deliveries: S.deliveries.map(x => (x.id === id ? { ...x, deleted: stampSec(), deletedBy: by } : x)), log: logWith([['Deleted', id, `Delivery note ${d.no} to ${d.to}`]], by) });
+  toast('Deleted ✓'); closeAll(); outList();
+}
+
+/* ---------- the receipt: who received what, the signed slip, the goods delivered ---------- */
+function receiveDelivery(id) {
+  const d = deliveryOf(id);
+  if (!d || d.status !== 'out') return;
+  openSheet(`${head('Record receipt', 'in', `${d.no} · ${d.to}`)}
+    <p class="hint">From the driver's photos (on WhatsApp or brought back), or with the receiver here. The slip's number <b>${esc(d.no)}</b> must show in the photo.</p>
+    <form data-form="dnReceipt" data-id="${esc(id)}">
+      ${textField('rname', 'Received by', 'The name the receiver wrote', '')}
+      <label class="fld"><span>Their phone <em>(optional)</em></span><input name="rphone" type="tel" maxlength="30" autocomplete="off"></label>
+      <div class="two"><label class="fld"><span>Received on</span><input type="date" name="rdate" value="${today()}" min="${esc(d.date)}" max="${today()}" required></label><label class="fld"><span>At</span><input type="time" name="rtime" value="${stamp().slice(11, 16)}" required></label></div>
+      <h3 class="subh">How many arrived</h3>
+      <div class="card pad">${d.lines.map(l => { const m = itemOf(l.m) || { name: l.m, unit: '' }; return `<label class="count-row"><span><b>${esc(m.name)}</b><small class="muted">sent ${plain(l.qty)} ${esc(m.unit)}</small></span><input name="g-${esc(l.m)}" data-sent="${l.qty}" inputmode="decimal" value="${l.qty}" autocomplete="off" aria-label="How many ${esc(m.name)} arrived"></label>`; }).join('')}</div>
+      <div class="fld"><span>The receiver's signature</span><div class="curseg"><label><input type="radio" name="sigby" value="paper" checked><span><b>📄 On the paper</b><small>a photo of the signed slip</small></span></label><label><input type="radio" name="sigby" value="phone"><span><b>✍️ Here, on this phone</b><small>the receiver is with you</small></span></label></div></div>
+      <label class="fld sig-paper"><span>Photo of the signed delivery note</span><input type="file" name="slip" accept="image/*,application/pdf"></label>
+      <div class="sig-phone" hidden>${sigField('the receiver')}</div>
+      <label class="fld"><span>Photo of the goods ${d.how === 'deliver' ? 'delivered, at the client' : 'collected'} ${d.how === 'deliver' ? '' : '<em>(optional)</em>'}</span><input type="file" name="goods" accept="image/*"></label>
+      <button type="button" class="btn small ghost" data-act="addGeo">📍 Add where we are now <small>(only if you are at the site)</small></button><input type="hidden" name="geo"><small class="muted geo-out"></small>
+      ${textField('rnote', 'Note', 'e.g. 5 bars bent, left with the client', '', false)}
+      <p class="err"></p>
+      <button class="btn in">Save the receipt</button>
+    </form>`);
+  sigPad($('#sheet canvas.sig'));
+}
+function refreshDnReceipt(f) {
+  const phone = f.elements.sigby.value === 'phone';
+  $('.sig-paper', f).hidden = phone; $('.sig-phone', f).hidden = !phone;
+  if (phone) sigPad($('canvas.sig', f));
+}
+function addGeo(b) {
+  const f = b.closest('form'), out = $('.geo-out', f);
+  if (!navigator.geolocation) return (out.textContent = 'This phone cannot give its place.');
+  out.textContent = 'Finding where you are…';
+  navigator.geolocation.getCurrentPosition(p => { f.elements.geo.value = JSON.stringify({ lat: Math.round(p.coords.latitude * 1e5) / 1e5, lng: Math.round(p.coords.longitude * 1e5) / 1e5, acc: Math.round(p.coords.accuracy) }); out.textContent = `📍 Added (±${Math.round(p.coords.accuracy)} m).`; },
+    e => { out.textContent = e.code === 1 ? 'Not allowed on this phone — fine, it is optional.' : 'Could not find it — fine, it is optional.'; }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+}
+async function saveDnReceipt(f) {
+  const d = deliveryOf(f.dataset.id), v = Object.fromEntries(new FormData(f));
+  if (!d || d.status !== 'out') return closeSheet();
+  const name = clean(v.rname), lines = $$('input[data-sent]', f).map(i => ({ m: i.name.slice(2), qty: parseNum(i.value || '0'), sent: +i.dataset.sent, el: i }));
+  if (!name) return formErr(f, 'rname', 'Who received it? (the name on the slip)');
+  const bad = lines.find(l => l.qty === null || l.qty < 0 || l.qty > l.sent + 1e-9);
+  if (bad) { bad.el.focus(); return formErr(f, null, 'How many arrived — from 0 up to what was sent.'); }
+  if (!DATE_RE.test(v.rdate) || !/^\d\d:\d\d$/.test(v.rtime) || v.rdate < d.date || v.rdate > today()) return formErr(f, 'rdate', `The day it arrived: from ${fmtDate(d.date)} to today`);
+  const onPhone = v.sigby === 'phone', cv = $('canvas.sig', f), slip = f.elements.slip.files[0], goods = f.elements.goods.files[0];
+  if (!onPhone && !slip) return formErr(f, 'slip', `Add the photo of the signed delivery note (its number ${d.no} must show).`);
+  if (onPhone && !cv.dataset.ink) return formErr(f, null, 'The receiver signs in the box first.');
+  if (d.how === 'deliver' && !goods) return formErr(f, 'goods', 'Add the photo of the goods at the client — proof they arrived.');
+  const short = lines.some(l => l.qty < l.sent);
+  if (short && !clean(v.rnote)) return formErr(f, 'rnote', 'Less arrived than was sent: write what happened.');
+  if (short && !confirm(`Less arrived than was sent:\n${lines.filter(l => l.qty < l.sent).map(l => `${(itemOf(l.m) || {}).name}: sent ${plain(l.sent)}, received ${plain(l.qty)}`).join('\n')}\n\nThe admins are told. Save it like this?`)) return;
+  let geo = null;
+  try { geo = v.geo ? JSON.parse(v.geo) : null; } catch { geo = null; }
+  const recv = { name, ...(clean(v.rphone) ? { phone: clean(v.rphone) } : {}), at: `${v.rdate}T${v.rtime}`, lines: lines.map(l => ({ m: l.m, qty: l.qty })), how: onPhone ? 'phone' : 'paper', ...(clean(v.rnote) ? { note: clean(v.rnote) } : {}), ...(geo ? { geo } : {}) };
+  const btn = $('button.btn.in', f); btn.disabled = true; $('.err', f).textContent = 'Saving…';
+  try {
+    // the proof first (it must not be lost if the phone closes): the signed slip's photo, or a PDF signed here; then the goods
+    if (onPhone) {
+      const done = { ...d, status: 'done', recv };
+      const spec = { ...deliverySpec(done), title: 'DELIVERY NOTE — RECEIVED', sections: [{ ...deliverySpec(done).sections[0], rows: d.lines.map(l => { const m = itemOf(l.m) || { name: l.m, unit: '' }, got = recv.lines.find(g => g.m === l.m); return [m.name, plain(l.qty), m.unit, plain(got ? got.qty : 0)]; }) }],
+        notes: [['Received', [`By ${name}${recv.phone ? ` (${recv.phone})` : ''} on ${fmtAbs(recv.at)}${geo ? ` · at ${geo.lat}, ${geo.lng} (±${geo.acc} m)` : ''}.`, ...(recv.note ? [recv.note] : [])]]],
+        sign: { label: 'Received by', sig: cv, name } };
+      const blob = await renderStatement(spec);
+      await keepFile({ for: d.id, type: 'delivery', proof: true, no: d.no, name: `${d.no} received ${fileSafe(name)}.pdf`, mime: 'application/pdf', check: d.check }, await blob.arrayBuffer());
+    } else {
+      const p = await prepareFile(slip);
+      await keepFile({ for: d.id, type: 'delivery', proof: true, no: d.no, name: `${d.no} signed slip${p.mime === 'application/pdf' ? '.pdf' : '.jpg'}`, mime: p.mime }, p.data);
+    }
+    if (goods) { const p = await prepareFile(goods); await keepFile({ for: d.id, type: 'photo', name: `${d.no} delivered.jpg`, mime: p.mime }, p.data); }
+  } catch (e) { btn.disabled = false; return formErr(f, null, e.message); }
+  const by = myName() || S.lastBy || '';
+  update({ deliveries: S.deliveries.map(x => (x.id === d.id ? { ...x, status: 'done', recv } : x)),
+    log: logWith([['Delivered', d.id, `${d.no} received by ${name} on ${fmtAbs(recv.at)}${short ? ' — SHORT: ' + lines.filter(l => l.qty < l.sent).map(l => `${(itemOf(l.m) || {}).name} ${plain(l.qty)} of ${plain(l.sent)}`).join(', ') : ''}`]], by) });
+  toast(short ? 'Saved — short, the admins are told' : 'Received ✓');
+  deliveryDetail(d.id);
+}
+
 /* ---------- SSP: dollars changed into SSP, what is spent in SSP, and what is left (admins) ---------- */
 // A change (kind X) takes dollars out of Cash or Bank and puts SSP into Cash or Bank, at the rate it was done (owner,
 // 17 Oct 2026: "the USD to SSP change I have done… a separate tile… the SSP balance, expenses, how much SSP is left").
@@ -6876,6 +7990,45 @@ const ACTIONS = {
   addWorker: () => workerForm(),
   openWorker: b => workerDetail(b.dataset.id),
   profilePhoto: b => profileSheet(b.dataset.id),
+  // the warehouse (stock.js, delivery.js)
+  stock: () => stockSheet(),
+  stockIn: () => receivedList(),
+  stockOutList: () => outList(),
+  stockReport: () => stockReport(),
+  receiveForm: b => receiveForm(b.dataset.id),
+  openReceipt: b => receiptDetail(b.dataset.id),
+  deleteReceipt: b => deleteReceipt(b.dataset.id),
+  landedPdf: b => landedPdf(b.dataset.id),
+  addRecvLine: () => { $('.rlines').insertAdjacentHTML('beforeend', recvLine()); refreshReceive($('#sheet form')); },
+  delRecvLine: b => { if ($$('.rline').length > 1) b.closest('.rline').remove(); refreshReceive($('#sheet form')); },
+  addCostLine: () => { $('.clines').insertAdjacentHTML('beforeend', costLine({ t: 'duty', split: 'value' })); refreshReceive($('#sheet form')); },
+  delCostLine: b => { b.closest('.cline').remove(); refreshReceive($('#sheet form')); },
+  itemForm: b => itemForm(b.dataset.id),
+  openItem: b => itemDetail(b.dataset.id),
+  openMove: b => openMove(b),
+  outForm: b => outForm(b.dataset.id),
+  addOutLine: () => { $('.olines').insertAdjacentHTML('beforeend', outLine()); refreshOut($('#sheet form')); },
+  delOutLine: b => { if ($$('.oline').length > 1) b.closest('.oline').remove(); refreshOut($('#sheet form')); },
+  openOut: b => outDetail(b.dataset.id),
+  deleteOut: b => deleteOut(b.dataset.id),
+  countSheet: () => countSheet(),
+  stockPdf: () => stockPdf(),
+  countPdf: () => countPdf(),
+  sellStock: b => { if (b.dataset.id && itemOf(b.dataset.id)) shopQ = itemOf(b.dataset.id).name; shopSheet(); },
+  cartStep: b => cartSet(b.dataset.id, (cart[b.dataset.id] || 0) + Number(b.dataset.d)),
+  checkout: () => checkout(),
+  deliveryForm: b => deliveryForm(b),
+  openDelivery: b => deliveryDetail(b.dataset.id),
+  receiveDelivery: b => receiveDelivery(b.dataset.id),
+  remakeDelivery: b => remakeDelivery(b.dataset.id),
+  deleteDelivery: b => deleteDelivery(b.dataset.id),
+  addGeo: b => addGeo(b),
+  approvePrice: b => approvePrice(b.dataset.id),
+  prices: () => pricesSheet(),
+  setPrice: b => setPrice(b.dataset.id, b.dataset.price, false, b.dataset.back),
+  setAllPrices: () => setPrice('', 0, true),
+  useSuggest: b => { const i = b.closest('form').elements.price; i.value = b.dataset.price; i.focus(); },
+  refusePrice: b => refusePrice(b.dataset.id),
   repayForm: b => repayForm(b.dataset.id),
   editWorker: async b => { if (await unlock('Enter the password to change this employee.')) workerForm(workerOf(b.dataset.id)); },
   markLeft: async b => { if (await unlock('Enter the password to record that this employee has left.')) leftForm(b.dataset.id); },
@@ -6990,7 +8143,8 @@ const ACTIONS = {
   delLine: b => { const all = $$('.iline'); if (all.length > 1) b.closest('.iline').remove(); else $$('input', b.closest('.iline')).forEach(i => (i.value = '')); refreshInvoice($('#sheet form')); },
 };
 const FORMS = { expense: saveExpense, credit: saveCredit, move: saveMove, assign: saveAssign, bulk: saveBulk, project: saveProject, settings: saveSettings, setup: doSetup, join: doJoin, connect: doConnect, import: doImport,
-  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, repay: saveRepay, left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
+  signin: doSignIn, setupLogins: doSetupLogins, user: saveUserForm, password: doChangePassword, slip: saveSlip, worker: saveWorker, profile: saveProfile, repay: saveRepay, item: saveItem, receive: saveReceive, stockOut: saveStockOut, count: saveCount, delivery: saveDelivery, dnReceipt: saveDnReceipt,
+  stockFilter: filterStock, shopFind: f => { shopQ = f.elements.q.value; $('#shopList').innerHTML = shopRows(); }, stockMonth: f => stockReport(f.elements.month.value), left: saveLeft, pay: savePay, final: saveFinal, absence: saveAbsence, contacts: saveContacts, checkPaper, regular: saveRegular, bank: saveBank, doc: saveDoc, renew: saveRenew, alerts: saveAlerts, client: saveClient, invoice: saveInvoice, take: saveTake, empAdvance: saveEmpAdvance,
   idea: saveIdea, need: saveNeed, quote: saveQuote, order: saveOrder, ship: saveShip, supplier: saveSupplier, inspect: saveInspection, trip: saveTrip, tripPick: saveTripPick, tripCosts: saveTripCosts, buyFilter: filterBuying, pasteList: savePasteList, subIdea: saveSubIdea, budgets: saveBudgets, exchange: saveExchange };
 
 function refreshAmount(input) {
@@ -7039,6 +8193,15 @@ document.addEventListener('input', e => {
   if (t.form && t.form.dataset.form === 'inspect') keepInspDraft(t.form, t);
   if (t.name === 'list' && t.form && t.form.dataset.form === 'pasteList') countPasted(t.form);
   if (t.form && t.form.dataset.form === 'order') refreshOrder(t.form, t);
+  // the warehouse
+  if (t.form && t.form.dataset.form === 'receive') refreshReceive(t.form);
+  if (t.form && t.form.dataset.form === 'stockFilter') filterStock(t.form);
+  if (t.form && t.form.dataset.form === 'shopFind') { shopQ = t.value; $('#shopList').innerHTML = shopRows(); }
+  if (t.dataset.cart !== undefined) cartSet(t.dataset.cart, parseNum(t.value) || 0);
+  if (t.form && t.form.dataset.form === 'count') refreshCount(t.form);
+  if (t.form && t.form.dataset.form === 'stockOut') refreshOut(t.form);
+  if (t.form && t.form.dataset.form === 'invoice' && t.name === 'price') t.dataset.typed = '1'; // a price typed by hand stays when the money or rate changes
+  if (t.form && t.form.dataset.form === 'invoice' && t.name === 'rate') { $$('.iline', t.form).forEach(r => pickStockLine(r, false)); refreshInvoice(t.form); }
 });
 document.addEventListener('change', e => {
   const t = e.target;
@@ -7055,7 +8218,14 @@ document.addEventListener('change', e => {
   if (t.dataset.replace !== undefined) replaceFile(t);
   if (t.name === 'photo' && t.type === 'file' && t.form) startFramer(t);
   if (t.form && t.form.dataset.form === 'pay' && t.name === 'month') refreshPay(t.form, t);
-  if (t.name === 'role' && t.form && t.form.dataset.form === 'user') $('.sees', t.form).hidden = t.value !== 'manager';
+  if (t.name === 'm' && t.closest('.iline')) pickStockLine(t.closest('.iline'), true);
+  if (t.name === 'cur' && t.form && t.form.dataset.form === 'invoice') $$('.iline', t.form).forEach(r => pickStockLine(r, false));
+  if (t.form && t.form.dataset.form === 'receive') refreshReceive(t.form);
+  if (t.form && t.form.dataset.form === 'stockOut') refreshOut(t.form);
+  if (t.name === 'how' && t.form && t.form.dataset.form === 'delivery') refreshDelivery(t.form);
+  if (t.name === 'sigby' && t.form && t.form.dataset.form === 'dnReceipt') refreshDnReceipt(t.form);
+  if (t.form && t.form.dataset.form === 'stockMonth') stockReport(t.value);
+  if (t.name === 'role' && t.form && t.form.dataset.form === 'user') { $('.sees', t.form).hidden = t.value !== 'manager'; $('.off-fld', t.form).hidden = t.value !== 'manager'; }
   if (t.form && t.form.dataset.form === 'worker') refreshOld(t.form);
   if (t.name === 'kind' && t.form && t.form.dataset.form === 'doc') refreshDocKind(t.form);
   if (t.name === 'periods' && t.form && t.form.dataset.form === 'expense') refreshPeriods(t.form);

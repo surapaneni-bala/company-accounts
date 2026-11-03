@@ -18,7 +18,7 @@ const FILE_COLS = ['fileId', 'uid', 'key']; // key = the phone's id for the file
 // the first bytes of each kind of file allowed: a file must be what it says it is
 const MAGIC = { 'image/jpeg': [0xFF, 0xD8, 0xFF], 'image/png': [0x89, 0x50, 0x4E, 0x47], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'application/pdf': '.pdf' };
-const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'USD to SSP', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Documents', 'Invoices', 'Buying list', 'Suppliers', 'Trips', 'Files'];
+const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves', 'USD to SSP', 'Ledger', 'Change Log', 'Employees', 'Regular payments', 'Bank accounts', 'Documents', 'Invoices', 'Stock', 'Stock moves', 'Imports', 'Import costs', 'Deliveries', 'Buying list', 'Suppliers', 'Trips', 'Files'];
 // record kinds: Expense, Received, Project, Log, Settings, Transfer (cash ↔ bank move),
 // Change request (an office manager's edit, delete or advance, waiting for an admin), Worker (employee),
 // File (a photo or PDF kept in the company Google Drive: slip, voucher, receipt, attachment, ID photo …),
@@ -26,9 +26,12 @@ const VIEW_TABS = ['Summary', 'Expenses', 'Money Received', 'Cash & Bank moves',
 // reGular payment (rent, internet, licence fees: due every 1, 3, 6 or 12 months), Bank account (the company's, to be paid into),
 // Vault document (a licence, a vehicle's papers, a passport…: its file is an F record of type 'document'),
 // Klient (who invoices and quotations go to) and Invoice (an invoice or a quotation: its PDF is an F record) — admins only
-const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 'K', 'I', 'N', 'U', 'J', 'X'];
-const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement', 'document', 'invoice', 'quote'];
-const SALES_KINDS = ['K', 'I']; // what clients are charged and owe: admins only (owner, 11 Oct 2026)
+const KINDS = ['E', 'R', 'P', 'L', 'S', 'T', 'C', 'W', 'F', 'A', 'G', 'B', 'V', 'K', 'I', 'N', 'U', 'J', 'X', 'M', 'Y', 'O', 'D'];
+// the warehouse (owner, 2 Nov 2026): stock items (M), goods received — an import with every cost (Y), goods out (O), and the
+// delivery note (D) every load leaves with: who takes it, the vehicle, and once there who received what, signed, with a photo
+const STOCK_KINDS = ['M', 'Y', 'O', 'D'];
+const OUT_KINDS = ['use', 'damage', 'return', 'count'];
+const FILE_TYPES = ['voucher', 'receipt', 'slip', 'photo', 'attachment', 'profile', 'idphoto', 'letterhead', 'stamp', 'statement', 'document', 'invoice', 'quote', 'delivery'];
 // buying: the list of what to buy (N), suppliers and factories (U) and buying trips (J): admins only (owner, 16 Oct 2026)
 const BUY_KINDS = ['N', 'U', 'J'];
 const BUY_STATES = ['idea', 'tobuy', 'ordered', 'inspected', 'shipped', 'received', 'dropped'];
@@ -82,7 +85,10 @@ const SHAPES = {
   K: d => str_(d.name) && d.name.length > 0 && ['phone', 'address', 'tin', 'note'].every(k => d[k] === undefined || str_(d[k])),
   I: d => ['invoice', 'quote'].indexOf(d.type) >= 0 && str_(d.no) && d.no.length > 0 && SAFE_ID.test(d.client) && DATE_RE.test(d.date) && (!d.due || DATE_RE.test(d.due))
     && CURS.indexOf(d.cur) >= 0 && Array.isArray(d.items) && d.items.length > 0 && d.items.length <= 100
-    && d.items.every(it => isObj_(it) && str_(it.t) && num_(it.qty) && it.qty > 0 && num_(it.price) && it.price >= 0 && (it.unit === undefined || str_(it.unit)))
+    && d.items.every(it => isObj_(it) && str_(it.t) && num_(it.qty) && it.qty > 0 && num_(it.price) && it.price >= 0 && (it.unit === undefined || str_(it.unit))
+      && (it.m === undefined || SAFE_ID.test(it.m)) && (it.list === undefined || (num_(it.list) && it.list >= 0))) // from stock: the item and its list price then
+    && (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (d.ok === undefined || ['waiting', 'approved', 'rejected'].indexOf(d.ok) >= 0) // SSP for 1 USD; a price below the list waiting for an admin
+    && (d.dl === undefined || ['deliver', 'collect'].indexOf(d.dl) >= 0) && strs_(d, ['addr', 'okBy', 'why']) && d.items.every(it => it.dlv === undefined || (it.dlv === true && it.m === undefined)) // delivered or collected; the delivery charge line (never an item)
     && (d.tax === undefined || (num_(d.tax) && d.tax >= 0 && d.tax <= 100)) && ['bank', 'from'].every(k => !d[k] || SAFE_ID.test(d[k])) && ['notes', 'project'].every(k => d[k] === undefined || str_(d[k])),
   // an item to buy: what, its category, every detail as spec lines (label, value), suppliers' quotes, the order, the inspection
   N: d => str_(d.t) && d.t.length > 0 && BUY_STATES.indexOf(d.status) >= 0 && strs_(d, ['cat', 'sub', 'area', 'unit', 'notes', 'link', 'where', 'ship', 'project'])
@@ -99,6 +105,29 @@ const SHAPES = {
   U: d => str_(d.name) && d.name.length > 0 && strs_(d, ['kind', 'city', 'country', 'market', 'person', 'phone', 'wechat', 'email', 'note']),
   // dollars changed into SSP (owner, 17 Oct 2026): usd out of Cash or Bank, ssp into Cash or Bank; was = the old expense it replaced
   X: d => AT_RE.test(d.at) && num_(d.usd) && d.usd > 0 && num_(d.ssp) && d.ssp > 0 && ACCOUNTS.indexOf(d.from) >= 0 && ACCOUNTS.indexOf(d.to) >= 0 && strs_(d, ['with', 'note']) && (!d.was || SAFE_ID.test(d.was)),
+  // a stock item: what it is, its unit, where it is kept, when to reorder; price = what one sells for in dollars (the admin's
+  // phone sets it from the landed cost and the markup, or an admin types it)
+  M: d => str_(d.name) && d.name.length > 0 && str_(d.unit) && strs_(d, ['cat', 'code', 'bin', 'note']) && ['price', 'min', 'markup'].every(k => d[k] === undefined || (num_(d[k]) && d[k] >= 0))
+    && (d.fixed === undefined || typeof d.fixed === 'boolean') && (d.prev === undefined || (isObj_(d.prev) && num_(d.prev.price) && DATE_RE.test(d.prev.until))), // the price before its last change
+  // goods received: the supplier's lines (item, how many, what the line cost in gcur at grate, weight) and every other cost, each in
+  // its own currency at that day's rate, spread by weight, value or quantity; lc = landed cost of one, per line (worked out by the app)
+  Y: d => DATE_RE.test(d.date) && strs_(d, ['ref', 'from', 'origin', 'note']) && (!d.sup || SAFE_ID.test(d.sup)) && CUR_CODE.test(d.gcur || 'USD') && (d.grate === undefined || (num_(d.grate) && d.grate > 0))
+    && Array.isArray(d.lines) && d.lines.length > 0 && d.lines.length <= 100 && d.lines.every(l => isObj_(l) && SAFE_ID.test(l.m) && num_(l.qty) && l.qty > 0 && num_(l.amt) && l.amt >= 0 && (l.kg === undefined || (num_(l.kg) && l.kg >= 0)))
+    && Array.isArray(d.costs) && d.costs.length <= 40 && d.costs.every(c => isObj_(c) && str_(c.t) && num_(c.amt) && c.amt >= 0 && CUR_CODE.test(c.cur) && (c.rate === undefined || (num_(c.rate) && c.rate > 0))
+      && ['kg', 'value', 'qty'].indexOf(c.split) >= 0 && strs_(c, ['what']) && (!c.pay || SAFE_ID.test(c.pay)))
+    && Array.isArray(d.lc) && d.lc.length === d.lines.length && d.lc.every(x => num_(x) && x >= 0),
+  // goods out: used (on a project), damaged or lost, returned to the supplier, or a stock count's differences (+ or −)
+  O: d => DATE_RE.test(d.date) && OUT_KINDS.indexOf(d.kind) >= 0 && strs_(d, ['project', 'to', 'note']) && Array.isArray(d.lines) && d.lines.length > 0 && d.lines.length <= 300
+    && d.lines.every(l => isObj_(l) && SAFE_ID.test(l.m) && num_(l.qty) && (d.kind === 'count' ? l.qty !== 0 : l.qty > 0) && (l.counted === undefined || (num_(l.counted) && l.counted >= 0))),
+  // a delivery note: for an invoice (inv) or goods used on a project (out); delivered by us or collected; who takes it; what the
+  // client pays for delivery (charge) and what it cost us (cost, pay = that payment); status out (left) → done (received:
+  // recv = who received what, when, and where it was signed if the phone allowed)
+  D: d => /^DN-[A-Za-z0-9-]{1,40}$/.test(d.no) && DATE_RE.test(d.date) && (d.inv ? SAFE_ID.test(d.inv) && !d.out : SAFE_ID.test(d.out || '')) && ['deliver', 'collect'].indexOf(d.how) >= 0
+    && strs_(d, ['to', 'addr', 'driver', 'phone', 'vehicle', 'note', 'check']) && ['charge', 'cost'].every(k => d[k] === undefined || (num_(d[k]) && d[k] >= 0)) && (d.cur === undefined || CURS.indexOf(d.cur) >= 0) && (!d.pay || SAFE_ID.test(d.pay))
+    && Array.isArray(d.lines) && d.lines.length > 0 && d.lines.length <= 100 && d.lines.every(l => isObj_(l) && SAFE_ID.test(l.m) && num_(l.qty) && l.qty > 0)
+    && ['out', 'done'].indexOf(d.status) >= 0 && (d.status === 'out' ? d.recv === undefined : isObj_(d.recv) && str_(d.recv.name) && d.recv.name.length > 0 && AT_RE.test(d.recv.at)
+      && strs_(d.recv, ['phone', 'note', 'how']) && Array.isArray(d.recv.lines) && d.recv.lines.every(l => isObj_(l) && SAFE_ID.test(l.m) && num_(l.qty) && l.qty >= 0)
+      && (d.recv.geo === undefined || (isObj_(d.recv.geo) && num_(d.recv.geo.lat) && num_(d.recv.geo.lng) && num_(d.recv.geo.acc)))),
   J: d => str_(d.to) && d.to.length > 0 && DATE_RE.test(d.out) && (!d.back || DATE_RE.test(d.back)) && Array.isArray(d.who) && d.who.length <= 20 && d.who.every(str_) && strs_(d, ['country', 'purpose', 'note'])
     && (d.budget === undefined || (num_(d.budget) && d.budget >= 0)),
 };
@@ -115,19 +144,22 @@ const extras_ = d => (d.rate === undefined || (num_(d.rate) && d.rate > 0)) && (
   && (d.advance === undefined || typeof d.advance === 'boolean') && (d.advanceTotal === undefined || (num_(d.advanceTotal) && d.advanceTotal > 0)) // an advance to a supplier
   && (d.from === undefined || SAFE_ID.test(d.from)) && (d.received === undefined || DATE_RE.test(d.received)) // goods taken from an advance
   && (d.trip === undefined || SAFE_ID.test(d.trip)) && (d.need === undefined || SAFE_ID.test(d.need)) // a buying trip's cost, an item bought
-  && (d.repay === undefined || (num_(d.repay) && d.repay >= 0)); // an employee's advance, taken back this much a month (0: all at once)
+  && (d.repay === undefined || (num_(d.repay) && d.repay >= 0)) // an employee's advance, taken back this much a month (0: all at once)
+  && (d.imp === undefined || SAFE_ID.test(d.imp)) && (d.dn === undefined || SAFE_ID.test(d.dn)); // a cost of an import (goods received), of a delivery
 const str_ = v => typeof v === 'string';
 const isObj_ = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.test(d.at) && CURS.indexOf(d.cur) >= 0;
 // limits for logins other than admins (the app never sends more than MAX_PUSH records at once)
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
+const MAX_BIG_RECORD = 40000; // a stock count, an invoice or a delivery note may list many items (review, 2 Nov 2026)
 const LOCK_WAIT_MS = 25000;
-const VERSION = 22; // shown when the web app link is opened in a browser
+const VERSION = 23; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
   num: '#,##0.00;[Red]-#,##0.00',
+  num4: '#,##0.0000;[Red]-#,##0.0000', // a landed cost of one: a rebar's to the hundredth of a cent
   pct: '0%',
   date: 'dd mmm yyyy',
 };
@@ -211,7 +243,9 @@ function sync_(req) {
   // what an office manager was given goes only to an app that knows it (req.sees): an older one would take it for something not
   // hers, drop everything and fetch again, over and over
   const viewer = user && user.sees && req.sees !== 1 ? Object.assign({}, user, { sees: null }) : user;
-  const result = merge_(rows, req.push, Number(req.since) || 0, user, uploads_(), codeOnly), hidden = hiddenFor_(result.rows, viewer);
+  const roles = Object.create(null);
+  users_().forEach(u => { roles[u.id] = { role: u.role, off: u.off || 0 }; });
+  const result = merge_(rows, req.push, Number(req.since) || 0, user, uploads_(), codeOnly, roles), hidden = hiddenFor_(result.rows, viewer);
   let warning = '';
   if (result.changed) {
     sh.getRange(2, 1, result.rows.length, 5).setValues(result.rows);
@@ -229,7 +263,7 @@ function sync_(req) {
   const forget = viewer && viewer.role === 'manager' && Number(req.since) > 0 ? result.pull.filter(r => r.k === 'E' && !view_(viewer, r, hidden)).map(r => r.id) : [];
   return {
     ok: true, version: VERSION, seq: result.seq, sheet: user && user.role !== 'admin' ? '' : ss.getUrl(), kinds: KINDS, // the sheet shows every balance
-    pull: pull, refused: result.refused, older: (result.older || []).filter(id => pull.some(r => r.id === id)), stamps: result.stamps || [], me: user ? public_(user) : null, forget: forget,
+    pull: pull, refused: result.refused, older: (result.older || []).filter(id => pull.some(r => r.id === id)), stamps: result.stamps || [], me: user ? public_(user) : null, forget: forget, rate: newestRate_(result.rows, null, roles),
     logins: !!user || users_().length > 0, warning: warning,
   };
 }
@@ -254,6 +288,7 @@ function view_(user, rec, hidden) {
   if (!user || user.role === 'admin') return rec;
   if (rec.k === 'S') return { id: rec.id, k: rec.k, u: rec.u, d: { company: rec.d.company } };
   if (rec.k === 'B') return rec; // the company's bank details are for everyone to give to clients (no balances)
+  if (user.role === 'manager' && rec.k === 'I' && hidden && hidden[rec.id]) return saleStub_(rec); // someone else's: only what left the stock
   if (user.role === 'manager') return (rec.k === 'V' && rec.d.kind === 'personal') || (hidden && hidden[rec.k === 'F' ? rec.d.for : rec.k === 'C' ? rec.d.target : rec.id]) ? null : managerView_(user, rec);
   if (rec.k === 'F' && BRAND_FILES.indexOf(rec.d.type) >= 0) return rec; // everyone's vouchers carry the letterhead and stamp
   return (rec.k === 'E' || rec.k === 'L' || rec.k === 'F') && rec.d.uid === user.id ? rec : null;
@@ -270,10 +305,11 @@ function hiddenFor_(rows, user) {
   if (!user || user.role !== 'manager') return null;
   const out = Object.create(null);
   rows.forEach(r => {
-    if (r[1] !== 'E' && r[1] !== 'V') return;
+    if (r[1] !== 'E' && r[1] !== 'V' && r[1] !== 'I') return;
     let d = null;
     try { d = JSON.parse(r[4]); } catch (err) { out[r[0]] = true; return; } // a damaged record: admins only
-    if (r[1] === 'V' ? d.kind === 'personal' : d.uid !== user.id && !d.worker && !d.regular && !seesE_(user.sees, d)) out[r[0]] = true;
+    if (r[1] === 'I') { if (d.uid !== user.id) out[r[0]] = true; return; } // her own invoices and quotations (owner, 2 Nov 2026)
+    if (r[1] === 'V' ? d.kind === 'personal' : d.uid !== user.id && (d.imp || d.dn || (!d.worker && !d.regular && !seesE_(user.sees, d)))) out[r[0]] = true; // what an import or a delivery cost: never by a grant
   });
   return out;
 }
@@ -293,9 +329,24 @@ function cleanSees_(x) {
   return s.all || s.p.length || s.l.length || s.u.length ? s : null;
 }
 function seesOf_(raw) { try { return raw ? cleanSees_(JSON.parse(String(raw))) : null; } catch (err) { return null; } }
+// The warehouse (owner, 2 Nov 2026): an office manager sells from stock and records what is used, so she gets the stock items with
+// their selling price, how many came in, went out and were sold; never what anything cost (landed cost, markup, import costs, the
+// import papers) nor other people's invoices beyond what they took out of stock. Clients, to invoice them; her own invoices.
+const stripCost_ = rec => { const d = Object.assign({}, rec.d); delete d.markup; return { id: rec.id, k: rec.k, u: rec.u, d: d }; };
+const receivedOnly_ = rec => ({ id: rec.id, k: rec.k, u: rec.u, d: { id: rec.d.id, date: rec.d.date, ref: rec.d.ref || '', lines: rec.d.lines.map(l => ({ m: l.m, qty: l.qty })), stub: true,
+  createdAt: rec.d.createdAt, deleted: rec.d.deleted } });
+function saleStub_(rec) {
+  const d = rec.d, lines = (d.items || []).filter(it => it.m);
+  return lines.length ? { id: rec.id, k: rec.k, u: rec.u, d: { id: d.id, type: d.type, date: d.date, items: lines.map(it => ({ m: it.m, qty: it.qty })), stub: true,
+    cancelled: d.cancelled, deleted: d.deleted, ok: d.ok, createdAt: d.createdAt } } : null;
+}
 function managerView_(user, rec) {
-  if (MONEY_KINDS.indexOf(rec.k) >= 0 || SALES_KINDS.indexOf(rec.k) >= 0 || BUY_KINDS.indexOf(rec.k) >= 0) return null;
-  if (rec.k === 'F' && /^[IKNUJ]-/.test(String(rec.d.for))) return null; // invoice and quotation PDFs, the buying list's photos and reports
+  if (MONEY_KINDS.indexOf(rec.k) >= 0 || BUY_KINDS.indexOf(rec.k) >= 0) return null;
+  if (rec.k === 'M') return stripCost_(rec);
+  if (rec.k === 'Y') return receivedOnly_(rec);
+  if (rec.k === 'K' && rec.d.uid !== user.id) { const d = Object.assign({}, rec.d); delete d.note; return { id: rec.id, k: rec.k, u: rec.u, d: d }; } // an admin's note on a client stays theirs
+  if (rec.k === 'D' && rec.d.uid !== user.id) { const d = Object.assign({}, rec.d); delete d.cost; delete d.costCur; delete d.pay; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
+  if (rec.k === 'F' && /^[KNUJY]-/.test(String(rec.d.for))) return null; // clients' papers, the buying list's photos and reports, import papers (they show costs)
   if (rec.k === 'P') { const d = Object.assign({}, rec.d); delete d.value; delete d.valueCur; delete d.buyBudget; return { id: rec.id, k: rec.k, u: rec.u, d: d }; }
   if (rec.k === 'C' && MONEY_KINDS.indexOf(rec.d.kind) >= 0) return null;
   if (rec.k === 'F' && /^[RT]-/.test(String(rec.d.for))) return null;
@@ -308,15 +359,117 @@ function allowed_(user, p, before) {
   if (before) return false; // only admins change what is already there (an office manager's edit is a change request)
   if (p.d.uid !== user.id || p.d.deleted) return false; // a new record carries its sender's login and isn't born deleted
   if (p.k === 'F' && BRAND_FILES.indexOf(p.d.type) >= 0) return false; // the company letterhead and stamp: admins only
-  if (p.k === 'F' && /^[IKNUJ]-/.test(String(p.d.for))) return false; // nor photos or PDFs on invoices, clients or the buying list
-  if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A', 'V'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0)) && (p.k !== 'V' || p.d.kind !== 'personal');
+  if (p.k === 'F' && /^[KNUJMY]-/.test(String(p.d.for))) return false; // nor photos or papers on clients, the buying list, stock items or imports
+  // a delivery note starts out and its receipt is added to it (merge_ receiptOnly_); one made and received before the phone synced
+  // arrives received at once — deliveryOk_ checks that receipt the same way
+  if (p.k === 'F' && /^I-/.test(String(p.d.for)) && user.role !== 'manager') return false; // an office manager's own invoices' PDFs
+  if (p.k === 'I' && (p.d.ok === 'approved' && !p.d.from || p.d.ok === 'rejected')) return false; // only an admin approves a price (or it came from an approved quotation)
+  if (user.role === 'manager') return ['E', 'L', 'C', 'W', 'F', 'A', 'V', 'K', 'I', 'O', 'D'].indexOf(p.k) >= 0 && (p.k !== 'C' || (p.d.status === 'waiting' && MONEY_KINDS.indexOf(p.d.kind) < 0)) && (p.k !== 'V' || p.d.kind !== 'personal');
   return p.k === 'E' || p.k === 'L' || p.k === 'F'; // store keeper: own expenses, notes and their receipts
+}
+
+// the delivery note as it was made, now with who received what: status out → done and recv added, every other field the same
+function receiptOnly_(was, now, user, at) {
+  if (was.uid !== user.id || was.status !== 'out' || now.status !== 'done' || !now.recv || !recvOk_(now, at)) return false;
+  const rest = x => JSON.stringify(Object.keys(x).filter(k => ['status', 'recv', 'by', 'u'].indexOf(k) < 0).sort().map(k => [k, x[k]])); // u: the phone's own stamp, sent inside the record
+  return rest(was) === rest(now);
+}
+// An office manager may sell from stock at most 1 % below the list price (owner, 2 Nov 2026); lower waits for an admin (ok:
+// 'waiting'). A price from a quotation an admin approved stands. The list price is the stock item's as the sheet has it now.
+// An office manager sells at the list price, or as far below it as an admin allows her login (off, %: none unless given —
+// owner, 3 Nov 2026: "only admins can give a lower priced invoice, or admins can give access to certain office managers")
+function pricesOk_(d, out, index, id, off, now, roles) {
+  const allow = off > 0 ? off : 0;
+  if (d.ok === 'waiting') return true;
+  const rec = x => (index[x] === undefined ? null : { k: out[index[x]][1], d: JSON.parse(out[index[x]][4]) });
+  // the delivery charge: one line, not an item from stock, once (review, 3 Nov 2026: "dlv" carried stock at $0)
+  if (d.items.filter(it => it.dlv).length > 1 || d.items.some(it => it.dlv && (it.m || it.qty !== 1))) return false;
+  // an approved quotation's prices stand on the one invoice made from it, by whoever asked for it, in its money, for no more than
+  // it quoted, at no less than its highest price for each item; a waiting or refused invoice naming it does not use it up
+  const quote = d.from ? rec(d.from) : null;
+  const usedBefore = d.from && out.some(r => r[1] === 'I' && r[0] !== id && (() => { const x = JSON.parse(r[4]); return x.from === d.from && !x.deleted && !x.cancelled && x.ok !== 'waiting' && x.ok !== 'rejected'; })());
+  const approved = quote && quote.k === 'I' && quote.d.type === 'quote' && quote.d.ok === 'approved' && quote.d.uid === d.uid && quote.d.cur === d.cur && !usedBefore ? quote.d : null;
+  if (d.ok === 'approved' && !approved) return false;
+  // in SSP, a price is valued at the company's rate (an admin's), never at one she typed: a lower rate cannot add to her allowance
+  let ref = 0;
+  if (d.cur === 'SSP' && d.items.some(it => it.m)) {
+    // the newest rate she could have known when she made it — she cannot date it more than a day back to pick an older one
+    const floorAt = Utilities.formatDate(new Date(now - 864e5), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
+    ref = newestRate_(out, String(d.createdAt || '') > floorAt ? d.createdAt : floorAt, roles);
+    if (!ref) return false;
+  }
+  const quoted = m => (approved ? approved.items.filter(q => q.m === m).reduce((t, q) => t + q.qty, 0) : 0), want = Object.create(null);
+  d.items.forEach(it => { if (it.m) want[it.m] = (want[it.m] || 0) + it.qty; });
+  const recent = Utilities.formatDate(new Date(now - 3 * 864e5), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return d.items.every(it => {
+    if (it.dlv) return true; // the delivery charge (checked above): hers to set
+    if (!it.m) return false; // a line typed by hand (not from stock) waits for an admin: it could be stock at any price
+    const m = rec(it.m);
+    if (!m || m.k !== 'M' || !(m.d.price > 0)) return false; // an item that is not in stock, or has no price yet
+    const usd = d.cur === 'USD' ? it.price : it.price / ref;
+    const highest = approved ? Math.max.apply(null, approved.items.filter(q => q.m === it.m).map(q => q.price).concat([-1])) : -1;
+    if (approved && highest >= 0 && want[it.m] <= quoted(it.m) + 1e-9 && it.price >= highest - 1e-9) return true;
+    const floor = p => p * (1 - allow / 100) - (d.cur === 'SSP' ? 0.5 / ref : 1e-9); // half an SSP: the rounding of a price in SSP
+    // the price before the item's last change still stands for a sale dated on or before that day, for 3 days (an offline phone)
+    const prev = m.d.prev && m.d.prev.price > 0 && d.date <= m.d.prev.until && m.d.prev.until >= recent ? m.d.prev.price : Infinity;
+    return usd >= floor(Math.min(m.d.price, prev));
+  });
+}
+// the newest SSP rate the company typed — money changed (admins only), and payments or money received in SSP that an admin
+// entered (review, 3 Nov 2026: an office manager's own expense must never set it); before = only those typed before then
+function newestRate_(out, before, roles) {
+  let at = '', rate = 0, atB = '', rateB = 0;
+  const byAdmin = x => !x.uid || !roles || (roles[x.uid] && roles[x.uid].role === 'admin');
+  out.forEach(r => {
+    if (r[1] !== 'X' && r[1] !== 'E' && r[1] !== 'R') return;
+    const x = JSON.parse(r[4]);
+    if (x.deleted || (r[1] !== 'X' && !byAdmin(x))) return;
+    const v = r[1] === 'X' ? (x.usd > 0 ? x.ssp / x.usd : 0) : x.cur === 'SSP' ? x.rate : 0;
+    if (v > 0 && String(x.at) > at) { at = String(x.at); rate = v; }
+    if (v > 0 && before && String(x.createdAt || x.at) <= String(before) && String(x.at) > atB) { atB = String(x.at); rateB = v; }
+  });
+  return before ? rateB || 0 : rate;
+}
+function dupNumber_(d, out, id) {
+  return out.some(r => r[1] === 'I' && r[0] !== id && (() => { const x = JSON.parse(r[4]); return x.type === 'invoice' && x.no === d.no && !x.deleted && x.ok !== 'waiting' && x.ok !== 'rejected'; })());
+}
+// invoice numbers given out (the series): who took each and when, so a number taken and never used shows in the morning email
+const NUMBERS_TAB = '_numbers', NUMBER_COLS = ['no', 'uid', 'at'];
+const issued_ = (no, uid) => rowsOf_(NUMBERS_TAB, NUMBER_COLS).some(r => String(r.no) === no && String(r.uid) === uid);
+// a delivery note an office manager makes: dated within the last week; its receipt (made at once, or added later) sound
+function deliveryOk_(d, now, out, index, id) {
+  const tz = Session.getScriptTimeZone(), tomorrow = Utilities.formatDate(new Date(now + 864e5), tz, 'yyyy-MM-dd'), back = Utilities.formatDate(new Date(now - 14 * 864e5), tz, 'yyyy-MM-dd');
+  if (d.date > tomorrow || d.date < back) return false;
+  const src = index[d.inv || d.out] === undefined ? null : { k: out[index[d.inv || d.out]][1], d: JSON.parse(out[index[d.inv || d.out]][4]) };
+  if (!src || src.d.deleted) return false;
+  const may = Object.create(null);
+  if (d.inv) { // an invoice that sells (not a quotation, cancelled, waiting or refused): no more of each item than it sold and no other note took
+    if (src.k !== 'I' || !sells_(src.d)) return false;
+    src.d.items.forEach(it => { if (it.m) may[it.m] = (may[it.m] || 0) + it.qty; });
+    out.forEach(r => { if (r[1] === 'D' && r[0] !== id) { const x = JSON.parse(r[4]); if (x.inv === d.inv && !x.deleted) x.lines.forEach(l => { may[l.m] = (may[l.m] || 0) - l.qty; }); } });
+  } else { // goods used on a project: what was taken out
+    if (src.k !== 'O' || src.d.kind !== 'use') return false;
+    src.d.lines.forEach(l => { may[l.m] = (may[l.m] || 0) + Math.abs(l.qty); });
+  }
+  const want = Object.create(null);
+  d.lines.forEach(l => { want[l.m] = (want[l.m] || 0) + l.qty; });
+  if (!Object.keys(want).every(m => m in may && want[m] <= may[m] + 1e-9)) return false;
+  return d.status === 'out' || recvOk_(d, now);
+}
+// who received what: every item that left, each from 0 up to what was sent, nothing else; received between leaving and now
+function recvOk_(d, now) {
+  const r = d.recv, sent = Object.create(null);
+  d.lines.forEach(l => { sent[l.m] = (sent[l.m] || 0) + l.qty; });
+  const got = Object.create(null);
+  r.lines.forEach(l => { got[l.m] = (got[l.m] || 0) + l.qty; });
+  const ms = Object.keys(sent), tomorrow = Utilities.formatDate(new Date(now + 864e5), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm");
+  return r.lines.length > 0 && Object.keys(got).every(m => m in sent) && ms.every(m => m in got && got[m] >= 0 && got[m] <= sent[m] + 1e-9) && r.at.slice(0, 10) >= d.date && r.at <= tomorrow;
 }
 
 // Pure merge: newest copy of each record wins. rows are [id, kind, u, seq, json].
 // user = the signed-in person (null = company code); records they may not change are refused.
 // uploads = { fileId: uid of the login that uploaded it }; codeOnly = a company-code phone of a company with logins.
-function merge_(rows, push, since, user, uploads, codeOnly) {
+function merge_(rows, push, since, user, uploads, codeOnly, roles) {
   const out = rows.map(r => r.slice());
   const index = Object.create(null); // ids come from phones: no inherited names like "constructor"
   out.forEach((r, i) => { index[r[0]] = i; });
@@ -327,7 +480,7 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
   (Array.isArray(push) ? push : []).forEach((p, n) => {
     if (!p || typeof p.id !== 'string' || !p.id || KINDS.indexOf(p.k) < 0 || typeof p.u !== 'number' || !isObj_(p.d)) return;
     if (!SAFE_ID.test(p.id) || (p.k !== 'S' && (p.k === 'L' ? p.d.lid : p.d.id) !== p.id) || !SHAPES[p.k](p.d)) { refused.push(p.id); return; }
-    if (limited && (n >= MAX_PUSH || JSON.stringify(p.d).length > MAX_RECORD)) { refused.push(p.id); return; }
+    if (limited && (n >= MAX_PUSH || JSON.stringify(p.d).length > (['I', 'O', 'D'].indexOf(p.k) >= 0 ? MAX_BIG_RECORD : MAX_RECORD))) { refused.push(p.id); return; }
     const i = index[p.id];
     if (i !== undefined && out[i][1] !== p.k) { refused.push(p.id); return; } // a record never changes kind
     // A phone can't stamp its copy in the future and so block later edits; a copy stored with a future stamp (a phone clock
@@ -336,15 +489,17 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     const stored = i === undefined ? 0 : Number(out[i][2]), sane = stored > cap ? 0 : stored, d = limited ? Object.assign({}, p.d, { by: user.name }) : p.d; // signed by the login that sent it
     let u = Math.min(p.u, cap);
     // a login other than an admin never changes what is there (an edit is a change request): refused alike whether it can
-    // see the entry or not, so nothing is learnt about entries it may not see; the same copy sent again is skipped
-    if (limited && i !== undefined) { if (out[i][4] !== JSON.stringify(d)) refused.push(p.id); return; }
+    // see the entry or not, so nothing is learnt about entries it may not see; the same copy sent again is skipped. One
+    // exception: the office manager who made a delivery note adds its receipt to it — nothing else on it changes.
+    const receipt = limited && i !== undefined && p.k === 'D' && user.role === 'manager' && receiptOnly_(JSON.parse(out[i][4]), d, user, now);
+    if (limited && i !== undefined && !receipt) { if (out[i][4] !== JSON.stringify(d)) refused.push(p.id); return; }
     // an edit made from an older copy than the sheet's (b: the copy it started from): the entry changed on another phone
     // meanwhile, so this one would undo that change — not stored; the sheet's copy goes back and that phone says so
     if (i !== undefined && typeof p.b === 'number' && sane > p.b && out[i][4] !== JSON.stringify(d)) { behind.push(i); return; }
     if (i !== undefined && sane > u) { behind.push(i); return; }
     if (i !== undefined && sane === u) { if (out[i][4] === JSON.stringify(d)) return; u = sane + 1; } // a different copy at the same instant is the later one
     const before = i === undefined ? null : JSON.parse(out[i][4]);
-    if (!allowed_(user || null, p, before)) { refused.push(p.id); return; }
+    if (!receipt && !allowed_(user || null, p, before)) { refused.push(p.id); return; }
     if (codeOnly && (p.k === 'W' || p.k === 'F' || p.k === 'V')) { refused.push(p.id); return; }
     const t = p.k === 'C' ? index[p.d.target] : 0;
     if (t === undefined || (p.k === 'C' && out[t][1] !== p.d.kind)) { refused.push(p.id); return; } // a change request needs its entry
@@ -355,10 +510,20 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
     const up = p.k === 'F' ? (uploads || {})[p.d.fileId] : '';
     if (up === undefined || (p.k === 'F' && limited && up !== user.id)) { refused.push(p.id); return; }
     if (p.k === 'A' && limited && (index[p.d.worker] === undefined || out[index[p.d.worker]][1] !== 'W')) { refused.push(p.id); return; } // a day not worked belongs to an employee
+    // a price from stock lower than an office manager may give waits for an admin — checked by whose invoice it is, so an admin
+    // signed in on her phone cannot send it through; an admin's own approval or refusal (ok) is the admin's call; a change that
+    // leaves the lines as they were (cancelling it) is not checked again
+    const owner = p.k === 'I' ? (roles || {})[p.d.uid] : null, ownerRole = owner ? owner.role : '', adminDecides = !limited && (d.ok === 'approved' || d.ok === 'rejected');
+    const sameLines = before && JSON.stringify(before.items) === JSON.stringify(d.items) && before.cur === d.cur && before.rate === d.rate;
+    if (p.k === 'I' && (limited || (ownerRole && ownerRole !== 'admin')) && !adminDecides && !sameLines && !pricesOk_(d, out, index, p.id, owner ? owner.off : 0, now, roles)) { refused.push(p.id); return; }
+    if (p.k === 'I' && d.type === 'invoice' && d.ok !== 'waiting' && dupNumber_(d, out, p.id)) { refused.push(p.id); return; } // one invoice per number
+    if (p.k === 'I' && limited && d.type === 'invoice' && d.ok !== 'waiting' && !(before && before.no === d.no) && !issued_(d.no, user.id)) { refused.push(p.id); return; } // a number the sheet gave her
+    if (p.k === 'D' && limited && !before && !deliveryOk_(d, now, out, index, p.id)) { refused.push(p.id); return; } // for a real sale, not more than it sold; a receipt within its bounds
+    if (p.k === 'I' && limited && d.ok === 'waiting' && /^INV-/.test(d.no)) { refused.push(p.id); return; } // a waiting invoice takes its number when approved
     if (p.k === 'F' && limited) { // a file belongs to a record the sender may see (a store keeper: their own)
       const f = index[p.d.for];
       const o = f === undefined ? null : JSON.parse(out[f][4]);
-      if (!o || (user.role === 'store' && o.uid !== user.id) || (out[f][1] === 'V' && o.kind === 'personal')) { refused.push(p.id); return; }
+      if (!o || (user.role === 'store' && o.uid !== user.id) || (out[f][1] === 'V' && o.kind === 'personal') || (out[f][1] === 'I' && o.uid !== user.id)) { refused.push(p.id); return; }
     }
     seq += 1;
     changed = true;
@@ -376,7 +541,8 @@ function merge_(rows, push, since, user, uploads, codeOnly) {
 /* ---------- logins ---------- */
 const USERS_TAB = '_users';
 const SESSIONS_TAB = '_sessions';
-const USER_COLS = ['id', 'username', 'name', 'role', 'salt', 'hash', 'active', 'fails', 'lockUntil', 'createdAt', 'createdBy', 'lastLogin', 'sees'];
+const USER_COLS = ['id', 'username', 'name', 'role', 'salt', 'hash', 'active', 'fails', 'lockUntil', 'createdAt', 'createdBy', 'lastLogin', 'sees', 'off'];
+const MAX_OFF = 50; // the most below the list price an admin can allow an office manager, %
 const SESSION_COLS = ['token', 'uid', 'createdAt', 'seen', 'device'];
 const ROLES = ['admin', 'manager', 'store']; // admin = everything · manager = staff, her own payments (and what she is given), asks for edits · store = own entries
 const PW_MIN = 8;
@@ -395,8 +561,9 @@ function account_(req) {
   if (req.op === 'alerts' || req.op === 'number') { // admins (or, before logins, a phone with the company code)
     const who = who_(req);
     if (who.error) return { ok: false, error: who.error, code: who.code };
-    if (!(who.user ? who.user.role === 'admin' : !users_().length)) return { ok: false, error: 'Only an admin can do this.' };
-    return req.op === 'alerts' ? alerts_(req) : nextInvoiceNo_();
+    const may = who.user ? who.user.role === 'admin' || (req.op === 'number' && who.user.role === 'manager') : !users_().length; // office managers invoice too (2 Nov 2026)
+    if (!may) return { ok: false, error: 'Only an admin can do this.' };
+    return req.op === 'alerts' ? alerts_(req) : nextInvoiceNo_(who.user);
   }
   if (req.op === 'login') return login_(req);
   if (req.op === 'setup') return setupLogins_(req);
@@ -463,10 +630,11 @@ function original_(user, id) {
 }
 // Invoices are numbered by the sheet, in one unbroken series for the whole company (phones may be offline, so they can't
 // count by themselves). Each request takes the next number, under the script lock that every request holds.
-function nextInvoiceNo_() {
-  const props = PropertiesService.getScriptProperties(), n = Number(props.getProperty('INVOICE_SEQ') || 0) + 1;
+function nextInvoiceNo_(user) {
+  const props = PropertiesService.getScriptProperties(), n = Number(props.getProperty('INVOICE_SEQ') || 0) + 1, no = 'INV-' + ('000' + n).slice(-4);
   props.setProperty('INVOICE_SEQ', String(n));
-  return { ok: true, no: 'INV-' + ('000' + n).slice(-4) };
+  saveRows_(NUMBERS_TAB, NUMBER_COLS, rowsOf_(NUMBERS_TAB, NUMBER_COLS).slice(-999).concat([{ no: no, uid: user ? user.id : '', at: Date.now() }]));
+  return { ok: true, no: no };
 }
 function uploads_() {
   const map = Object.create(null);
@@ -491,7 +659,7 @@ function uploads_() {
    away, except the unstamped original of a cancelled paper once its stamped copy is in. A Drive problem never stops a sync. */
 const LAYOUT = '3'; // bump when the layout changes: every sheet then refiles everything once
 const DOC_FOLDER = { company: 'COMPANY', vehicle: 'VEHICLES', personal: 'PERSONAL' };
-const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', docs: '05 DOCUMENTS', invoices: '06 INVOICES', quotes: '07 QUOTATIONS', unfiled: '10 UNFILED', buying: '11 BUYING', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
+const FOLDER = { pay: '01 PAYMENTS', received: '02 MONEY RECEIVED', staff: '03 EMPLOYEES', company: '04 COMPANY', docs: '05 DOCUMENTS', invoices: '06 INVOICES', quotes: '07 QUOTATIONS', unfiled: '10 UNFILED', buying: '11 BUYING', stock: '12 WAREHOUSE', staffGone: '08 DELETED EMPLOYEES', gone: '09 DELETED ENTRIES', changes: 'CHANGES', slips: 'PAYMENT SLIPS', other: 'OTHER DOCUMENTS' };
 const TYPE_FOLDER = { idphoto: 'ID DOCUMENT', profile: 'PROFILE PHOTO', statement: 'STATEMENTS', letterhead: 'LETTERHEAD', stamp: 'STAMP' };
 const MONTHS_ = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
 const upper_ = s => String(s || '').replace(/[\\/]/g, '-').replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 60);
@@ -566,6 +734,10 @@ function fileHome_(f, byId, files) {
     const seg = owner.k === 'N' ? [upper_(o.cat) || 'OTHER', idSeg_(upper_(o.t), owner.id)] : owner.k === 'U' ? ['SUPPLIERS', idSeg_(upper_(o.name), owner.id)] : ['TRIPS', idSeg_(`${o.out} ${upper_(o.to)}`, owner.id)];
     return { path: (gone ? [FOLDER.gone, FOLDER.buying] : [FOLDER.buying].concat(changes)).concat(seg), name: name, status: status };
   }
+  if (STOCK_KINDS.indexOf(owner.k) >= 0) { // the warehouse: a folder per item (its photos), goods received and out by month (their papers)
+    const seg = owner.k === 'M' ? ['ITEMS', idSeg_(upper_(o.name), owner.id)] : [{ Y: 'GOODS RECEIVED', O: 'GOODS OUT', D: 'DELIVERY NOTES' }[owner.k]].concat(dated_(String(o.date || '')), [idSeg_(`${o.date} ${upper_(o.no || o.ref || o.from || o.kind || '')}${o.to ? ' ' + upper_(o.to) : ''}`, owner.id)]);
+    return { path: (gone ? [FOLDER.gone, FOLDER.stock] : [FOLDER.stock].concat(changes)).concat(seg), name: name, status: status };
+  }
   if (owner.k === 'V') { // the vault: one folder per document, its older versions under CHANGES
     const doc = [DOC_FOLDER[o.kind] || FOLDER.other, idSeg_(upper_(o.title), owner.id)];
     return { path: (gone ? [FOLDER.gone, FOLDER.docs] : [FOLDER.docs].concat(changes)).concat(doc), name: `${upper_(o.title)} ${String(f.createdAt || '').slice(0, 10)}${ext}`, status: status };
@@ -577,7 +749,7 @@ function fileHome_(f, byId, files) {
 }
 const homeText_ = h => (h.w ? [h.w.d.deleted ? FOLDER.staffGone : FOLDER.staff, staffName_(h.w)] : []).concat(h.path).map(segName_).join(' / ');
 const homeFolder_ = (h, cache) => (h.w ? h.path.reduce(child_, staffFolder_(h.w, cache)) : folderAt_(h.path, cache));
-const SECTIONS = [FOLDER.pay, FOLDER.received, FOLDER.staff, FOLDER.company, FOLDER.docs, FOLDER.invoices, FOLDER.quotes, FOLDER.staffGone, FOLDER.gone, FOLDER.buying];
+const SECTIONS = [FOLDER.pay, FOLDER.received, FOLDER.staff, FOLDER.company, FOLDER.docs, FOLDER.invoices, FOLDER.quotes, FOLDER.staffGone, FOLDER.gone, FOLDER.buying, FOLDER.stock];
 // folders a move left empty go to the bin, up to the sections (the sections and the company folder always stay)
 function tidyUp_(folder, rootId) {
   while (folder && folder.getId() !== rootId && SECTIONS.indexOf(folder.getName()) < 0 && !folder.getFiles().hasNext() && !folder.getFolders().hasNext()) {
@@ -716,7 +888,8 @@ function saveUser_(me, input) {
   if (input.role !== undefined) u.role = String(input.role);
   if (input.active !== undefined) u.active = !!input.active;
   if (input.sees !== undefined) u.sees = cleanSees_(input.sees);
-  if (u.role !== 'manager') u.sees = null; // only an office manager is given more to see
+  if (input.off !== undefined) u.off = num_(input.off) && input.off > 0 ? Math.min(MAX_OFF, Math.round(input.off * 100) / 100) : 0;
+  if (u.role !== 'manager') { u.sees = null; u.off = 0; } // only an office manager is given more to see, or a discount to give
   const pw = input.password === undefined || input.password === '' ? null : String(input.password);
   if (!old && pw === null) return { ok: false, error: 'Give the new login a password.' };
   if (!/^[a-z0-9._-]{2,30}$/.test(u.username)) return { ok: false, error: 'Username: 2 to 30 letters or numbers, no spaces.' };
@@ -730,7 +903,7 @@ function saveUser_(me, input) {
   saveUsers_(old ? list.map(x => (x.id === u.id ? u : x)) : list.concat([u]));
   // a new password, a new role, a change in what she may see or a disabled login: signed out everywhere, so the phone drops what it
   // held and reloads what it may see
-  if (old && (pw !== null || !u.active || u.role !== old.role || JSON.stringify(u.sees || null) !== JSON.stringify(old.sees || null))) endSessions_(u.id, '', false);
+  if (old && (pw !== null || !u.active || u.role !== old.role || JSON.stringify(u.sees || null) !== JSON.stringify(old.sees || null) || (u.off || 0) !== (old.off || 0))) endSessions_(u.id, '', false);
   return { ok: true, users: users_().map(public_) };
 }
 
@@ -785,10 +958,11 @@ function users_() {
     id: String(u.id), username: String(u.username), name: String(u.name), role: String(u.role), salt: String(u.salt), hash: String(u.hash),
     active: String(u.active) === 'true', fails: Number(u.fails) || 0, lockUntil: Number(u.lockUntil) || 0, lastLogin: Number(u.lastLogin) || 0,
     sees: String(u.role) === 'manager' ? seesOf_(u.sees) : null,
+    off: String(u.role) === 'manager' && Number(u.off) > 0 ? Math.min(MAX_OFF, Number(u.off)) : 0,
   }));
 }
 const saveUsers_ = list => saveRows_(USERS_TAB, USER_COLS, list.map(u => Object.assign({}, u, { active: u.active ? 'true' : 'false', sees: u.sees ? JSON.stringify(u.sees) : '' })));
-const public_ = u => ({ id: u.id, username: u.username, name: u.name, role: u.role, active: u.active, lastLogin: u.lastLogin || 0, sees: u.sees || null });
+const public_ = u => ({ id: u.id, username: u.username, name: u.name, role: u.role, active: u.active, lastLogin: u.lastLogin || 0, sees: u.sees || null, off: u.off || 0 });
 const cleanUsername_ = s => String(s || '').trim().toLowerCase();
 
 // small hidden tables: a header row, then one object per row; stored as plain text so nothing is reformatted
@@ -852,7 +1026,7 @@ function rebuild_(ss, all) {
   const wname = id => (workers[id] ? workers[id].name : 'Unknown employee');
   const live = k => of(k).filter(x => !x.deleted && (k !== 'T' || (ACCOUNTS.indexOf(x.from) >= 0 && ACCOUNTS.indexOf(x.to) >= 0))).sort(byAt_);
   const settings = of('S')[0] || {};
-  const ctx = { E: live('E'), R: live('R'), T: live('T'), X: live('X'), P: of('P').filter(x => !x.deleted), L: of('L').sort(byAt_), pname: pname, wname: wname, company: settings.company || 'Company' };
+  const ctx = { E: live('E'), R: live('R'), T: live('T'), X: live('X'), P: of('P').filter(x => !x.deleted), L: of('L').sort(byAt_), F: of('F'), pname: pname, wname: wname, company: settings.company || 'Company' };
   summary_(ss, ctx);
   expenses_(ss, ctx);
   received_(ss, ctx);
@@ -865,6 +1039,7 @@ function rebuild_(ss, all) {
   banks_(ss, ctx, of('B').filter(x => !x.deleted));
   docs_(ss, ctx, of('V').filter(x => !x.deleted), recs);
   invoices_(ss, ctx, of('I').filter(x => !x.deleted), of('K'));
+  stock_(ss, ctx, of('M').filter(x => !x.deleted), of('Y').filter(x => !x.deleted), of('O').filter(x => !x.deleted), of('I').filter(x => !x.deleted), of('U'), of('D').filter(x => !x.deleted));
   buying_(ss, ctx, of('N').filter(x => !x.deleted), of('U'), of('J'));
   filesTab_(ss, ctx, recs);
   // keep the tabs in a fixed order right after "Read me"
@@ -1030,7 +1205,7 @@ function received_(ss, c) {
     ['', 'date', '', '', '', '', 'USD', 'SSP'], [110, 105, 50, 80, 190, 75, 120, 140, 110, 200, 120, 150, 260, 110], [6, 7]);
 }
 // Every uploaded file: what it is, what it belongs to, its status and the Drive folder it is filed in.
-const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document', invoice: 'Invoice', quote: 'Quotation' };
+const FILE_KIND = { voucher: 'Payment voucher', receipt: 'Receipt', slip: 'Salary slip', photo: 'Photo', attachment: 'Attachment', profile: 'Profile photo', idphoto: 'ID photo', letterhead: 'Letterhead', stamp: 'Company stamp', statement: 'Statement', document: 'Document', invoice: 'Invoice', quote: 'Quotation' , delivery: 'Delivery note'};
 function filesTab_(ss, c, recs) {
   const byId = Object.create(null);
   recs.forEach(r => { byId[r.id] = r; });
@@ -1170,6 +1345,75 @@ function invoices_(ss, c, invs, clients) {
     }), ['', '', '', 'date', 'date', '', 'num', 'num', 'num'], [110, 100, 220, 105, 120, 80, 120, 120, 120, 100, 120], null);
 }
 
+/* ---------- the warehouse (the app's stock.js; calc.js stockBook is the same replay) ---------- */
+// every move in date order (a day's receipts first, its counts last); the average landed cost changes only when goods come in
+const OUT_TEXT_ = { in: 'Received', sale: 'Sold', use: 'Used', damage: 'Damaged / lost', return: 'Returned to supplier', count: 'Stock count' };
+const OUT_RANK_ = { in: 0, sale: 1, use: 1, damage: 1, return: 1, count: 2 };
+const sells_ = x => x.type === 'invoice' && !x.cancelled && x.ok !== 'waiting' && x.ok !== 'rejected';
+function stockMoves_(Y, O, I) {
+  const mv = [];
+  Y.forEach(y => y.lines.forEach((l, i) => mv.push({ m: l.m, date: y.date, kind: 'in', qty: l.qty, cost: y.lc[i] || 0, ref: y.ref || '', id: y.id, by: y.by || '', at: y.createdAt })));
+  O.forEach(o => o.lines.forEach(l => mv.push({ m: l.m, date: o.date, kind: o.kind, qty: o.kind === 'count' ? l.qty : -l.qty, ref: o.to || '', project: o.project || '', id: o.id, by: o.by || '', at: o.createdAt })));
+  I.filter(sells_).forEach(x => x.items.forEach(it => { if (it.m) mv.push({ m: it.m, date: x.date, kind: 'sale', qty: -it.qty, ref: x.no, id: x.id, by: x.by || '', at: x.createdAt }); }));
+  mv.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : OUT_RANK_[a.kind] - OUT_RANK_[b.kind] || (String(a.at || '') < String(b.at || '') ? -1 : String(a.at || '') > String(b.at || '') ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0)));
+  const st = Object.create(null);
+  mv.forEach(x => {
+    const s = st[x.m] || (st[x.m] = { qty: 0, avg: 0, inQ: 0, outQ: 0 });
+    if (x.kind === 'in') s.avg = s.qty > 0 ? Math.round((s.qty * s.avg + x.qty * x.cost) / (s.qty + x.qty) * 1e4) / 1e4 : x.cost;
+    x.val = Math.round(x.qty * (x.kind === 'in' ? x.cost : s.avg) * 100) / 100;
+    s.qty = Math.round((s.qty + x.qty) * 1e6) / 1e6;
+    if (x.qty > 0) s.inQ += x.qty; else s.outQ -= x.qty;
+    x.bal = s.qty; x.avg = s.avg;
+  });
+  return { moves: mv, st: st };
+}
+function stock_(ss, c, items, Y, O, I, sups, D) {
+  const item = Object.create(null), sup = Object.create(null);
+  items.forEach(m => { item[m.id] = m; });
+  sups.forEach(u => { sup[u.id] = u.name; });
+  const r = stockMoves_(Y, O, I), name = id => (item[id] ? item[id].name : 'Unknown item ' + id), code = id => (item[id] ? item[id].code || '' : '');
+  dataTab_(ss, c.company, 'Stock', '#b45309', ['Code', 'Item', 'Category', 'Unit', 'Shelf / place', 'Came in', 'Went out', 'On hand', 'Reorder at', 'Low', 'Average landed cost USD', 'Stock value USD', 'Markup %', 'Sells for USD', 'Entry no.'],
+    items.slice().sort((a, b) => String(a.cat || '').localeCompare(String(b.cat || '')) || a.name.localeCompare(b.name)).map(m => {
+      const s = r.st[m.id] || { qty: 0, avg: 0, inQ: 0, outQ: 0 };
+      return [safe_(m.code || ''), safe_(m.name), safe_(m.cat || ''), m.unit, safe_(m.bin || ''), s.inQ, s.outQ, s.qty, m.min || '', m.min && s.qty <= m.min ? 'LOW' : '', s.avg, Math.round(s.qty * s.avg * 100) / 100, m.markup === undefined ? 10 : m.markup, m.price || '', m.id];
+    }), ['', '', '', '', '', 'num', 'num', 'num', 'num', '', 'num4', 'num', 'num', 'num'], [90, 220, 150, 70, 110, 90, 90, 90, 90, 60, 150, 130, 80, 110, 120], [11]);
+  dataTab_(ss, c.company, 'Stock moves', '#b45309', ['Date', 'Item', 'Code', 'What', 'In', 'Out', 'Balance', 'Unit cost USD', 'Value USD', 'Project', 'Reference / to', 'By', 'Entry no.'],
+    r.moves.map(x => [x.date, safe_(name(x.m)), safe_(code(x.m)), OUT_TEXT_[x.kind] || x.kind, x.qty > 0 ? x.qty : '', x.qty < 0 ? -x.qty : '', x.bal, x.kind === 'in' ? x.cost : x.avg, x.val, x.project ? c.pname(x.project) : '', safe_(x.ref), safe_(x.by), x.id]),
+    ['date', '', '', '', 'num', 'num', 'num', 'num4', 'num'], [105, 220, 90, 150, 80, 80, 90, 120, 110, 170, 160, 110, 120], null);
+  const rows = [], costs = [];
+  Y.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).forEach(y => {
+    const rate = y.gcur && y.gcur !== 'USD' ? y.grate : '';
+    y.lines.forEach((l, i) => {
+      const goods = Math.round((y.gcur && y.gcur !== 'USD' ? (y.grate > 0 ? l.amt / y.grate : 0) : l.amt) * 100) / 100, landed = Math.round(y.lc[i] * l.qty * 100) / 100;
+      rows.push([y.date, safe_(y.ref || ''), safe_(sup[y.sup] || y.from || ''), safe_(y.origin || ''), safe_(name(l.m)), l.qty, item[l.m] ? item[l.m].unit : '', l.amt, y.gcur || 'USD', rate, goods, Math.round((landed - goods) * 100) / 100, landed, y.lc[i], l.kg || '', y.id]);
+    });
+    y.costs.forEach(k => costs.push([y.date, safe_(y.ref || ''), safe_(COST_TEXT_[k.t] || k.t), safe_(k.what || ''), k.amt, k.cur, k.cur === 'USD' ? '' : k.rate || '', k.cur === 'USD' ? k.amt : k.rate > 0 ? Math.round(k.amt / k.rate * 100) / 100 : '', SPLIT_TEXT_[k.split] || k.split, k.pay || '', y.id]));
+  });
+  dataTab_(ss, c.company, 'Imports', '#b45309', ['Date', 'Reference', 'Supplier', 'From', 'Item', 'Qty', 'Unit', 'Goods (as invoiced)', 'Currency', '1 USD =', 'Goods USD', 'Extra costs USD', 'Landed USD', 'Landed cost of one USD', 'Weight kg', 'Entry no.'],
+    rows, ['date', '', '', '', '', 'num', '', 'num', '', 'num', 'num', 'num', 'num', 'num4', 'num'], [105, 140, 170, 100, 200, 80, 60, 120, 80, 80, 110, 120, 110, 140, 90, 120], [10, 11, 12]);
+  deliveries_(ss, c, D, I, O, item, c.F);
+  dataTab_(ss, c.company, 'Import costs', '#b45309', ['Date', 'Reference', 'Cost', 'Detail', 'Amount', 'Currency', '1 USD =', 'USD', 'Spread by', 'Payment entry', 'Entry no.'],
+    costs, ['date', '', '', '', 'num', '', 'num', 'num'], [105, 140, 170, 200, 110, 80, 80, 110, 100, 130, 120], [7]);
+}
+// every delivery note: what left, who took it, what the client paid for delivery and what it cost, who received what, where
+function deliveries_(ss, c, D, I, O, item, files) {
+  const inv = Object.create(null), out = Object.create(null), proof = Object.create(null);
+  (files || []).forEach(f => { if (f.proof && !f.removed) proof[f.for] = true; }); // the signed slip (photo, or the PDF signed on the phone)
+  I.forEach(x => { inv[x.id] = x; });
+  O.forEach(x => { out[x.id] = x; });
+  const list = ls => ls.map(l => l.qty + ' × ' + (item[l.m] ? item[l.m].name : l.m)).join('; ');
+  dataTab_(ss, c.company, 'Deliveries', '#b45309', ['Number', 'Left on', 'For', 'To', 'Address', 'Delivered or collected', 'Taken by', 'Phone', 'Vehicle', 'Goods', 'Delivery charged', 'Delivery cost', 'Currency', 'Status', 'Received by', 'Received at', 'Received', 'Short', 'Where signed', 'Entry no.'],
+    D.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).map(d => {
+      const got = d.recv ? d.recv.lines : [], short = d.recv ? d.lines.some(l => (got.filter(g => g.m === l.m).reduce((t, g) => t + g.qty, 0)) < l.qty) : false;
+      const forWhat = d.inv ? (inv[d.inv] ? inv[d.inv].no : d.inv) : out[d.out] && out[d.out].project ? c.pname(out[d.out].project) : d.out || '';
+      return [d.no, d.date, safe_(forWhat), safe_(d.to || ''), safe_(d.addr || ''), d.how === 'collect' ? 'Collected' : 'Delivered by us', safe_(d.driver || ''), safe_(d.phone || ''), safe_(d.vehicle || ''), safe_(list(d.lines)),
+        d.charge === undefined ? '' : d.charge, d.cost === undefined ? '' : d.costCur && d.costCur !== d.cur ? d.cost + ' ' + d.costCur : d.cost, d.cur || '', d.status === 'done' ? (proof[d.id] ? 'Received' : 'Received — NO PROOF') : 'On the way', d.recv ? safe_(d.recv.name) : '', d.recv ? when_(d.recv.at) : '', safe_(list(got)), short ? 'SHORT' : '',
+        d.recv && d.recv.geo ? 'https://maps.google.com/?q=' + d.recv.geo.lat + ',' + d.recv.geo.lng : '', d.id];
+    }), ['', 'date', '', '', '', '', '', '', '', '', 'num', 'num'], [130, 105, 130, 170, 170, 130, 140, 110, 100, 260, 110, 110, 80, 100, 140, 150, 260, 70, 200, 120], [10, 11]);
+}
+const COST_TEXT_ = { freight: 'Freight / shipping', duty: 'Customs duty', tax: 'Taxes at import', clearing: 'Clearing agent', port: 'Port / border charges', transport: 'Transport to the warehouse', handling: 'Loading / offloading', insurance: 'Insurance', bank: 'Bank / transfer charges', other: 'Other' };
+const SPLIT_TEXT_ = { kg: 'Weight', value: 'Value', qty: 'Quantity' };
+
 /* ---------- buying: the list, suppliers and trips (the app's buying.js) ---------- */
 const BUY_TEXT = { idea: 'Idea', tobuy: 'To buy', ordered: 'Ordered', inspected: 'Inspected', shipped: 'Shipped', received: 'Received', dropped: 'Dropped' };
 const PRI_TEXT = { 1: 'Urgent', 2: 'Normal', 3: 'Some day' };
@@ -1228,6 +1472,39 @@ function alertLines_(recs, t) {
     if (left < 0 && monday) lines.push('EXPIRED: ' + v.title + who + ' — expired on ' + v.expires);
     else if (left >= 0 && [remindOf_(v), 7, 1, 0].indexOf(left) >= 0) lines.push((left ? 'Expires in ' + left + ' day' + (left === 1 ? '' : 's') : 'Expires TODAY') + ': ' + v.title + who + ' (' + v.expires + ')');
   });
+  // deliveries: one that arrived short (for two days), one on the way for more than two days, goods sold three days ago not sent
+  const D = live('D'), I = live('I');
+  D.filter(d => d.status === 'done' && daysBetween_(d.recv.at.slice(0, 10), t) <= 2 && d.lines.some(l => d.recv.lines.filter(g => g.m === l.m).reduce((a, g) => a + g.qty, 0) < l.qty))
+    .forEach(d => lines.push('SHORT DELIVERY: ' + d.no + ' to ' + (d.to || '') + ' — received by ' + d.recv.name + ' with less than was sent'));
+  D.filter(d => d.status === 'out' && daysBetween_(d.date, t) > 2 && daysBetween_(d.date, t) <= 30).forEach(d => lines.push('NOT CONFIRMED: ' + d.no + ' to ' + (d.to || '') + ' left on ' + d.date + ' (' + (d.driver || '?') + ') — nobody has recorded it as received'));
+  I.filter(x => sells_(x) && x.items.some(it => it.m) && daysBetween_(x.date, t) >= 3 && daysBetween_(x.date, t) <= 60).forEach(x => {
+    const sent = D.filter(d => d.inv === x.id).reduce((a, d) => a + d.lines.reduce((b, l) => b + l.qty, 0), 0), sold = x.items.filter(it => it.m).reduce((a, it) => a + it.qty, 0);
+    if (sent < sold) lines.push('NOT DELIVERED: ' + x.no + ' of ' + x.date + ' — ' + (sold - sent) + ' of ' + sold + ' still in the warehouse, with no delivery note');
+  });
+  // what someone other than an admin wrote off yesterday or today (damaged, returned, counted short), and what was received with no
+  // signed slip; an invoice number taken more than a day ago that no invoice has
+  const admins = Object.create(null), names = Object.create(null), item = Object.create(null);
+  users_().forEach(u => { if (u.role === 'admin') admins[u.id] = true; });
+  live('M').forEach(m => { item[m.id] = m; });
+  const yesterday = Utilities.formatDate(new Date(Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10)) - 864e5), 'UTC', 'yyyy-MM-dd');
+  live('O').filter(o => !admins[o.uid] && String(o.createdAt || o.date).slice(0, 10) >= yesterday && o.lines.some(l => o.kind === 'count' ? l.qty < 0 : o.kind !== 'use'))
+    .forEach(o => lines.push('WRITTEN OFF by ' + (o.by || '?') + ' (' + (OUT_TEXT_[o.kind] || o.kind) + '): ' + o.lines.filter(l => o.kind !== 'count' || l.qty < 0).map(l => Math.abs(l.qty) + ' ' + (item[l.m] ? item[l.m].unit + ' ' + item[l.m].name : l.m)).join(', ') + (o.note ? ' — ' + o.note : '')));
+  const proof = Object.create(null);
+  recs.filter(r => r.k === 'F' && r.d.proof && !r.d.removed).forEach(r => { proof[r.d.for] = true; });
+  D.filter(d => d.status === 'done' && !proof[d.id] && daysBetween_(d.recv.at.slice(0, 10), t) >= 1 && daysBetween_(d.recv.at.slice(0, 10), t) <= 14)
+    .forEach(d => lines.push('NO PROOF: ' + d.no + ' to ' + (d.to || '') + ' was marked received by ' + d.recv.name + ' but no signed slip is in the records'));
+  const used = Object.create(null);
+  I.forEach(x => { used[x.no] = true; });
+  rowsOf_(NUMBERS_TAB, NUMBER_COLS).filter(r => !used[String(r.no)] && Date.now() - Number(r.at) > 864e5 && Date.now() - Number(r.at) < 30 * 864e5).forEach(r => {
+    const u = users_().filter(x => x.id === String(r.uid))[0];
+    lines.push('NUMBER NOT USED: ' + r.no + ' was taken' + (u ? ' by ' + u.name : '') + ' on ' + Utilities.formatDate(new Date(Number(r.at)), Session.getScriptTimeZone(), 'yyyy-MM-dd') + ' and no invoice has it');
+  });
+  // the warehouse on Mondays: what is at or below its reorder level, and anything below zero
+  if (monday) {
+    const st = stockMoves_(live('Y'), live('O'), live('I')).st;
+    live('M').filter(m => st[m.id] && st[m.id].qty < 0).forEach(m => lines.push('BELOW ZERO: ' + m.name + ' — ' + st[m.id].qty + ' ' + m.unit + ' (more went out than came in: check the records)'));
+    live('M').filter(m => m.min > 0 && (st[m.id] ? st[m.id].qty : 0) <= m.min).forEach(m => lines.push('LOW STOCK: ' + m.name + ' — ' + (st[m.id] ? st[m.id].qty : 0) + ' ' + m.unit + ' left (reorder at ' + m.min + ')'));
+  }
   // a buying trip a week, a day and on the day before it leaves: what is still on its list
   const N = live('N');
   live('J').forEach(j => {
