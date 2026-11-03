@@ -504,6 +504,8 @@ button.wh-stat { cursor: pointer; } .wh-stat b { font-size: 22px; font-variant-n
 .wh-hero-pic { position: relative; aspect-ratio: 4 / 3; border-radius: var(--r-md); overflow: hidden; margin-bottom: 12px; background: var(--paper); }
 .cost-row { border-top: 1px solid var(--line); } .cost-row:first-child { border-top: 0; } .cost-row .mrow { border-top: 0; }
 .pay-link { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 14px 10px; font-size: 14px; } .pay-link .link { padding: 0; font-size: 14px; text-align: left; }
+.amt .conv, .list .row > .amt .conv { display: block; margin-left: 0; font-weight: 600; text-align: inherit; } /* what an SSP payment comes to in dollars: under its amount */
+.pay-one { display: flex; flex-wrap: wrap; gap: 2px 12px; flex-basis: 100%; } .pay-one .link + .link { color: var(--muted); font-weight: 600; } .pay-link .tally { flex-basis: 100%; font-weight: 600; } /* several payments for one cost: one a line, then whether they tally */
 @media (max-width: 340px) { .rnums { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rnums .x { grid-column: 2; justify-self: end; width: 44px; } .cnums:nth-child(2) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .stepper-q { grid-template-columns: 36px 48px 36px; } }
 /* buying: the idea box, the filters, an item's detail lines, inspection ticks, photo strips */
 .idea-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 6px; }

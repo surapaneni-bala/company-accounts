@@ -7,8 +7,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ctx = vm.createContext({ TextEncoder });
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry, landedCost, splitCents, sellPrice, belowList, stockBook, niceUp, suggestPrice };', ctx);
-const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry, landedCost, splitCents, sellPrice, belowList, stockBook, niceUp, suggestPrice } = ctx.api;
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/calc.js'), 'utf8') + '\n;this.api = { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry, landedCost, splitCents, sellPrice, belowList, stockBook, niceUp, suggestPrice, tally };', ctx);
+const { payDays, workerLedger, amountInWords, jpegToPdf, pdfPages, advancesUsd, dueOn, regularDue, invoiceTotals, invoiceState, findRegulars, guessCat, orderShares, spendByProject, findDoubles, salaryDue, seesEntry, landedCost, splitCents, sellPrice, belowList, stockBook, niceUp, suggestPrice, tally } = ctx.api;
 const plain = x => JSON.parse(JSON.stringify(x));
 
 /* ---------- days on a 30-day month: joining and leaving days both count, day 31 counts as day 30 ---------- */
@@ -283,6 +283,21 @@ const t0 = Date.now(); findDoubles(many); assert.ok(Date.now() - t0 < 500, `6,00
   assert.deepStrictEqual([b.used, b.usedValue, b.lost, b.lostValue], [20, 22500, 3, 3375], 'used on the project 20 ($225); 2 missing at the count and 1 damaged ($33.75)');
   assert.strictEqual(plain(stockBook([], [O('O9', '2026-11-01', 'use', [['nut', 3]])], [])).nut.short, true, 'more out than ever came in: flagged, not hidden');
   assert.deepStrictEqual(plain(stockBook([Y('Y1', '2026-11-01', [['a', 5, 2]])], [], [I('I1', '2026-11-01', [['a', 5, 3]])])).a.moves.map(m => m.kind), ['in', 'sale'], 'received and sold the same day: in first');
+}
+
+{ // an import's cost against its payments in Accounts: one cost entered as one line here but paid in parts there (owner, 3 Nov 2026)
+  const p = (amount, cur, rate) => ({ amount, cur, rate });
+  assert.deepStrictEqual(plain(tally(2458, 'USD', undefined, [p(1458, 'USD'), p(1000, 'USD')])), { paid: 2458, diff: 0, ok: true, about: false }, 'two payments that add up: tallies');
+  assert.deepStrictEqual(plain(tally(2458, 'USD', undefined, [p(1458, 'USD'), p(500, 'USD'), p(500.01, 'USD')])), { paid: 2458.01, diff: 0.01, ok: false, about: false }, 'one cent over: does not tally');
+  assert.deepStrictEqual(plain(tally(2458, 'USD', undefined, [p(1458, 'USD')])), { paid: 1458, diff: -1000, ok: false, about: false }, 'part linked: $1,000 still to link');
+  assert.strictEqual(tally(0.3, 'USD', undefined, [p(0.1, 'USD'), p(0.2, 'USD')]).ok, true, 'counted in cents, so 0.1 + 0.2 is 0.3');
+  assert.deepStrictEqual(plain(tally(10530000, 'SSP', 4500, [p(5265000, 'SSP', 4500), p(1170, 'USD')])), { paid: 10530000, diff: 0, ok: true, about: true }, 'SSP duty paid partly in dollars: brought over at the cost\'s rate, tallies within 1 %');
+  assert.strictEqual(tally(2340, 'USD', undefined, [p(10530000, 'SSP', 4600)]).ok, false, 'the same SSP at a rate 2 % off: does not tally');
+  assert.strictEqual(tally(2340, 'USD', undefined, [p(10530000, 'SSP', 4520)]).ok, true, 'rates less than 1 % apart: tallies (about)');
+  assert.deepStrictEqual(plain(tally(100, 'USD', undefined, [p(450000, 'SSP')])), { err: true }, 'an SSP payment without its rate cannot be compared');
+  assert.deepStrictEqual(plain(tally(1000, 'USD', undefined, [p(2250000, 'SSP', 4500), p(500, 'USD')])), { paid: 1000, diff: 0, ok: true, about: true }, 'a dollar cost paid partly in SSP in Accounts: the SSP brought over at its own rate (owner, 3 Nov 2026)');
+  assert.deepStrictEqual(plain(tally(1000, 'USD', undefined, [p(4500000, 'SSP', 4300)])), { paid: 1046.51, diff: 46.51, ok: false, about: true }, 'SSP at a rate 4.4 % off: shows the $46.51 difference, not hidden');
+  assert.deepStrictEqual(plain(tally(100, 'USD', undefined, [])), { paid: 0, diff: -100, ok: false, about: false }, 'nothing linked');
 }
 
 console.log('Pay maths, words and PDF: all checks passed');

@@ -281,7 +281,8 @@ const costLine = (c = {}) => `<div class="cline">
     <input name="crate" inputmode="decimal" placeholder="1 USD =" value="${esc(c.rate || (c.cur && c.cur !== 'USD' ? '' : ''))}" autocomplete="off" aria-label="How many made 1 US dollar that day" ${(c.cur || 'USD') === 'USD' ? 'hidden' : ''}>
     <button type="button" class="x" data-act="delCostLine" aria-label="Remove this cost">×</button></div>
   <div class="cnums"><select name="csplit" aria-label="How it is spread">${Object.entries(SPLIT_NAME).map(([k, n]) => `<option value="${k}" ${k === (c.split || 'kg') ? 'selected' : ''}>Spread ${n}</option>`).join('')}</select>
-    <select name="cpay" aria-label="In Accounts">${payOptions(c.pay)}</select></div>
+    <select name="cpay" aria-label="In Accounts">${paysOf(c).length > 1 ? `<option value="__kept" selected>🔗 ${paysOf(c).length} payments linked (change them on the import's page)</option>` : ''}${payOptions(paysOf(c).length > 1 ? '' : c.pay)}</select>
+    <input type="hidden" name="ckept" value="${esc(paysOf(c).join(' '))}"></div>
   <small class="muted chint"></small></div>`;
 // a cost's payment in Accounts: not there, add it now (cash or bank), or one already entered (so nothing is typed twice)
 function payOptions(sel) {
@@ -327,7 +328,7 @@ function readReceive(f) {
     .filter(r => r.m || r.nname || r.qty || r.amt);
   rows.forEach(r => { const w = r.kgText ? parseNum(r.kgText) : 0; r.kg = w === null ? null : Math.round(w * wu * 1000) / 1000; });
   const costs = $$('.cline', f).map(el => ({ el, t: $('[name=ct]', el).value, what: clean($('[name=cwhat]', el).value), amtText: $('[name=camt]', el).value.trim(), cur: $('[name=ccur]', el).value,
-    rate: parseNum($('[name=crate]', el).value) || undefined, split: $('[name=csplit]', el).value, pay: $('[name=cpay]', el).value }))
+    rate: parseNum($('[name=crate]', el).value) || undefined, split: $('[name=csplit]', el).value, pay: $('[name=cpay]', el).value, kept: $('[name=ckept]', el).value.split(' ').filter(Boolean) }))
     .filter(c => c.amtText);
   costs.forEach(c => { c.amt = parseNum(c.amtText); });
   const y = { gcur, grate: gcur === 'USD' ? undefined : parseNum(v.grate) || undefined, lines: rows.map(r => ({ m: r.m, qty: r.qty, amt: r.amt, kg: r.kg || 0 })),
@@ -375,20 +376,23 @@ async function saveReceive(f) {
   if (!old) { const [[nid], seq] = nextIds('Y', 1, S.seq); update({ seq }); id = nid; }
   const payIds = [];
   const outCosts = costs.map(c => {
-    let pay = c.pay && !['cash', 'bank'].includes(c.pay) ? c.pay : '';
+    let pay = c.pay && !['cash', 'bank', '__kept'].includes(c.pay) ? c.pay : '';
     if (['cash', 'bank'].includes(c.pay)) {
       const [[eid], s2] = nextIds('E', 1, S.seq);
       const e = { id: eid, cur: c.cur, amount: c.amt, rate: c.cur === 'SSP' ? c.rate : undefined, paidTo: c.what || COST_NAME[c.t], reason: `${COST_NAME[c.t]} — goods received ${clean(v.ref) || v.date}`, location: '', project: '', mode: c.pay === 'bank' ? 'Bank' : 'Cash', at: `${v.date}T12:00`, manualDate: true, imp: id, by, createdAt: stampSec(), batch: null };
       update({ expenses: [...S.expenses, e], seq: s2 });
       payIds.push(eid); pay = eid;
     }
-    return { t: c.t, ...(c.what ? { what: c.what } : {}), amt: c.amt, cur: c.cur, ...(c.cur !== 'USD' ? { rate: c.rate } : {}), split: c.split, ...(pay ? { pay } : {}) };
+    return withPays({ t: c.t, ...(c.what ? { what: c.what } : {}), amt: c.amt, cur: c.cur, ...(c.cur !== 'USD' ? { rate: c.rate } : {}), split: c.split }, c.pay === '__kept' ? c.kept : pay ? [pay] : []);
   });
   const rec = { date: v.date, ref: clean(v.ref), ...(sup ? { sup: sup.id } : { from: clean(v.from) }), origin: clean(v.origin), gcur: y.gcur, ...(y.gcur !== 'USD' ? { grate: y.grate } : {}),
     lines: rows.map(row => ({ m: row.m, qty: row.qty, amt: row.amt, ...(row.kg ? { kg: row.kg } : {}) })), costs: outCosts, lc: r.lines.map(l => l.unit), note: clean(v.note) };
   const text = `${rows.length} line${rows.length === 1 ? '' : 's'} · landed ${money(r.total / 100, 'USD')}${payIds.length ? ` · ${payIds.length} cost${payIds.length === 1 ? '' : 's'} added to Accounts` : ''}`;
-  const differ = outCosts.filter(c => c.pay).map(c => ({ c, e: S.expenses.find(e => e.id === c.pay && !e.deleted) })).filter(({ c, e }) => e && (e.cur !== c.cur || Math.abs(e.amount - c.amt) > 0.004));
-  if (differ.length) alert(`In Accounts these payments are not what the costs now say:\n${differ.map(({ c, e }) => `${COST_NAME[c.t]}: ${cost(c.amt, c.cur)} here, ${money(e.amount, e.cur)} in Accounts`).join('\n')}\n\nCorrect the payment in Accounts too (open it from History).`);
+  // the payments the form linked remember the import; the ones it let go forget it
+  const before = new Set(old ? old.costs.flatMap(paysOf) : []), after = new Set(outCosts.flatMap(paysOf));
+  update({ expenses: S.expenses.map(e => (after.has(e.id) && e.imp !== id ? { ...e, imp: id } : before.has(e.id) && !after.has(e.id) && e.imp === id ? (({ imp, ...rest }) => rest)(e) : e)) });
+  const differ = outCosts.filter(c => paysOf(c).length && !costTally(c).ok);
+  if (differ.length) alert(`These costs do not tally with Accounts:\n${differ.map(c => { const t = costTally(c); return `${COST_NAME[c.t]}: ${cost(c.amt, c.cur)} here, ${t.err ? 'a payment without its rate' : cost(t.paid, c.cur)} in Accounts`; }).join('\n')}\n\nCorrect the payment in Accounts, or link the rest on the import's page.`);
   if (old) update({ receipts: S.receipts.map(x => { if (x.id !== old.id) return x; const { sup: _s, from: _f, ...base } = x; return { ...base, ...rec, editedAt: stampSec(), editedBy: by }; }), log: logWith([['Edited', id, `Goods received ${rec.ref || rec.date}: ${text}`]], by) });
   else update({ receipts: [...S.receipts, { id, ...rec, by, createdAt: stampSec() }], log: logWith([['Received', id, `Goods received ${rec.ref || rec.date}: ${text}`]], by) });
   firstPrices(rec.lines.map(l => l.m), by);
@@ -406,9 +410,9 @@ function receiptDetail(id) {
     <div class="card list inset">${y.lines.map((l, i) => { const m = itemOf(l.m) || { name: 'An item no longer in the list', unit: '' }; return `<button class="mrow" data-act="openItem" data-id="${esc(l.m)}" style="width:100%;border:0;background:none;text-align:left;cursor:pointer;font:inherit">
       <span>${esc(m.name)}</span><span class="muted">${admin ? `${r && !r.err ? `${money(r.lines[i].total / 100, 'USD')} landed · ` : ''}${usd4(y.lc[i])} each` : esc(m.unit)}</span><b>${plain(l.qty)}</b></button>`; }).join('')}</div>
     ${admin ? `<h3 class="subh">Paid for the goods</h3>${goodsPays(y)}
-      <h3 class="subh">Costs (${y.costs.length})</h3>${y.costs.length ? `<div class="card list inset">${y.costs.map((c, i) => { const usd = toUsd(c.amt, c.cur, c.rate), e = c.pay && S.expenses.find(x => x.id === c.pay && !x.deleted);
+      <h3 class="subh">Costs (${y.costs.length})</h3>${y.costs.length ? `${tallySum(y)}<div class="card list inset">${y.costs.map((c, i) => { const usd = toUsd(c.amt, c.cur, c.rate), pays = linkedPays(paysOf(c));
       return `<div class="cost-row"><div class="mrow"><span>${esc(COST_NAME[c.t] || c.t)}${c.what ? ` — ${esc(c.what)}` : ''}<br><small class="muted">${esc(SPLIT_NAME[c.split])}${c.cur === 'USD' ? '' : ` · ${esc(cost(c.amt, c.cur))} at ${plain(c.rate)}`}</small></span><span></span><b>${money(Math.round(usd * 100) / 100, 'USD')}</b></div>
-        <div class="pay-link">${e ? `<button type="button" class="link" data-act="open" data-kind="E" data-id="${esc(e.id)}">💵 ${esc(fmtDate(e.at.slice(0, 10)))} · ${esc(money(e.amount, e.cur))} · ${esc(e.paidTo)}</button><button type="button" class="link" data-act="linkPay" data-id="${esc(id)}" data-w="${i}">Change</button><button type="button" class="link" data-act="unlinkPay" data-id="${esc(id)}" data-w="${i}" data-e="${esc(e.id)}">Unlink</button>`
+        <div class="pay-link">${pays.length ? `${pays.map(e => payOne(id, i, e, c.cur, c.rate)).join('')}${tallyNote(tally(c.amt, c.cur, c.rate, pays), c.cur)}<button type="button" class="link" data-act="linkPay" data-id="${esc(id)}" data-w="${i}">＋ Link another payment</button>`
           : `<span class="muted">Not linked to Accounts</span><button type="button" class="link" data-act="linkPay" data-id="${esc(id)}" data-w="${i}">🔗 Link to a payment in Accounts</button>`}</div></div>`; }).join('')}</div>` : '<p class="muted">None.</p>'}
       ${r && !r.err ? `<p class="note">Goods ${money(r.goods / 100, 'USD')} + costs ${money(r.extra / 100, 'USD')} = <b>${money(r.total / 100, 'USD')}</b> landed${r.kg ? ` · ${usd4(Math.round(r.total / r.kg * 1e4) / 1e6)} a kg` : ''}.</p>` : ''}
       <div class="two"><button class="btn ghost" data-act="landedPdf" data-id="${esc(id)}">📄 Landed cost sheet (PDF)</button><button class="btn ghost" data-act="receiveForm" data-id="${esc(id)}">✏️ Change 🔒</button></div>
@@ -418,55 +422,81 @@ function receiptDetail(id) {
   comeBack(() => receiptDetail(id));
 }
 /* ---------- an import's payments in Accounts: linked (or changed) any time, from every payment, searched (owner, 3 Nov 2026) ---------- */
-// The payments were usually entered in Accounts when they were made: they are linked here, never entered twice. A cost has one
-// payment; the goods may have several (a deposit, then the rest). A linked payment says on its own page what it was for (imp).
-const linkedTo = () => { const m = new Map(); live(S.receipts).forEach(r => { (r.costs || []).forEach(k => k.pay && m.set(k.pay, r)); (r.gpay || []).forEach(e => m.set(e, r)); }); return m; };
+// The payments were usually entered in Accounts when they were made: they are linked here, never entered twice. A cost or the goods
+// may have several (paid in parts, or entered in Accounts in parts), and what they add up to must tally with what is typed here. A
+// payment is linked in one place only; it says on its own page what it was for (imp).
+// a cost's payments: pay = the first (the one the sheet's list shows, and all an older record has), pays = all of them when more than one
+const paysOf = c => c.pays || (c.pay ? [c.pay] : []);
+const withPays = (c, ids) => { const { pay: _p, pays: _ps, ...rest } = c; return { ...rest, ...(ids.length ? { pay: ids[0] } : {}), ...(ids.length > 1 ? { pays: ids } : {}) }; };
+const linkedTo = () => { const m = new Map(); live(S.receipts).forEach(r => { (r.costs || []).forEach(k => paysOf(k).forEach(e => m.set(e, r))); (r.gpay || []).forEach(e => m.set(e, r)); }); return m; };
+const linkedPays = ids => ids.map(x => S.expenses.find(e => e.id === x && !e.deleted)).filter(Boolean);
+const goodsAmt = y => y.lines.reduce((t, l) => t + Math.round(l.amt * 100), 0) / 100;
+const costTally = c => tally(c.amt, c.cur, c.rate, linkedPays(paysOf(c)));
+const goodsTally = y => tally(goodsAmt(y), y.gcur || 'USD', y.grate, linkedPays(y.gpay || []));
+const untallied = y => y.costs.filter(c => !costTally(c).ok).length + (goodsTally(y).ok ? 0 : 1);
+const slotName = (y, w) => (w === 'g' ? 'the goods' : COST_NAME[y.costs[+w].t] || y.costs[+w].t);
 const payLine = e => `${fmtDate(e.at.slice(0, 10))} · ${money(e.amount, e.cur)} · ${e.paidTo}`;
+// a linked payment, with what it comes to in the cost's currency when it was paid in another (SSP for a cost typed in dollars)
+const payOne = (id, w, e, cur, rate) => `<span class="pay-one"><button type="button" class="link" data-act="open" data-kind="E" data-id="${esc(e.id)}">💵 ${esc(payLine(e))}${e.cur !== cur && inCur(e, cur, rate) !== null ? ` ≈ ${esc(cost(inCur(e, cur, rate), cur))}` : ''}</button><button type="button" class="link" data-act="unlinkPay" data-id="${esc(id)}" data-w="${w}" data-e="${esc(e.id)}">Unlink</button></span>`;
+function tallyNote(t, cur, goods) {
+  if (t.err) return '<span class="tally warn-c">⚠ A payment in SSP has no rate, so it cannot be compared</span>';
+  if (t.ok) return `<span class="tally in-c">✓ Tallies with Accounts${t.about ? ' (at the rates on the entries)' : ''}</span>`;
+  const d = cost(Math.abs(t.diff), cur);
+  return `<span class="tally warn-c">⚠ Accounts ${t.about ? '≈ ' : ''}${esc(cost(t.paid, cur))}: ${t.diff < 0 ? `${esc(d)} ${goods ? 'still to pay or link' : 'still to link'}` : `${esc(d)} more than ${goods ? 'invoiced' : 'this cost'}`}</span>`;
+}
+function tallySum(y) {
+  const n = y.costs.filter(c => !costTally(c).ok).length;
+  return n ? `<p class="note">⚠ ${n} of ${y.costs.length} cost${y.costs.length === 1 ? ' does' : 's do'} not tally with Accounts yet.</p>` : '<p class="muted">✓ Every cost tallies with Accounts.</p>';
+}
 function goodsPays(y) {
-  const pays = (y.gpay || []).map(id => S.expenses.find(e => e.id === id && !e.deleted)).filter(Boolean), r = landedCost(y);
-  const paid = pays.reduce((t, e) => t + Math.round((toUsd(e.amount, e.cur, e.rate) || 0) * 100), 0);
-  return `${pays.length ? `<div class="card list inset">${pays.map(e => `<div class="mrow"><button type="button" class="link" data-act="open" data-kind="E" data-id="${esc(e.id)}" style="text-align:left">💵 ${esc(payLine(e))}</button><span></span>
-      <button type="button" class="link" data-act="unlinkPay" data-id="${esc(y.id)}" data-w="g" data-e="${esc(e.id)}">Unlink</button></div>`).join('')}</div>
-    <p class="muted">Paid ${money(paid / 100, 'USD')} of ${money(r.err ? 0 : r.goods / 100, 'USD')} invoiced.</p>` : '<p class="muted">No payment linked yet.</p>'}
-    <button type="button" class="btn small ghost" data-act="linkPay" data-id="${esc(y.id)}" data-w="g">🔗 Link a payment for the goods</button>`;
+  const pays = linkedPays(y.gpay || []), cur = y.gcur || 'USD';
+  return `<p class="muted">Their invoice: ${esc(cost(goodsAmt(y), cur))}</p>${pays.length ? `<div class="card list inset"><div class="pay-link" style="padding-top:10px">${pays.map(e => payOne(y.id, 'g', e, cur, y.grate)).join('')}${tallyNote(goodsTally(y), cur, true)}</div></div>` : '<p class="muted">No payment linked yet.</p>'}
+    <button type="button" class="btn small ghost" data-act="linkPay" data-id="${esc(y.id)}" data-w="g">🔗 Link ${pays.length ? 'another' : 'a'} payment for the goods</button>`;
+}
+// what is still to link: the cost (or the goods) less what is linked, in its own currency; 0 once it tallies or is over
+function leftToLink(y, w) {
+  const t = w === 'g' ? goodsTally(y) : costTally(y.costs[+w]);
+  return { amt: t.err || t.diff >= 0 ? 0 : -t.diff, cur: w === 'g' ? y.gcur || 'USD' : y.costs[+w].cur, rate: w === 'g' ? y.grate : y.costs[+w].rate };
 }
 function payPicker(id, which) {
   const y = receiptOf(id);
   if (!y || !seesCost()) return;
-  const c = which === 'g' ? null : y.costs[+which];
-  openSheet(`${head('Link a payment', 'stock', c ? `${COST_NAME[c.t] || c.t} · ${cost(c.amt, c.cur)}` : `Goods · ${y.ref || fmtDate(y.date)}`)}
-    <p class="hint">Every payment in Accounts. The likely ones come first: ${c ? 'the same amount, ' : ''}near ${esc(fmtDate(y.date))}. Search by amount, who was paid, the reason or the date.</p>
+  const c = which === 'g' ? null : y.costs[+which], left = leftToLink(y, which);
+  openSheet(`${head('Link a payment', 'stock', c ? `${COST_NAME[c.t] || c.t} · ${cost(c.amt, c.cur)}` : `Goods · ${y.ref || fmtDate(y.date)} · ${cost(goodsAmt(y), y.gcur || 'USD')}`)}
+    ${left.amt ? `<p class="note">Still to link: <b>${esc(cost(left.amt, left.cur))}</b>. Link as many payments as it took.</p>` : ''}
+    <p class="hint">Every payment in Accounts. The likely ones come first: ${left.amt ? 'the amount still to link, ' : ''}near ${esc(fmtDate(y.date))}. Search by amount, who was paid, the reason or the date. A payment made in SSP counts at the rate on its entry.</p>
     <form data-form="payFind" data-id="${esc(id)}" data-w="${esc(which)}"><input name="q" class="shop-q" placeholder="🔍 e.g. 2458, clearing, Juma, 28 Oct" autocomplete="off" aria-label="Search the payments"></form>
     <div id="payList">${payRows(id, which, '')}</div>`);
   comeBack(() => receiptDetail(id));
 }
 function payRows(id, which, q) {
-  const y = receiptOf(id), c = which === 'g' ? null : y.costs[+which], links = linkedTo(), words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const y = receiptOf(id), left = leftToLink(y, which), links = linkedTo(), words = q.toLowerCase().split(/\s+/).filter(Boolean);
   const days = e => Math.abs(Date.parse(e.at.slice(0, 10)) - Date.parse(y.date)) / 864e5;
-  const same = e => c && e.cur === c.cur && Math.abs(e.amount - c.amt) < 0.005, close = e => c && e.cur === c.cur && Math.abs(e.amount - c.amt) <= c.amt * 0.02;
+  // likely: what is still to link, in its currency, or the same in another at the payment's rate (to 1 %, as the tally)
+  const conv = e => inCur(e, left.cur, left.rate), near = (e, by) => left.amt > 0 && conv(e) !== null && Math.abs(conv(e) - left.amt) <= by;
+  const same = e => near(e, e.cur === left.cur ? 0.005 : Math.max(1, left.amt / 100)), close = e => near(e, left.amt * 0.02);
   const score = e => (same(e) ? 0 : close(e) ? 1 : 2) * 1000 + Math.min(days(e), 999);
-  const hay = e => [e.paidTo, e.reason, e.location, e.note, String(e.amount), plain(e.amount), e.cur, e.at.slice(0, 10), fmtDate(e.at.slice(0, 10)), accountOf(e.mode), e.by].join(' ').toLowerCase();
+  const hay = e => [e.paidTo, e.reason, e.location, e.note, String(e.amount), plain(e.amount), e.cur, ...(e.cur !== left.cur && conv(e) !== null ? [String(Math.round(conv(e))), plain(Math.round(conv(e) * 100) / 100)] : []), e.at.slice(0, 10), fmtDate(e.at.slice(0, 10)), accountOf(e.mode), e.by].join(' ').toLowerCase();
   const list = live(S.expenses).filter(e => !e.worker && words.every(w => hay(e).includes(w))).sort((a, b) => (words.length ? byAt(b, a) : score(a) - score(b))).slice(0, 80);
   if (!list.length) return '<p class="muted">No payment matches. Try fewer words, or only the amount.</p>';
   return `<div class="card list inset">${list.map(e => { const other = links.get(e.id);
     return `<button class="row out" data-act="pickPay" data-id="${esc(id)}" data-w="${esc(which)}" data-e="${esc(e.id)}"><span class="dot">💵</span>
-      <span class="main"><span class="t"><span class="tt">${esc(e.paidTo)}</span>${same(e) ? '<i class="tag">Same amount</i>' : ''}${other ? `<i class="tag warn">${other.id === id ? 'Linked here' : `Linked to ${esc(other.ref || other.date)}`}</i>` : ''}</span>
-      <span class="s">${esc([e.reason, fmtDate(e.at.slice(0, 10)), accountOf(e.mode), e.by && 'by ' + e.by].filter(Boolean).join(' · '))}</span></span><span class="amt">${money(e.amount, e.cur)}</span></button>`; }).join('')}</div>`;
+      <span class="main"><span class="t"><span class="tt">${esc(e.paidTo)}</span>${same(e) ? '<i class="tag">The amount still to link</i>' : ''}${other ? `<i class="tag warn">${other.id === id ? 'Linked on this import' : `Linked to ${esc(other.ref || other.date)}`}</i>` : ''}</span>
+      <span class="s">${esc([e.reason, fmtDate(e.at.slice(0, 10)), accountOf(e.mode), e.by && 'by ' + e.by].filter(Boolean).join(' · '))}</span></span><span class="amt">${money(e.amount, e.cur)}${e.cur !== left.cur && conv(e) !== null ? `<small class="conv">≈ ${esc(cost(conv(e), left.cur))}</small>` : ''}</span></button>`; }).join('')}</div>`;
 }
 function pickPay(id, which, eid) {
   const y = receiptOf(id), e = S.expenses.find(x => x.id === eid && !x.deleted);
   if (!y || !e || !seesCost()) return;
-  const other = linkedTo().get(eid);
-  if (other && other.id !== id && !confirm(`This payment is linked to ${other.ref || other.date} already. Link it here instead?`)) return;
-  const by = myName() || S.lastBy || '', was = which === 'g' ? null : y.costs[+which].pay;
-  const holds = (r, pid) => (r.costs || []).some(k => k.pay === pid) || (r.gpay || []).includes(pid); // only the import that held it changes
-  const strip = (rs, pid) => rs.map(r => (r.id === id || !holds(r, pid) ? r : { ...r, costs: r.costs.map(k => (k.pay === pid ? (({ pay, ...rest }) => rest)(k) : k)), gpay: (r.gpay || []).filter(x => x !== pid), editedAt: stampSec(), editedBy: by }));
-  let receipts = other && other.id !== id ? strip(S.receipts, eid) : S.receipts;
-  receipts = receipts.map(r => (r.id !== id ? r : which === 'g' ? { ...r, gpay: [...new Set([...(r.gpay || []), eid])], editedAt: stampSec(), editedBy: by }
-    : { ...r, costs: r.costs.map((k, j) => (j === +which ? { ...k, pay: eid } : k)), editedAt: stampSec(), editedBy: by }));
-  const freed = was && was !== eid ? was : '';
-  update({ receipts, expenses: S.expenses.map(x => (x.id === eid ? { ...x, imp: id } : x.id === freed ? (({ imp, ...rest }) => rest)(x) : x)),
-    log: logWith([['Linked', id, `${which === 'g' ? 'Goods' : COST_NAME[y.costs[+which].t]} of ${y.ref || y.date} ↔ payment ${payLine(e)}`]], by) });
+  const other = linkedTo().get(eid), was = other && ((other.gpay || []).includes(eid) ? 'g' : String(other.costs.findIndex(k => paysOf(k).includes(eid))));
+  if (other && other.id === id && was === String(which)) return toast('Already linked here');
+  if (other && !confirm(`This payment is linked to ${other.id === id ? slotName(y, was) : other.ref || other.date} already. Move it here?`)) return;
+  const by = myName() || S.lastBy || '', at = stampSec();
+  // a payment is linked in one place: it leaves the import (or the cost) that held it, then joins this one
+  const drop = r => ({ ...r, costs: r.costs.map(k => (paysOf(k).includes(eid) ? withPays(k, paysOf(k).filter(x => x !== eid)) : k)), ...(r.gpay ? { gpay: r.gpay.filter(x => x !== eid) } : {}), editedAt: at, editedBy: by });
+  const add = r => ({ ...(which === 'g' ? { ...r, gpay: [...(r.gpay || []), eid] } : { ...r, costs: r.costs.map((k, j) => (j === +which ? withPays(k, [...paysOf(k), eid]) : k)) }), editedAt: at, editedBy: by });
+  const receipts = S.receipts.map(r => { const x = other && r.id === other.id ? drop(r) : r; return x.id === id ? add(x) : x; });
+  update({ receipts, expenses: S.expenses.map(x => (x.id === eid ? { ...x, imp: id } : x)),
+    log: logWith([['Linked', id, `${slotName(y, which)} of ${y.ref || y.date} ↔ payment ${payLine(e)}`]], by) });
   toast('Linked ✓'); receiptDetail(id);
 }
 function unlinkPay(id, which, eid) {
@@ -474,8 +504,8 @@ function unlinkPay(id, which, eid) {
   if (!y || !seesCost()) return;
   const by = myName() || S.lastBy || '';
   update({ receipts: S.receipts.map(r => (r.id !== id ? r : which === 'g' ? { ...r, gpay: (r.gpay || []).filter(x => x !== eid), editedAt: stampSec(), editedBy: by }
-    : { ...r, costs: r.costs.map((k, j) => (j === +which ? (({ pay, ...rest }) => rest)(k) : k)), editedAt: stampSec(), editedBy: by })),
-    expenses: S.expenses.map(x => (x.id === eid ? (({ imp, ...rest }) => rest)(x) : x)), log: logWith([['Unlinked', id, `Payment ${eid} from ${y.ref || y.date}`]], by) });
+    : { ...r, costs: r.costs.map((k, j) => (j === +which ? withPays(k, paysOf(k).filter(x => x !== eid)) : k)), editedAt: stampSec(), editedBy: by })),
+    expenses: S.expenses.map(x => (x.id === eid ? (({ imp, ...rest }) => rest)(x) : x)), log: logWith([['Unlinked', id, `Payment ${eid} from ${slotName(y, which)} of ${y.ref || y.date}`]], by) });
   toast('Unlinked'); receiptDetail(id);
 }
 // on a payment's own page: what it paid for in the warehouse (admins)
@@ -498,7 +528,7 @@ const receivedList = () => goStock('in');
 function receivedBody() {
   const ys = live(S.receipts).sort((a, b) => b.date.localeCompare(a.date)), admin = seesCost();
   return ys.length ? `<div class="card list">${ys.map(y => { const r = admin && !y.stub ? landedCost(y) : null; return `<button class="row in" data-act="openReceipt" data-id="${esc(y.id)}"><span class="dot">🚢</span>
-      <span class="main"><span class="t"><span class="tt">${esc(y.ref || 'Goods received')}</span></span><span class="s">${esc([fmtDate(y.date), (y.sup && (live(S.suppliers).find(u => u.id === y.sup) || {}).name) || y.from, `${y.lines.length} line${y.lines.length === 1 ? '' : 's'}`].filter(Boolean).join(' · '))}</span></span>
+      <span class="main"><span class="t"><span class="tt">${esc(y.ref || 'Goods received')}</span>${r && untallied(y) ? `<i class="tag warn">${untallied(y)} to tally</i>` : ''}</span><span class="s">${esc([fmtDate(y.date), (y.sup && (live(S.suppliers).find(u => u.id === y.sup) || {}).name) || y.from, `${y.lines.length} line${y.lines.length === 1 ? '' : 's'}`].filter(Boolean).join(' · '))}</span></span>
       ${r && !r.err ? `<span class="amt">${money(r.total / 100, 'USD')}<small>landed</small></span>` : ''}</button>`; }).join('')}</div>` : empty('Nothing received yet', 'Each import or delivery from a supplier is entered with <b>Goods received</b>, with all its costs.');
 }
 

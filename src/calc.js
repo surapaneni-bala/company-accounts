@@ -292,6 +292,18 @@ function seesEntry(sees, e) {
 /* ---------- the warehouse (owner, 2 Nov 2026): landed cost of what is imported, stock at average cost, sales ---------- */
 // to US dollars: amt in cur, rate = how many of cur make 1 US dollar that day (as on Accounts' SSP entries); null without a rate
 const toUsd = (amt, cur, rate) => (cur === 'USD' ? amt : rate > 0 ? amt / rate : null);
+// a payment in another currency's terms: as it is in the same currency, else brought over at the payment's own rate (and the
+// other's rate when that is not dollars) — an SSP payment for a cost typed in dollars, say; null without a rate
+const inCur = (p, cur, rate) => { if (p.cur === cur) return p.amount; const usd = toUsd(p.amount, p.cur, p.rate); return usd === null ? null : cur === 'USD' ? usd : rate > 0 ? usd * rate : null; };
+// do the payments in Accounts add up to what a cost (or an import's goods) says? In the cost's own currency, to the cent. A payment
+// in another currency can only tally to within 1 % (about: true), the two rates being typed on different days; err = a payment
+// without a rate. paid and diff (paid − amt) in the cost's currency.
+function tally(amt, cur, rate, pays) {
+  let cents = 0;
+  for (const p of pays) { const v = inCur(p, cur, rate); if (v === null) return { err: true }; cents += Math.round(v * 100); }
+  const about = pays.some(p => p.cur !== cur), want = Math.round(amt * 100), diff = cents - want;
+  return { paid: cents / 100, diff: diff / 100, ok: about ? Math.abs(diff) <= Math.max(100, want / 100) : diff === 0, about };
+}
 // whole cents split over shares in proportion; the cents left over go to the largest remainders, so the parts always add up
 function splitCents(total, shares) {
   const sum = shares.reduce((a, b) => a + b, 0);

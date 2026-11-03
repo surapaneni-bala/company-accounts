@@ -195,4 +195,17 @@ gas.organizeAll ? gas.organizeAll() : null;
 assert.ok(!sync(mary4).pull.some(p => p.id === 'F-OW1-0001'), 'the supplier invoice shows costs: not for the office manager');
 assert.strictEqual(post({ op: 'file', token: mary4, id: 'F-OW1-0001' }).ok, false, 'nor can she fetch it');
 
+/* ---------- a cost paid in parts: several payments in Accounts linked to one cost, and to the goods (owner, 3 Nov 2026) ---------- */
+{
+  const pay = (id, amount, reason) => ({ id, k: 'E', u: 900, d: { id, cur: 'USD', amount, paidTo: 'Clearing agent', reason, at: '2026-10-29T10:00', imp: 'Y-OW1-0001', uid: ownerId } });
+  const parts = { ...imp, u: 901, d: { ...imp.d, costs: imp.d.costs.map(c => (c.t === 'clearing' ? { ...c, pay: 'E-OW1-0091', pays: ['E-OW1-0091', 'E-OW1-0092', 'E-OW1-0093'] } : c)), gpay: ['E-OW1-0094', 'E-OW1-0095'], editedAt: '2026-11-03T10:00:00' } };
+  const r = sync(owner, [pay('E-OW1-0091', 400, 'Clearing part 1'), pay('E-OW1-0092', 350, 'Clearing part 2'), pay('E-OW1-0093', 250, 'Clearing part 3'), pay('E-OW1-0094', 10000, 'Deposit'), pay('E-OW1-0095', 15050.54, 'Balance'), parts]);
+  assert.deepStrictEqual(r.refused, [], 'an import whose clearing is three payments and whose goods are two: taken as it is');
+  const back = sync(owner).pull.find(p => p.id === 'Y-OW1-0001');
+  assert.deepStrictEqual([back.d.costs.find(c => c.t === 'clearing').pays, back.d.gpay], [['E-OW1-0091', 'E-OW1-0092', 'E-OW1-0093'], ['E-OW1-0094', 'E-OW1-0095']], 'every link comes back to the other phones');
+  const seen = sync(mary4).pull;
+  assert.deepStrictEqual(Object.keys(seen.find(p => p.id === 'Y-OW1-0001').d).sort(), ['createdAt', 'date', 'id', 'lines', 'ref', 'stub'], 'the office manager still sees none of it');
+  assert.ok(!seen.some(p => /^E-OW1-009[1-5]$/.test(p.id)), 'nor the payments for the import');
+}
+
 console.log('Warehouse: all checks passed');
