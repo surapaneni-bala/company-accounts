@@ -51,11 +51,11 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 24; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 25; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // What an older script still keeps on the phones: the version that first stores it. From NEEDED_SCRIPT on, everything goes
 // up and a newer script only improves things — said quietly, never as a warning (owner, 23 Oct 2026: the message showed
 // "needed" while everything worked).
-const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [24, 'questions reach your staff and theirs reach you']];
+const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [24, 'questions reach your staff and theirs reach you'], [25, 'notifications reach phones']];
 const NEEDED_SCRIPT = 23, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines'], [22, 'what you let an office manager see'], [23, 'the warehouse — stock, goods received, goods out and delivery notes']];
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {
@@ -255,7 +255,7 @@ async function syncNow() {
     const accepted = new Set(res.kinds || OLD_SERVER_KINDS), notAllowed = new Set(res.refused || []);
     const refused = new Set([...push.filter(p => !accepted.has(p.k)).map(p => p.id), ...notAllowed]);
     const sent = new Map(push.map(p => [p.id, p.u])), now = stampsNow(), was = S.link;
-    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins), ...(res.rate > 0 ? { rate: res.rate } : {}) }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
+    S = { ...S, link: { ...S.link, since: res.seq, sheet: sheetOk(res.sheet) || (can('money') ? S.link.sheet : ''), v: res.version || 2, logins: !!(res.logins || S.link.logins), ...(res.rate > 0 ? { rate: res.rate } : {}), push: res.push || null }, dirty: S.dirty.filter(id => !lostIds.has(id) && (refused.has(id) || !sent.has(id) || (now.get(id) || 0) !== sent.get(id))) };
     S = { ...S, base: Object.fromEntries(Object.entries(S.base || {}).filter(([id]) => S.dirty.includes(id))) }; // sent: the next edit starts from the new copy
     // entries an office manager may no longer see (moved to another project or place): her old copies go, unless changed here
     const forget = new Set((res.forget || []).filter(id => !S.dirty.includes(id)));

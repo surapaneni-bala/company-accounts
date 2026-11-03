@@ -278,6 +278,7 @@ function render() {
   $('#coName').innerHTML = tab === 'menu' || !can('staff') ? `<img class="co-logo" src="logo-wide.png" alt="${esc(S.company)}">` : ({ staff: 'Employees', hist: 'History', proj: 'Projects', sheet: 'Google Sheet', stock: 'Warehouse' })[tab] || 'Accounts';
   $('#todayDate').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $$('#tabs [data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-current', b.dataset.tab === tab ? 'page' : 'false'); });
+  noteLaunch(); // which app file opened the app, a tapped notification (before drawing: the banners depend on it)
   const y = tab === render.tab ? scrollY : 0; // redrawn after an edit: stay where you were
   main.innerHTML = { menu: viewMenu, home: viewHome, hist: viewHistory, proj: viewProjects, staff: viewStaff, sheet: viewSheet, stock: viewStock }[tab]();
   if (y) scrollTo(0, y);
@@ -334,7 +335,7 @@ function viewMenu() {
   const h = new Date().getHours(), hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const who = signedIn() ? session.user.name.split(' ')[0] : '';
   const staffWaiting = waiting().filter(c => c.kind === 'W').length;
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${notifyBanner()}${lostBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${apkBanner()}${notifyBanner()}${lostBanner()}${approvalsBanner()}${brandBanner()}${docBanners()}
     <section class="launch">
       <h1>${hi}${who ? ', ' + esc(who) : ''}</h1>
       <div class="apps">
@@ -369,7 +370,7 @@ function viewHome() {
   const hide = signedIn() && !showMoney, M = '<span class="mask">••••••</span>';
   const fig = n => (hide ? M : plain(n));
   const lines = vals => (hide ? `<b>${M}</b>` : curLines(vals));
-  return `${moveBanner()}${updateBanner()}${signInBanner()}${notifyBanner()}${approvalsBanner()}${brandBanner()}${lostBanner()}${doubleBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
+  return `${moveBanner()}${updateBanner()}${signInBanner()}${apkBanner()}${notifyBanner()}${approvalsBanner()}${brandBanner()}${lostBanner()}${doubleBanner()}${lookalikeBanner()}${backupBanner()}${regularBanners()}
   ${seeMoney ? '' : `<p class="hint" style="margin:0 4px 4px">${can('staff') ? `${signedIn() && session.user.sees ? 'The expenses you entered, and those an admin lets you see.' : 'Your expenses — only the ones you entered.'} The balances are kept by the admins.` : 'Your expenses — only you and the admins see them.'}</p>`}
   <section class="balance ${!hide && CURS.some(c => bal[c].Total < 0) ? 'neg' : ''}" aria-label="Balances" ${seeMoney ? '' : 'hidden'}>
     <div class="lbl">Balance</div>
@@ -489,6 +490,7 @@ function viewSheet() {
         <div class="setrow" ${can('settings') && signedIn() ? '' : 'hidden'}><span>My signature<br><span class="muted">On this phone only — for "Approved by", digitally signed</span></span><button class="btn small ghost" data-act="mySig">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span class="brandthumb" data-brand="stamp"></span><span>Company stamp<br><span class="muted">${latestFile('settings', 'stamp') ? 'On every slip, with its date' : '<b class="out-c">Not set — papers print without it</b>'}</span></span><button class="btn small ghost" data-act="stamp">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span>Company bank details<br><span class="muted">${live(S.banks).length ? `${live(S.banks).length} account${live(S.banks).length === 1 ? '' : 's'} — for clients to pay into` : '<b class="out-c">None yet — add each account once</b>'}</span></span><button class="btn small ghost" data-act="banks">Open</button></div>
+        <div class="setrow" ${can('settings') && S.link && signedIn() ? '' : 'hidden'}><span>Phone notifications<br><span class="muted">${S.link && S.link.push ? 'On — questions, approvals and alerts reach phones' : '<b class="out-c">Not set up — they only show inside the app</b>'}</span></span><button class="btn small ghost" data-act="pushSheet">${S.link && S.link.push ? 'Change' : 'Set up'} 🔒</button></div>
         <div class="setrow" ${can('settings') && S.link ? '' : 'hidden'}><span>Morning email<br><span class="muted">Payments due and documents expiring, every morning</span></span><button class="btn small ghost" data-act="alerts">Change 🔒</button></div>
         <div class="setrow" ${can('settings') ? '' : 'hidden'}><span class="brandthumb" data-brand="letterhead"></span><span>Letterhead<br><span class="muted">${latestFile('settings', 'letterhead') ? 'Printed on vouchers and slips' : '<b class="out-c">Not set — papers get a plain heading</b>'}</span></span><button class="btn small ghost" data-act="letterhead">Change 🔒</button></div>
         <div class="setrow"><span>App version ${APP_VERSION.slice(0, 7)}<br><span class="muted">${newerVersion ? '🆕 A new version is ready' : 'Get the newest version of the app'}</span></span><button class="btn small ${newerVersion ? 'primary' : 'ghost'}" data-act="updateApp">${newerVersion ? 'Update now' : 'Check for update'}</button></div>

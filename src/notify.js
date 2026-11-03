@@ -105,6 +105,7 @@ function paintBell() {
   chip.hidden = false;
   chip.innerHTML = `🔔${n ? `<b>${n > 99 ? '99+' : n}</b>` : ''}`;
   chip.setAttribute('aria-label', n ? `Notifications: ${n} need you` : 'Notifications');
+  if (S.link && S.link.push && notifyState() === 'granted') pushRegister(); // at most once a week, quietly
   try { if (n && navigator.setAppBadge) navigator.setAppBadge(n).catch(() => {}); else if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {}); } catch (e) { /* a number on the icon is a nicety */ }
 }
 const noticeRow = n => `<div class="nrow ${n.how}"><button class="nmain" data-act="${n.act}" ${Object.entries(n.data).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ')}><span class="nic">${n.icon}</span><span>${esc(n.text)}</span></button>
@@ -129,16 +130,17 @@ function bellSheet() {
    phone notifications reach them once they are switched on for the company. Blocked: only the phone's settings can undo it. */
 const notifyState = () => (typeof Notification === 'undefined' ? 'none' : Notification.permission); // none · default · granted · denied
 function notifyBanner() {
-  if (!signedIn() || notifyState() !== 'default' || ((S.notifyAsk || {})[myUid()] || '') >= today()) return '';
+  if (!signedIn() || S.apk === 1 || notifyState() !== 'default' || ((S.notifyAsk || {})[myUid()] || '') >= today()) return ''; // the first Android app file: the download banner instead
   return `<div class="banner new"><span>🔔 <b>Turn on notifications</b> so questions, approvals and alerts reach you on this phone.</span><span class="two-btn"><button class="btn small" data-act="notifyOn">Turn on</button><button class="btn small ghost" data-act="notifyLater">Not now</button></span></div>`;
 }
 async function notifyOn() {
   try { await Notification.requestPermission(); } catch (e) { /* an old phone: nothing to ask */ }
+  if (notifyState() === 'granted') await pushRegister(true);
   toast(notifyState() === 'granted' ? 'Notifications are on ✓' : notifyState() === 'denied' ? 'Notifications are off. To turn them on later, allow them for this app in the phone’s settings.' : 'Not turned on');
   render();
 }
 function notifyLater() { update({ notifyAsk: perUser(S.notifyAsk, plusDays(today(), SNOOZE_DAYS)) }); render(); }
-const notifyLine = () => ({ granted: '🔔 Notifications are on for this phone.', denied: '🔕 Notifications are blocked on this phone — allow them for this app in the phone’s settings.', none: '' }[notifyState()]
+const notifyLine = () => ({ granted: `🔔 Notifications are on for this phone.${pushErr ? ` <b class="out-c">It could not register: ${esc(pushErr)}</b>` : ''}${S.link && S.link.push ? ' <button class="btn small ghost" data-act="pushTest">Send a test</button>' : ''}`, denied: '🔕 Notifications are blocked on this phone — allow them for this app in the phone’s settings.', none: '' }[notifyState()]
   ?? '<button class="btn small" data-act="notifyOn">🔔 Turn on notifications for this phone</button>');
 function snooze(key) { update({ snooze: { ...Object.fromEntries(Object.entries(S.snooze || {}).filter(([, d]) => d >= today())), [key]: plusDays(today(), SNOOZE_DAYS) } }); bellSheet(); }
 function unsnooze() { update({ snooze: {} }); bellSheet(); }

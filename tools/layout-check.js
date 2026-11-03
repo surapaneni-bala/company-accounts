@@ -90,6 +90,8 @@ const SETUP = () => {
         { id: 'Q-3', to: 'admins', text: 'The cement store roof is leaking over the bags', by: 'Store One', uid: 'U-2', createdAt: '2026-11-03T07:10:00' }] }; bellSheet(); }],
     ['question thread', () => threadSheet('Q-1')], ['ask a question', () => askForm('E', 'E-1')], ['messages', () => messagesSheet()], ['entries to check', () => reviewSheet()], ['entry with questions', () => detail('E', 'E-1')],
     ['turn on notifications', () => { closeAll(); tab = 'menu'; render(); }],
+    ['phone notifications set-up', () => { unlock = async () => true; S = { ...S, link: { ...S.link, v: 25, push: { web: { projectId: 'brookfield-a1b2c' } } } }; return pushSheet(); }],
+    ['old android app', () => { closeAll(); S = { ...S, apk: 1 }; tab = 'menu'; render(); }],
   ];
   window.__show = i => { screens[i][1](); const d = document.querySelector('#sheet[open]'); if (d) d.scrollTop = 0; };
   return screens.map(s => s[0]);

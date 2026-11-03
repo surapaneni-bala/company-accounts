@@ -126,20 +126,28 @@ function loadGas(code, state = {}, opts = {}) {
   const drive = state.drive || {};
   const ss = makeSpreadsheet(state);
   const mails = [], triggers = state.triggers || [];
+  // phone notifications: every call to Google is kept (fetches); Google's answers come from fetchReply (tests may replace it);
+  // clock.hour pins the hour formatDate gives for 'H' (quiet hours)
+  const fetches = [], cache = {}, clock = { hour: 10 };
+  const fetchReply = { fn: req => (/oauth2\.googleapis\.com\/token/.test(req.url) ? [200, { access_token: 'access-1', expires_in: 3599 }]
+    : /\/messages:send$/.test(req.url) ? (/"token":"gone/.test(req.payload) ? [404, { error: { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] } }] : [200, { name: 'projects/p/messages/1' }]) : [404, {}]) };
+  const fetchOne = req => { fetches.push(req); const [code, body] = fetchReply.fn(req); return { getResponseCode: () => code, getContentText: () => JSON.stringify(body) }; };
   const sandbox = {
     SpreadsheetApp: { getActive: () => ss, BorderStyle: { SOLID: 'SOLID', SOLID_MEDIUM: 'SOLID_MEDIUM' } },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, setProperties: o => { Object.entries(o).forEach(([k, v]) => { props[k] = String(v); }); }, deleteProperty: k => { delete props[k]; } }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
     ContentService: { MimeType: { JSON: 'JSON' }, createTextOutput: s => ({ setMimeType() { return this; }, getContent: () => s }) },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
-      formatDate: (d, tz, fmt) => (fmt === 'yyyy-MM' ? d.toISOString().slice(0, 7) : fmt === 'yyyy-MM-dd' ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace('T', ' ')),
+      formatDate: (d, tz, fmt) => (fmt === 'H' ? String(clock.hour) : fmt === 'yyyy-MM' ? d.toISOString().slice(0, 7) : fmt === 'yyyy-MM-dd' ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace('T', ' ')),
       DigestAlgorithm: { SHA_256: 'sha256' },
       Charset: { UTF_8: 'utf8' },
       // like Apps Script: an array of signed bytes (-128…127)
       computeDigest: (alg, s, cs) => [...new Int8Array(crypto.createHash(alg).update(String(s), cs).digest())],
       base64Decode: s => [...new Int8Array(Buffer.from(String(s), 'base64'))],
       base64Encode: bytes => Buffer.from(Uint8Array.from(bytes, b => b & 255)).toString('base64'),
+      base64EncodeWebSafe: x => (typeof x === 'string' ? Buffer.from(x, 'utf8') : Buffer.from(Uint8Array.from(x, b => b & 255))).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
+      computeRsaSha256Signature: (input, pem) => [...new Int8Array(crypto.sign('sha256', Buffer.from(input, 'utf8'), pem))],
       newBlob,
     },
     DriveApp: opts.noDrive ? NO_DRIVE : makeDrive(drive),
@@ -152,11 +160,13 @@ function loadGas(code, state = {}, opts = {}) {
       newTrigger: fn => { const t = { fn }; const b = { timeBased: () => b, everyDays: n => { t.days = n; return b; }, atHour: h => { t.hour = h; return b; }, create: () => { triggers.push(t); return t; } }; return b; },
     },
     MailApp: { sendEmail: m => { mails.push(m); } },
+    UrlFetchApp: { fetch: (url, o = {}) => fetchOne({ url, ...o }), fetchAll: reqs => reqs.map(r => fetchOne(r)) },
+    CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = String(v); }, remove: k => { delete cache[k]; } }) },
   };
   vm.createContext(sandbox);
   const api = vm.runInContext(`${code}\n;({ setup, doGet, doPost, allowFiles: typeof allowFiles === 'function' ? allowFiles : null, morningEmail: typeof morningEmail === 'function' ? morningEmail : null })`, sandbox);
   const dump = () => ({ props, drive, triggers, sheets: ss.getSheets().map(s => ({ name: s.getName(), grid: s.grid, hidden: s.hidden })) });
-  return { ...api, ss, props, dump, mails, triggers };
+  return { ...api, ss, props, dump, mails, triggers, fetches, fetchReply, clock, cache };
 }
 
 module.exports = { loadGas };
