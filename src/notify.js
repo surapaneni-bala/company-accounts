@@ -140,7 +140,7 @@ async function notifyOn() {
   render();
 }
 function notifyLater() { update({ notifyAsk: perUser(S.notifyAsk, plusDays(today(), SNOOZE_DAYS)) }); render(); }
-const notifyLine = () => ({ granted: `🔔 Notifications are on for this phone.${pushErr ? ` <b class="out-c">It could not register: ${esc(pushErr)}</b>` : ''}${S.link && S.link.push ? ' <button class="btn small ghost" data-act="pushTest">Send a test</button>' : ''}`, denied: '🔕 Notifications are blocked on this phone — allow them for this app in the phone’s settings.', none: '' }[notifyState()]
+const notifyLine = () => ({ granted: `🔔 Notifications are on for this phone.${pushErr ? ` <b class="out-c">It could not register: ${esc(pushErr)}</b>` : ''}${S.link && S.link.push ? ' <button class="btn small ghost" data-act="pushTest">Send a test</button>' : ''}`, denied: '🔕 Notifications are blocked on this phone — allow them for this app in the phone’s settings.', none: /iPhone|iPad/.test(navigator.userAgent) && !isInstalled() ? '📱 On iPhone, notifications work only in the app opened from its <b>Home Screen icon</b> — in Safari tap Share → <b>Add to Home Screen</b>, then open it from there.' : '' }[notifyState()]
   ?? '<button class="btn small" data-act="notifyOn">🔔 Turn on notifications for this phone</button>');
 function snooze(key) { update({ snooze: { ...Object.fromEntries(Object.entries(S.snooze || {}).filter(([, d]) => d >= today())), [key]: plusDays(today(), SNOOZE_DAYS) } }); bellSheet(); }
 function unsnooze() { update({ snooze: {} }); bellSheet(); }

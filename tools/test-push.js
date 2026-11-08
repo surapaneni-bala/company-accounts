@@ -100,8 +100,21 @@ assert.strictEqual(to('tok-mary-11111111111111111').length, 4, 'Mary had 2 today
 
 /* ---------- a test from Settings; phones that left ---------- */
 fresh();
-assert.deepStrictEqual(post({ op: 'pushTest', token: mary }), { ok: true, sent: 1 }, 'a test reaches her phone even past the day\'s limit');
-assert.strictEqual(post({ op: 'pushTest', token: store }).ok, false, 'someone with no phone registered is told');
+assert.deepStrictEqual(post({ op: 'pushTest', token: mary }), { ok: true, sent: 1, phones: 1 }, 'a test reaches her phone even past the day\'s limit');
+assert.match(post({ op: 'pushTest', token: store }).error, /^No phone of yours is registered yet/, 'someone with no phone registered is told so');
+const usual2 = gas.fetchReply.fn;
+gas.fetchReply.fn = req => (/messages:send$/.test(req.url) ? [403, { error: { code: 403, message: 'Firebase Cloud Messaging API has not been used in project 123 before or it is disabled.', status: 'PERMISSION_DENIED' } }] : usual2(req));
+assert.deepStrictEqual(post({ op: 'pushTest', token: mary }), { ok: false, error: 'Google did not deliver it: Firebase Cloud Messaging API has not been used in project 123 before or it is disabled.' }, 'Google refusing is reported in its own words, not as "no phone registered" (owner, 9 Nov 2026)');
+assert.ok(tab().some(x => x[0] === 'tok-mary-11111111111111111'), 'and her phone is kept: it was Google, not the phone');
+gas.fetchReply.fn = usual2;
+let st = post({ op: 'pushStatus', token: mary });
+assert.deepStrictEqual([st.set, st.mine.map(m => m.device), st.all, st.zone], [true, ['Android'], undefined, 'Africa/Juba'], 'the status: on, her phones, not the company count (admins only), Juba time');
+st = post({ op: 'pushStatus', token: owner });
+assert.deepStrictEqual([st.mine.length, st.all, st.quiet], [1, 2, false], 'an admin sees how many phones the company has; 10 am is not quiet');
+gas.clock.hour = 23;
+assert.strictEqual(post({ op: 'pushStatus', token: owner }).quiet, true, '11 pm by the sheet\'s clock is quiet');
+gas.clock.hour = 10;
+assert.strictEqual(post({ op: 'pushStatus', fcm: 'x' }).ok, false, 'only someone signed in asks');
 post({ op: 'pushToken', token: owner, fcm: 'gone-owner-333333333333333', device: 'Old phone' });
 fresh();
 post({ op: 'pushTest', token: owner });

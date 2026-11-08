@@ -161,7 +161,7 @@ const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const MAX_BIG_RECORD = 40000; // a stock count, an invoice or a delivery note may list many items (review, 2 Nov 2026)
 const LOCK_WAIT_MS = 25000;
-const VERSION = 25; // shown when the web app link is opened in a browser
+const VERSION = 26; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -629,38 +629,53 @@ function pushTokenSave_(me, req) {
   saveRows_(PUSH_TAB, PUSH_COLS, others.concat(mine, [{ token: token, uid: me.id, device: device, createdAt: now, seen: now }]));
   return { ok: true };
 }
+// a test from the app says exactly what stands in the way (owner, 9 Nov 2026: none arrived and nothing said why)
 function pushTest_(me) {
-  const n = push_([me.id], { title: 'Brookfield', body: 'Phone notifications work on this phone ✓', tag: 'test' }, true);
-  return n ? { ok: true, sent: n } : { ok: false, error: pushPublic_() ? 'No phone of yours is registered yet: allow notifications on this phone, wait a few seconds, and try again.' : 'Phone notifications are not set up yet.' };
+  if (!pushPublic_()) return { ok: false, error: 'Phone notifications are not set up yet: an admin does it in Settings → Phone notifications.' };
+  const r = push_([me.id], { title: 'Brookfield', body: 'Phone notifications work on this phone ✓', tag: 'test' }, true);
+  if (!r.phones) return { ok: false, error: 'No phone of yours is registered yet: on this phone allow notifications, wait a few seconds, and try again.' };
+  if (!r.sent) return { ok: false, error: 'Google did not deliver it: ' + (r.failed[0] || 'no reason given') };
+  return { ok: true, sent: r.sent, phones: r.phones };
 }
-// one notification to each person (by login id), within the rules; force (a test) skips the hours and the daily limit
+// for the set-up screen: is it on, which of my phones are registered, how many in all (admins), and is it quiet time now
+function pushStatus_(me) {
+  const rows = rowsOf_(PUSH_TAB, PUSH_COLS);
+  return { ok: true, set: !!pushPublic_(), mine: rows.filter(r => String(r.uid) === me.id).map(r => ({ device: String(r.device), since: Number(r.createdAt) })),
+    all: me.role === 'admin' ? rows.length : undefined, quiet: quietNow_(), zone: SpreadsheetApp.getActive().getSpreadsheetTimeZone() };
+}
+// quiet hours by the company's clock (the sheet's time zone, Africa/Juba), not the script's, which may be another country's
+const quietNow_ = () => { const h = Number(Utilities.formatDate(new Date(), SpreadsheetApp.getActive().getSpreadsheetTimeZone(), 'H')); return h >= PUSH_QUIET[0] || h < PUSH_QUIET[1]; };
+// why Google refused one: its own words when it gives them
+const googleWhy_ = x => { try { return JSON.parse(x.getContentText()).error.message || 'Google answered ' + x.getResponseCode(); } catch (err) { return 'Google answered ' + x.getResponseCode(); } };
+// one notification to each person (by login id), within the rules; force (a test) skips the hours and the daily limit.
+// Says how it went: sent, phones = the registered phones it tried, failed = Google's reasons
 function push_(uids, n, force) {
   const props = PropertiesService.getScriptProperties();
-  if (!props.getProperty('PUSH_KEY') || !uids.length) return 0;
-  const hour = Number(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'H'));
-  if (!force && (hour >= PUSH_QUIET[0] || hour < PUSH_QUIET[1])) return 0;
+  const none = { sent: 0, phones: 0, failed: [] };
+  if (!props.getProperty('PUSH_KEY') || !uids.length) return none;
+  if (!force && quietNow_()) return none;
   let count = {};
   try { count = JSON.parse(props.getProperty('PUSH_COUNT') || '{}'); } catch (err) { /* a new day */ }
   if (count.day !== today_()) count = { day: today_() };
   const active = users_().filter(u => u.active).map(u => u.id); // a closed login gets nothing, even on a phone it registered
   const want = uids.filter((u, i) => uids.indexOf(u) === i && active.indexOf(u) >= 0 && (force || (count[u] || 0) < PUSH_DAY_MAX));
   const rows = rowsOf_(PUSH_TAB, PUSH_COLS), targets = rows.filter(r => want.indexOf(String(r.uid)) >= 0);
-  if (!targets.length) return 0;
+  if (!targets.length) return none;
   const project = JSON.parse(props.getProperty('PUSH_KEY')).project_id, access = pushAccess_();
   const res = UrlFetchApp.fetchAll(targets.map(r => ({ url: 'https://fcm.googleapis.com/v1/projects/' + project + '/messages:send', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
     headers: { Authorization: 'Bearer ' + access },
     payload: JSON.stringify({ message: { token: String(r.token), data: { title: n.title, body: n.body, tag: n.tag, url: n.url || '/?bell=1' }, webpush: { headers: { TTL: '43200', Urgency: 'high' } } } }) })));
   let sent = 0;
-  const gone = [];
+  const gone = [], failed = [];
   res.forEach((x, i) => {
     const code = x.getResponseCode();
     if (code === 200) sent += 1;
-    else if (code === 404 || (code === 400 && /registration token|UNREGISTERED/i.test(x.getContentText()))) gone.push(String(targets[i].token)); // a phone that left
-    else console.error('Notification not sent (' + code + '): ' + x.getContentText().slice(0, 300));
+    else if (code === 404 || (code === 400 && /registration token|UNREGISTERED/i.test(x.getContentText()))) { gone.push(String(targets[i].token)); failed.push('this phone is no longer registered with Google — open the app on it to register again'); } // a phone that left
+    else { failed.push(googleWhy_(x)); console.error('Notification not sent (' + code + '): ' + x.getContentText().slice(0, 300)); }
   });
   if (gone.length) saveRows_(PUSH_TAB, PUSH_COLS, rows.filter(r => gone.indexOf(String(r.token)) < 0));
   if (!force) { want.forEach(u => { count[u] = (count[u] || 0) + 1; }); props.setProperty('PUSH_COUNT', JSON.stringify(count)); }
-  return sent;
+  return { sent: sent, phones: targets.length, failed: failed };
 }
 // what a sync changed that someone must hear about now (before = the rows as they were, for what an edit changed)
 function pushFor_(before, result, user, roles) {
@@ -737,6 +752,7 @@ function account_(req) {
   if (req.op === 'password') return changePassword_(me, req);
   if (req.op === 'pushToken') return pushTokenSave_(me, req);
   if (req.op === 'pushTest') return pushTest_(me);
+  if (req.op === 'pushStatus') return pushStatus_(me);
   if (me.role !== 'admin') return { ok: false, error: 'Only an admin can do this.' };
   if (req.op === 'pushSetup') return pushSetup_(req);
   if (req.op === 'users') return { ok: true, users: users_().map(public_), required: required_() };

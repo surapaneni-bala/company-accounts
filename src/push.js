@@ -30,7 +30,10 @@ async function pushRegister(force) {
 }
 async function pushTest() {
   if (!await pushRegister(true)) return alert(`This phone could not register for notifications${pushErr ? `: ${pushErr}` : ''}.`);
-  try { const res = await callServer(S.link, { op: 'pushTest' }); toast(res.ok ? 'Test sent ✓ It arrives in a few seconds' : res.error); } catch (e) { alert(e.offline ? 'No internet.' : e.message); }
+  try {
+    const res = await callServer(S.link, { op: 'pushTest' });
+    if (res.ok) toast(`Test sent to ${plural(res.phones || res.sent, 'phone')} of yours ✓ It arrives in a few seconds`); else alert(res.error); // an error stays until read
+  } catch (e) { alert(e.offline ? 'No internet.' : e.message); }
 }
 // a tapped notification: the 🔔, on a phone where the app was already open or freshly opened
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.bell && signedIn()) bellSheet(); });
@@ -60,6 +63,17 @@ async function pushSheet() {
       <p class="err"></p>
       <button class="btn primary" ${old ? 'disabled' : ''}>Check and switch on</button>
     </form>`);
+  if (p && (S.link.v || 2) >= 26) pushStatusInto();
+}
+// what the sheet knows: this login's registered phones, how many in all, and whether it is quiet time (owner, 9 Nov 2026)
+async function pushStatusInto() {
+  let st;
+  try { st = await callServer(S.link, { op: 'pushStatus' }); } catch (e) { return; } // offline: the screen works without it
+  const box = $('#sheet form[data-form=pushSetup]');
+  if (!st || !st.ok || !box) return;
+  const mine = st.mine || [];
+  box.insertAdjacentHTML('beforebegin', `<p class="note" style="margin-top:12px">${mine.length ? `📲 Your registered ${mine.length === 1 ? 'phone' : 'phones'}: ${esc(mine.map(m => `${m.device || 'phone'} (since ${fmtDate(new Date(m.since).toISOString().slice(0, 10))})`).join(', '))}.` : '📲 <b>None of your phones is registered yet.</b> On your phone: open the app, tap 🔔, then <b>Turn on notifications</b>.'}
+    ${st.all !== undefined ? ` Phones registered in the company: <b>${st.all}</b>.` : ''}${st.quiet ? ` It is quiet time now (9 pm – 7 am, ${esc(st.zone)}): notifications wait for the morning, a test still comes.` : ''}</p>`);
 }
 async function savePushSetup(f) {
   const web = Object.fromEntries([...f.elements.cfg.value.matchAll(/(\w+)\s*:\s*["']([^"']+)["']/g)].map(m => [m[1], m[2]]));

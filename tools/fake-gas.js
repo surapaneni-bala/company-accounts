@@ -71,6 +71,7 @@ function makeSpreadsheet(state) {
   ss.setActiveSheet = sh => { ss.active = sh; return sh; };
   ss.moveActiveSheet = pos => { ss.sheets = ss.sheets.filter(s => s !== ss.active); ss.sheets.splice(pos - 1, 0, ss.active); };
   ss.getUrl = () => 'https://docs.google.com/spreadsheets/d/LOCAL-TEST/edit';
+  ss.getSpreadsheetTimeZone = () => 'Africa/Juba';
   ss.getId = () => 'SHEET'; // the Google Sheet is a Drive file too (see makeDrive)
   return chainable(ss);
 }
