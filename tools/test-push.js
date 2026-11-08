@@ -89,6 +89,9 @@ fresh();
 const dayCount = gas.props.PUSH_COUNT; // this check leaves the day's counts as they were
 sync(owner, [rec('Q', id('owner'), { to: id('mary'), text: 'These three?', about: [{ k: 'E', id: pay.id, what: 'a' }, { k: 'E', id: 'E-T-9998', what: 'b' }, { k: 'I', id: 'I-T-9999', what: 'c' }] })]);
 assert.deepStrictEqual(to('tok-mary-11111111111111111').map(d => d.body), ['Owner asked you a question about 3 entries'], 'several transactions: how many, not what');
+fresh();
+sync(owner, [rec('Q', id('owner'), { to: id('mary'), text: 'Change the dates', fix: 'date', about: [{ k: 'E', id: pay.id, what: 'a' }, { k: 'E', id: 'E-T-9998', what: 'b' }] })]);
+assert.deepStrictEqual(to('tok-mary-11111111111111111').map(d => [d.title, d.body]), [['Please fix', 'Owner asked you to fix 2 entries (wrong date)']], 'a fix says what kind, never amounts');
 gas.props.PUSH_COUNT = dayCount;
 
 /* ---------- never at night; at most 6 a day ---------- */

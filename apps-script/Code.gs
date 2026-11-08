@@ -135,7 +135,8 @@ const SHAPES = {
   // a reply answers. state: done = sorted, open = opened again; the newest message that says decides
   Q: d => str_(d.text) && d.text.trim().length > 0 && d.text.length <= 2000 && (d.state === undefined || d.state === 'open' || d.state === 'done')
     && (d.re === undefined ? (d.to === 'admins' || SAFE_ID.test(String(d.to))) && (d.about === undefined || aboutOk_(d.about) || (Array.isArray(d.about) && d.about.length > 0 && d.about.length <= 20 && d.about.every(aboutOk_)))
-      : SAFE_ID.test(String(d.re)) && d.to === undefined && d.about === undefined),
+      : SAFE_ID.test(String(d.re)) && d.to === undefined && d.about === undefined)
+    && (d.fix === undefined || (d.re === undefined && FIX_KINDS_.indexOf(d.fix) >= 0)), // what needs fixing in the linked entries (9 Nov 2026)
 };
 const strs_ = (d, ks) => ks.every(k => d[k] === undefined || str_(d[k]));
 const EVERY_MONTHS = [1, 3, 6, 12];
@@ -160,6 +161,8 @@ const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
 const aboutOk_ = a => isObj_(a) && KINDS.indexOf(a.k) >= 0 && SAFE_ID.test(String(a.id)) && strs_(a, ['what']) && String(a.what || '').length <= 200; // an entry a question is about
 const aboutsOf_ = d => (Array.isArray(d.about) ? d.about : d.about ? [d.about] : []);
+const FIX_KINDS_ = ['date', 'amount', 'project', 'payee', 'receipt', 'twice', 'check'];
+const FIX_TEXT_ = { date: 'wrong date', amount: 'wrong amount', project: 'wrong project or place', payee: 'wrong person paid or reason', receipt: 'receipt missing', twice: 'entered twice', check: 'please check' };
 const MAX_BIG_RECORD = 40000; // a stock count, an invoice or a delivery note may list many items (review, 2 Nov 2026)
 const LOCK_WAIT_MS = 25000;
 const VERSION = 26; // shown when the web app link is opened in a browser
@@ -695,7 +698,8 @@ function pushFor_(before, result, user, roles) {
     if (d.deleted) return;
     const by = (user && user.id === d.uid ? user.name : d.by) || 'Someone'; // the login that sent it (an admin's record carries no stamp)
     if (k === 'Q' && !old) {
-      if (d.re === undefined) add(d.to === 'admins' ? admins : [d.to], 'A question for you', by + ' asked you a question' + (aboutsOf_(d).length > 1 ? ' about ' + aboutsOf_(d).length + ' entries' : aboutsOf_(d).length && KIND_WORD_[aboutsOf_(d)[0].k] ? ' about ' + KIND_WORD_[aboutsOf_(d)[0].k] : ''), 'q');
+      if (d.re === undefined && d.fix) add(d.to === 'admins' ? admins : [d.to], 'Please fix', by + ' asked you to fix ' + (aboutsOf_(d).length === 1 ? 'an entry' : aboutsOf_(d).length + ' entries') + ' (' + FIX_TEXT_[d.fix] + ')', 'q');
+      else if (d.re === undefined) add(d.to === 'admins' ? admins : [d.to], 'A question for you', by + ' asked you a question' + (aboutsOf_(d).length > 1 ? ' about ' + aboutsOf_(d).length + ' entries' : aboutsOf_(d).length && KIND_WORD_[aboutsOf_(d)[0].k] ? ' about ' + KIND_WORD_[aboutsOf_(d)[0].k] : ''), 'q');
       else {
         const root = result.rows.filter(r => r[0] === d.re).map(r => JSON.parse(r[4]))[0];
         if (!root) return;

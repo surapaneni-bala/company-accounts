@@ -73,4 +73,10 @@ assert.deepStrictEqual(sync(store, [q('Q-ST1-0020', id('store1'), { to: 'admins'
 body = mail();
 assert.ok(/QUESTION from Store One, .*\(about Payment 1 of \$10 to Hardware, 1 Nov 2026 and 19 more\)/.test(body), 'the morning email names the first and how many more');
 
+/* ---------- asking for a fix (owner, 9 Nov 2026: payments logged a day late kept that day's date) ---------- */
+assert.deepStrictEqual(sync(owner, [q('Q-OW1-0030', id('owner'), { to: id('mary'), text: 'These were paid yesterday — please change the dates.', fix: 'date', about: [link(1), link(2)] })]).refused, [], 'a question asking to fix the dates of two payments');
+assert.strictEqual(sync(mary).pull.find(p => p.id === 'Q-OW1-0030').d.fix, 'date', 'Mary receives what needs fixing');
+assert.deepStrictEqual(sync(owner, [q('Q-OW1-0031', id('owner'), { to: id('mary'), text: 'x', fix: 'colour', about: [link(1)] })]).refused, ['Q-OW1-0031'], 'only the known kinds of fix');
+assert.deepStrictEqual(sync(mary, [q('Q-MRY-0030', id('mary'), { re: 'Q-OW1-0030', text: 'Done', fix: 'date' })]).refused, ['Q-MRY-0030'], 'an answer does not carry a fix');
+
 console.log('Questions: all checks passed');

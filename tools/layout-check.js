@@ -87,8 +87,9 @@ const SETUP = () => {
       S = { ...S, link: { u: 'https://example.invalid/x', v: 24, since: 1, logins: true }, questions: [
         { id: 'Q-1', to: 'U-1', text: 'Which site was the cement for? The receipt in the photo does not show the delivery address and the amount differs from the quotation we approved last week.', about: { k: 'E', id: 'E-1', what: 'Payment of $1,250.50 to Sample Hardware Supplies Limited, 20 Oct 2026' }, by: 'Bala', uid: 'U-0', createdAt: '2026-11-02T09:00:00' },
         { id: 'Q-2', re: 'Q-1', text: 'Gudele block 3 — I will attach the delivery note today.', by: 'Agnes', uid: 'U-1', createdAt: '2026-11-02T10:30:00' },
-        { id: 'Q-3', to: 'admins', text: 'The cement store roof is leaking over the bags', by: 'Store One', uid: 'U-2', createdAt: '2026-11-03T07:10:00' }] }; bellSheet(); }],
-    ['question thread', () => threadSheet('Q-1')], ['ask a question', () => askForm('E', 'E-1')], ['messages', () => messagesSheet()], ['entries to check', () => reviewSheet()], ['entry with questions', () => detail('E', 'E-1')],
+        { id: 'Q-3', to: 'admins', text: 'The cement store roof is leaking over the bags', by: 'Store One', uid: 'U-2', createdAt: '2026-11-03T07:10:00' },
+        { id: 'Q-4', to: 'U-1', text: 'These were paid yesterday, 8 Nov — please change their dates.', fix: 'date', about: [{ k: 'E', id: 'E-1', what: 'Payment of $1,250.50 to Sample Hardware Supplies Limited, 20 Oct 2026' }, { k: 'E', id: 'E-4', what: 'Payment of $1,250.50 to Sample Hardware, 20 Oct 2026' }, { k: 'I', id: 'I-1', what: 'Invoice INV-0001' }], by: 'Bala', uid: 'U-0', createdAt: '2026-11-02T08:00:00' }] }; bellSheet(); }],
+    ['question thread', () => threadSheet('Q-1')], ['fix request', () => threadSheet('Q-4')], ['ask a question', () => askForm('E', 'E-1')], ['messages', () => messagesSheet()], ['entries to check', () => reviewSheet()], ['entry with questions', () => detail('E', 'E-1')],
     ['turn on notifications', () => { closeAll(); tab = 'menu'; render(); }],
     ['phone notifications set-up', () => { unlock = async () => true; S = { ...S, link: { ...S.link, v: 25, push: { web: { projectId: 'brookfield-a1b2c' } } } }; return pushSheet(); }],
     ['old android app', () => { closeAll(); S = { ...S, apk: 1 }; tab = 'menu'; render(); }],

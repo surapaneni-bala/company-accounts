@@ -19,6 +19,7 @@ function notices() {
   threads().forEach(t => {
     const who = t.last.by || 'Someone', what = `“${t.last.text.slice(0, 90)}${t.last.text.length > 90 ? '…' : ''}”`;
     if (waitsOnMe(t)) add(`q:${t.q.id}`, '❓', t.msgs.length === 1 ? `${who} asks: ${what}${aboutText(t.q) ? ` — about ${aboutText(t.q)}` : ''}` : `${who} answered: ${what}`, 'thread', { id: t.q.id });
+    else if (allFixed(t) && !t.done && t.q.uid === uid) add(`qf:${t.q.id}`, '✓', `All ${plural(aboutsOf(t.q).length, 'transaction')} you asked ${toName(t)} to fix ${aboutsOf(t.q).length === 1 ? 'is' : 'are'} fixed — mark it sorted`, 'thread', { id: t.q.id });
     else if (t.done && t.last.uid !== uid && String(t.last.createdAt) > seen && isMine(t)) add(`qd:${t.q.id}`, '✓', `${who} marked “${t.q.text.slice(0, 60)}” as sorted`, 'thread', { id: t.q.id }, 'new');
   });
   if (admin) {

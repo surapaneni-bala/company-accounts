@@ -13,6 +13,33 @@ const aboutText = q => { const a = aboutsOf(q); return a.length ? `${a[0].what}$
 const LINK_KINDS = { E: 'expenses', R: 'credits', T: 'transfers', I: 'invoices', Y: 'receipts', O: 'stockOut', D: 'deliveries' };
 const LINK_ICON = { E: '💵', R: '💰', T: '⇄', I: '🧾', Y: '🚢', O: '−', D: '🚚', W: '👷' };
 let askLinks = []; // [kind, id] ticked in the Ask form that is open
+// what needs fixing (owner, 9 Nov 2026: payments logged a day late kept that day's date). The one asked fixes each linked transaction
+// from the question; each moves from to fix → sent for approval → fixed, worked out from the change requests, edits, files and
+// deletions made after the question was asked — nothing more is stored than the kind of fix.
+const FIXES = {
+  date: ['Wrong date', 'e.g. These were paid yesterday, 8 Nov — please change their dates.'],
+  amount: ['Wrong amount', 'e.g. The receipt says $95, not $120.'],
+  project: ['Wrong project or place', 'e.g. These were for the Gudele site.'],
+  payee: ['Wrong person paid or reason', 'e.g. This was paid to Juma, for transport.'],
+  receipt: ['Receipt or photo missing', 'e.g. Please attach the receipt for each.'],
+  twice: ['Entered twice — please delete', 'e.g. These are the same as payments the day before.'],
+  check: ['Please check and correct', 'e.g. Something is not right with these — please check them.'],
+};
+// one linked transaction's state for a fix: todo · sent (a change waits for an admin) · done · refused (the change was refused) ·
+// gone (not on this phone, so this phone cannot tell)
+function linkState(q, a) {
+  const r = (S[KIND_KEY[a.k]] || []).find(x => x.id === a.id), since = String(q.createdAt || '');
+  if (!r) return 'gone';
+  if (q.fix === 'twice' && r.deleted) return 'done';
+  if (q.fix === 'receipt' && S.files.some(f => f.for === a.id && !f.deleted && String(f.createdAt || '') >= since)) return 'done';
+  const last = (S.changes || []).filter(c => c.target === a.id && String(c.createdAt || '') >= since).sort((x, y) => String(x.createdAt).localeCompare(String(y.createdAt))).pop();
+  if (last && last.status === 'waiting') return 'sent';
+  if (q.fix !== 'receipt' && ((last && last.status === 'approved') || String(r.editedAt || '') >= since)) return 'done'; // approved, or an admin changed it
+  return last && last.status === 'rejected' ? 'refused' : 'todo';
+}
+const fixStates = t => (t.q.fix ? aboutsOf(t.q).map(a => linkState(t.q, a)) : []);
+const fixLeft = t => fixStates(t).filter(s => s === 'todo' || s === 'refused').length;
+const allFixed = t => !!t.q.fix && fixStates(t).length > 0 && fixStates(t).every(s => s === 'done');
 function threads() {
   const all = live(S.questions || []);
   return all.filter(q => q.re === undefined).map(q => {
@@ -27,6 +54,8 @@ const isMine = t => t.q.to === myUid() || t.q.uid === myUid() || (t.q.to === 'ad
 function waitsOnMe(t) {
   if (t.done) return false;
   const uid = myUid();
+  // a fix: the one asked has a turn while transactions are left to fix — fixing them is the answer — or when written to again
+  if (t.q.fix && t.q.to === uid) return fixLeft(t) > 0 || (t.msgs.length > 1 && t.last.uid !== uid);
   if (t.q.to === 'admins') return can('edit') && t.last.uid === t.q.uid && t.q.uid !== uid;
   return (t.q.to === uid && t.last.uid !== uid) || (t.q.uid === uid && t.last.uid === t.q.to);
 }
@@ -46,7 +75,7 @@ function askInto(k, r) {
     <button class="btn ghost" data-act="ask" data-kind="${esc(k)}" data-id="${esc(r.id)}" style="margin-top:12px">❓ ${can('edit') ? 'Ask about this' : 'Ask the admins about this'}</button>`);
 }
 const threadRow = t => `<button class="row" data-act="thread" data-id="${esc(t.q.id)}"><span class="dot">${t.done ? '✓' : waitsOnMe(t) ? '❓' : '💬'}</span>
-  <span class="main"><span class="t"><span class="tt">${esc(t.q.text.slice(0, 70))}${t.q.text.length > 70 ? '…' : ''}</span>${t.done ? '<i class="tag">Sorted</i>' : waitsOnMe(t) ? '<i class="tag warn">Your turn</i>' : ''}</span>
+  <span class="main"><span class="t"><span class="tt">${esc(t.q.text.slice(0, 70))}${t.q.text.length > 70 ? '…' : ''}</span>${t.done ? '<i class="tag">Sorted</i>' : waitsOnMe(t) ? '<i class="tag warn">Your turn</i>' : ''}${t.q.fix && !t.done ? `<i class="tag">${fixStates(t).filter(s => s === 'done').length} of ${aboutsOf(t.q).length} fixed</i>` : ''}</span>
   <span class="s">${esc([t.q.uid === myUid() ? `To ${toName(t)}` : `From ${t.q.by || 'someone'}`, aboutText(t.q), `${plural(t.msgs.length, 'message')}`, fmtAbs(t.last.createdAt)].filter(Boolean).join(' · '))}</span></span></button>`;
 async function askForm(k, id) {
   if (!canAsk()) return alert(`Questions reach people once the Google Sheet script is updated to version ${QUESTIONS_SCRIPT} (Sheet tab → Show me how).`);
@@ -57,6 +86,7 @@ async function askForm(k, id) {
   openSheet(`${head(admin ? 'Ask a question' : 'Ask the admins', '', 'A question or a problem')}
     <form data-form="ask">
       ${admin ? `<label class="fld"><span>To</span><select name="to" required><option value="">Choose who…</option>${people.map(p => `<option value="${esc(p.id)}" ${p.id === pick ? 'selected' : ''}>${esc(p.name)}${p.id === pick ? ' (entered this)' : ''}</option>`).join('')}<option value="admins">The admins</option></select></label>` : '<p class="muted">Every admin sees it and can answer.</p>'}
+      ${admin ? `<label class="fld"><span>What needs fixing?</span><select name="fix"><option value="">Nothing — just a question</option>${Object.entries(FIXES).map(([v, [n]]) => `<option value="${v}">${esc(n)}</option>`).join('')}</select></label>` : ''}
       <label class="fld"><span>Your question</span><textarea name="text" rows="4" maxlength="2000" required placeholder="${r ? 'e.g. Which site was this for? Please attach the receipt.' : 'e.g. The cement store roof is leaking.'}"></textarea></label>
       <div class="fld"><span>About <em>(optional — tick the transactions you mean)</em></span>
         <div id="askChosen">${askChosen()}</div>
@@ -65,7 +95,8 @@ async function askForm(k, id) {
       <p class="err"></p>
       <button class="btn primary">Send</button>
     </form>`);
-  const find = $('#askFind');
+  const find = $('#askFind'), fixSel = $('#sheet [name=fix]');
+  if (fixSel) fixSel.addEventListener('change', () => { $('#sheet [name=text]').placeholder = FIXES[fixSel.value] ? FIXES[fixSel.value][1] : 'e.g. Which site was this for? Please attach the receipt.'; });
   find.addEventListener('input', () => { $('#askHits').innerHTML = askHits(find.value); });
   find.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); }); // a search, not sending the question
   comeBack(() => askForm(k, id));
@@ -87,7 +118,7 @@ function askHits(q) {
 }
 function askChosen() {
   const recs = askLinks.map(l => [l[0], linkRec(l)]).filter(([, r]) => r);
-  return recs.length ? `<div class="chips">${recs.map(([k, r]) => `<button type="button" class="chip-x" data-act="askLink" data-kind="${esc(k)}" data-id="${esc(r.id)}" aria-label="Remove ${esc(linkLabel(k, r))}">${LINK_ICON[k] || '📎'} ${esc(linkLabel(k, r))} <b>×</b></button>`).join('')}</div>` : '<p class="muted" style="margin:0 0 6px">Nothing linked.</p>';
+  return recs.length ? `<div class="link-chips">${recs.map(([k, r]) => `<button type="button" class="chip-x" data-act="askLink" data-kind="${esc(k)}" data-id="${esc(r.id)}" aria-label="Remove ${esc(linkLabel(k, r))}">${LINK_ICON[k] || '📎'} ${esc(linkLabel(k, r))} <b>×</b></button>`).join('')}</div>` : '<p class="muted" style="margin:0 0 6px">Nothing linked.</p>';
 }
 // tick or untick one; the first one ticked chooses who is asked when nobody is chosen yet (who entered it)
 function askLink(k, id) {
@@ -112,8 +143,11 @@ function saveAsk(f) {
   const to = can('edit') ? v.to : 'admins', about = askLinks.map(l => [l[0], linkRec(l)]).filter(([, r]) => r).map(([k, r]) => ({ k, id: r.id, what: aboutLine(k, r) }));
   if (!to) return formErr(f, 'to', 'Choose who to ask.');
   if (!text) return formErr(f, 'text', 'Type the question.');
+  const fix = FIXES[v.fix] ? v.fix : '';
+  if (fix && !about.length) return formErr(f, null, 'Tick the transactions to fix.');
+  if (fix && (S.link.v || 2) < MULTI_LINK_SCRIPT) return formErr(f, null, `Asking for a fix needs the Google Sheet script version ${MULTI_LINK_SCRIPT} (Sheet tab → Show me how). A plain question works now.`);
   if (about.length > 1 && (S.link.v || 2) < MULTI_LINK_SCRIPT) return formErr(f, null, `To link more than one transaction, first update the Google Sheet script to version ${MULTI_LINK_SCRIPT} (Sheet tab → Show me how). One is fine now.`);
-  const qid = newMsg({ to, text, ...(about.length ? { about: about.length === 1 ? about[0] : about } : {}) });
+  const qid = newMsg({ to, text, ...(about.length ? { about: about.length === 1 ? about[0] : about } : {}), ...(fix ? { fix } : {}) });
   askLinks = [];
   toast('Sent ✓ They see it in their 🔔'); threadSheet(qid); paintBell();
 }
@@ -125,7 +159,7 @@ function threadSheet(id) {
   const linkHtml = a => { const there = (S[KIND_KEY[a.k]] || []).some(x => x.id === a.id && !x.deleted && !x.stub), act = ['E', 'R', 'T'].includes(a.k) ? `data-act="open" data-kind="${esc(a.k)}"` : `data-act="${OPEN_ACT[a.k] || 'open'}"`;
     return there ? `<button class="row" ${act} data-id="${esc(a.id)}"><span class="dot">${LINK_ICON[a.k] || '📎'}</span><span class="main"><span class="t"><span class="tt">${esc(a.what)}</span></span></span></button>` : `<div class="row"><span class="dot">${LINK_ICON[a.k] || '📎'}</span><span class="main"><span class="t"><span class="tt">${esc(a.what)}</span></span></span></div>`; };
   openSheet(`${head(t.q.uid === uid ? `To ${toName(t)}` : `From ${t.q.by || 'someone'}`, '', t.done ? 'Sorted ✓' : waitsOnMe(t) ? 'Waiting for your answer' : 'Waiting for an answer')}
-    ${links.length ? `<h3 class="subh" style="margin-top:0">About (${links.length})</h3><div class="card list" style="margin-bottom:14px">${links.map(linkHtml).join('')}</div>` : ''}
+    ${t.q.fix ? fixBlock(t, linkHtml) : links.length ? `<h3 class="subh" style="margin-top:0">About (${links.length})</h3><div class="card list" style="margin-bottom:14px">${links.map(linkHtml).join('')}</div>` : ''}
     <div class="msgs">${t.msgs.map(m => `<div class="msg ${m.uid === uid ? 'me' : ''}"><p>${esc(m.text)}</p><small>${esc([m.uid === uid ? 'You' : m.by, fmtAbs(m.createdAt), m.state === 'done' ? 'marked sorted' : m.state === 'open' ? 'opened again' : ''].filter(Boolean).join(' · '))}</small></div>`).join('')}</div>
     <form data-form="reply" data-id="${esc(t.q.id)}">
       <label class="fld"><span>${t.done ? 'Write to open it again' : 'Your answer'}</span><textarea name="text" rows="3" maxlength="2000" required></textarea></label>
@@ -133,6 +167,19 @@ function threadSheet(id) {
       <div class="two"><button class="btn primary">Send</button>${t.done ? '' : `<button type="button" class="btn in" data-act="qDone" data-id="${esc(t.q.id)}">✓ Sorted</button>`}</div>
     </form>`);
   comeBack(() => threadSheet(id));
+}
+// a fix: what is wrong, then the transactions to fix (each with what fixes it), those sent for approval, and those fixed
+function fixBlock(t, linkHtml) {
+  const links = aboutsOf(t.q), st = fixStates(t), done = st.filter(s => s === 'done').length;
+  const act = a => {
+    if (!['E', 'R', 'T'].includes(a.k)) return `<button class="btn small ghost" data-act="${OPEN_ACT[a.k] || 'open'}" data-id="${esc(a.id)}">Open it to change</button>`;
+    if (t.q.fix === 'receipt') return attachButton(a.id, '📎 Attach the receipt');
+    if (t.q.fix === 'twice') return can('delete') ? `<button class="btn small danger" data-act="del" data-kind="${esc(a.k)}" data-id="${esc(a.id)}">🗑 Delete</button>` : canChange() ? `<button class="btn small" data-act="askDelete" data-kind="${esc(a.k)}" data-id="${esc(a.id)}">🗑 Ask to delete</button>` : '<small class="muted">Only an admin can delete it — say so in your answer.</small>';
+    return canChange() ? `<button class="btn small" data-act="edit" data-kind="${esc(a.k)}" data-id="${esc(a.id)}">✏️ Fix it</button>` : '<small class="muted">Only an admin can change it — say so in your answer.</small>';
+  };
+  const group = (title, pick, withAct) => { const l = links.filter((a, i) => pick(st[i])); return l.length ? `<h3 class="subh">${title} (${l.length})</h3><div class="card list fixlist">${l.map(a => `<div class="fixrow">${linkHtml(a)}${withAct ? `<div class="fixact">${st[links.indexOf(a)] === 'refused' ? '<i class="tag bad">Change refused — fix it again</i>' : ''}${act(a)}</div>` : ''}</div>`).join('')}</div>` : ''; };
+  return `<p class="note" style="margin-top:0">🛠 <b>${esc(FIXES[t.q.fix][0])}</b> — ${done} of ${links.length} fixed.${allFixed(t) && !t.done ? ' All fixed ✓ — tap <b>✓ Sorted</b> below.' : ''}</p>
+    ${group('To fix', s => s === 'todo' || s === 'refused', true)}${group('Sent for approval', s => s === 'sent', false)}${group('Fixed ✓', s => s === 'done', false)}${group('Not on this phone', s => s === 'gone', false)}`;
 }
 function saveReply(f) {
   const t = threadOf(f.dataset.id), text = String(new FormData(f).get('text') || '').trim();
