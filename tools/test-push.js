@@ -85,6 +85,12 @@ fresh();
 sync(store, [rec('Q', id('store1'), { to: 'admins', text: 'The store roof leaks' })]);
 assert.deepStrictEqual([to('tok-owner-2222222222222222').map(d => d.body), to('tok-mary-11111111111111111')], [['Store One asked you a question'], []], 'staff asking the admins: the admins only');
 
+fresh();
+const dayCount = gas.props.PUSH_COUNT; // this check leaves the day's counts as they were
+sync(owner, [rec('Q', id('owner'), { to: id('mary'), text: 'These three?', about: [{ k: 'E', id: pay.id, what: 'a' }, { k: 'E', id: 'E-T-9998', what: 'b' }, { k: 'I', id: 'I-T-9999', what: 'c' }] })]);
+assert.deepStrictEqual(to('tok-mary-11111111111111111').map(d => d.body), ['Owner asked you a question about 3 entries'], 'several transactions: how many, not what');
+gas.props.PUSH_COUNT = dayCount;
+
 /* ---------- never at night; at most 6 a day ---------- */
 fresh();
 gas.clock.hour = 22;

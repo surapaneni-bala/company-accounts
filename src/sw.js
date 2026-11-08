@@ -19,7 +19,7 @@ self.addEventListener('push', e => {
   let m = {};
   try { m = e.data ? e.data.json() : {}; } catch (err) { m = {}; }
   const d = m.data || m.notification || {};
-  e.waitUntil(self.registration.showNotification(d.title || 'Brookfield', { body: d.body || 'Something needs you — open Brookfield.', tag: d.tag || 'brookfield', renotify: true, icon: 'icon-192.png', data: { url: d.url || './?bell=1' } }));
+  e.waitUntil(self.registration.showNotification(d.title || 'Brookfield', { body: d.body || 'Something needs you — open Brookfield.', tag: d.tag || 'brookfield', renotify: true, vibrate: [200, 100, 200], icon: 'icon-192.png', data: { url: d.url || './?bell=1' } }));
 });
 self.addEventListener('notificationclick', e => {
   e.notification.close();

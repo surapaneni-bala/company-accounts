@@ -131,11 +131,10 @@ const SHAPES = {
   J: d => str_(d.to) && d.to.length > 0 && DATE_RE.test(d.out) && (!d.back || DATE_RE.test(d.back)) && Array.isArray(d.who) && d.who.length <= 20 && d.who.every(str_) && strs_(d, ['country', 'purpose', 'note'])
     && (d.budget === undefined || (num_(d.budget) && d.budget >= 0)),
   // a question or an alert (owner, 3 Nov 2026): to whom (a login's id, or 'admins') and what about (an entry: its kind, id and a
-  // line saying what it is, as the one asked may not see that entry) — or re = the question a reply answers. state: done = sorted,
-  // open = opened again; the newest message that says decides
+  // line saying what it is, as the one asked may not see that entry; or up to 20 of them, owner 9 Nov 2026) — or re = the question
+  // a reply answers. state: done = sorted, open = opened again; the newest message that says decides
   Q: d => str_(d.text) && d.text.trim().length > 0 && d.text.length <= 2000 && (d.state === undefined || d.state === 'open' || d.state === 'done')
-    && (d.re === undefined ? (d.to === 'admins' || SAFE_ID.test(String(d.to))) && (d.about === undefined || (isObj_(d.about) && KINDS.indexOf(d.about.k) >= 0
-      && SAFE_ID.test(String(d.about.id)) && strs_(d.about, ['what']) && String(d.about.what || '').length <= 200))
+    && (d.re === undefined ? (d.to === 'admins' || SAFE_ID.test(String(d.to))) && (d.about === undefined || aboutOk_(d.about) || (Array.isArray(d.about) && d.about.length > 0 && d.about.length <= 20 && d.about.every(aboutOk_)))
       : SAFE_ID.test(String(d.re)) && d.to === undefined && d.about === undefined),
 };
 const strs_ = (d, ks) => ks.every(k => d[k] === undefined || str_(d[k]));
@@ -159,6 +158,8 @@ const money_ = d => typeof d.amount === 'number' && isFinite(d.amount) && AT_RE.
 // limits for logins other than admins (the app never sends more than MAX_PUSH records at once)
 const MAX_PUSH = 200;
 const MAX_RECORD = 5000; // characters
+const aboutOk_ = a => isObj_(a) && KINDS.indexOf(a.k) >= 0 && SAFE_ID.test(String(a.id)) && strs_(a, ['what']) && String(a.what || '').length <= 200; // an entry a question is about
+const aboutsOf_ = d => (Array.isArray(d.about) ? d.about : d.about ? [d.about] : []);
 const MAX_BIG_RECORD = 40000; // a stock count, an invoice or a delivery note may list many items (review, 2 Nov 2026)
 const LOCK_WAIT_MS = 25000;
 const VERSION = 26; // shown when the web app link is opened in a browser
@@ -512,7 +513,7 @@ function merge_(rows, push, since, user, uploads, codeOnly, roles) {
   (Array.isArray(push) ? push : []).forEach((p, n) => {
     if (!p || typeof p.id !== 'string' || !p.id || KINDS.indexOf(p.k) < 0 || typeof p.u !== 'number' || !isObj_(p.d)) return;
     if (!SAFE_ID.test(p.id) || (p.k !== 'S' && (p.k === 'L' ? p.d.lid : p.d.id) !== p.id) || !SHAPES[p.k](p.d)) { refused.push(p.id); return; }
-    if (limited && (n >= MAX_PUSH || JSON.stringify(p.d).length > (['I', 'O', 'D'].indexOf(p.k) >= 0 ? MAX_BIG_RECORD : MAX_RECORD))) { refused.push(p.id); return; }
+    if (limited && (n >= MAX_PUSH || JSON.stringify(p.d).length > (['I', 'O', 'D', 'Q'].indexOf(p.k) >= 0 ? MAX_BIG_RECORD : MAX_RECORD))) { refused.push(p.id); return; }
     const i = index[p.id];
     if (i !== undefined && out[i][1] !== p.k) { refused.push(p.id); return; } // a record never changes kind
     // A phone can't stamp its copy in the future and so block later edits; a copy stored with a future stamp (a phone clock
@@ -694,7 +695,7 @@ function pushFor_(before, result, user, roles) {
     if (d.deleted) return;
     const by = (user && user.id === d.uid ? user.name : d.by) || 'Someone'; // the login that sent it (an admin's record carries no stamp)
     if (k === 'Q' && !old) {
-      if (d.re === undefined) add(d.to === 'admins' ? admins : [d.to], 'A question for you', by + ' asked you a question' + (d.about && KIND_WORD_[d.about.k] ? ' about ' + KIND_WORD_[d.about.k] : ''), 'q');
+      if (d.re === undefined) add(d.to === 'admins' ? admins : [d.to], 'A question for you', by + ' asked you a question' + (aboutsOf_(d).length > 1 ? ' about ' + aboutsOf_(d).length + ' entries' : aboutsOf_(d).length && KIND_WORD_[aboutsOf_(d)[0].k] ? ' about ' + KIND_WORD_[aboutsOf_(d)[0].k] : ''), 'q');
       else {
         const root = result.rows.filter(r => r[0] === d.re).map(r => JSON.parse(r[4]))[0];
         if (!root) return;
@@ -1697,7 +1698,7 @@ function alertLines_(recs, t) {
     const thread = [q].concat(Q.filter(r => r.re === q.id)).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))), last = thread[thread.length - 1];
     const said = thread.filter(m => m.state).pop();
     if (said && said.state === 'done') return; // sorted
-    const what = '"' + String(q.text).slice(0, 80) + (q.text.length > 80 ? '…' : '') + '"' + (q.about && q.about.what ? ' (about ' + q.about.what + ')' : '');
+    const what = '"' + String(q.text).slice(0, 80) + (q.text.length > 80 ? '…' : '') + '"' + (aboutsOf_(q).length ? ' (about ' + aboutsOf_(q)[0].what + (aboutsOf_(q).length > 1 ? ' and ' + (aboutsOf_(q).length - 1) + ' more' : '') + ')' : '');
     if (q.to === 'admins' && last.uid === q.uid) lines.push('QUESTION from ' + (q.by || names[q.uid] || '?') + ', ' + String(q.createdAt).slice(0, 10) + ': ' + what);
     else if (q.to !== 'admins' && last.uid !== q.to && daysBetween_(String(last.createdAt).slice(0, 10), t) >= 1) lines.push('NO ANSWER YET from ' + (names[q.to] || 'them') + ', asked ' + String(q.createdAt).slice(0, 10) + ': ' + what);
   });

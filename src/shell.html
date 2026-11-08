@@ -512,6 +512,8 @@ button.wh-stat { cursor: pointer; } .wh-stat b { font-size: 22px; font-variant-n
 .nrow .nic { flex: none; width: 22px; text-align: center; } .nrow.new .nmain { font-weight: 700; } .nrow.info .nmain { color: var(--muted); }
 .nrow .nnot { flex: none; margin-right: 10px; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
 .nrow .nmain:hover, .nrow .nmain:focus-visible { background: var(--field); } .nrow .nnot:hover, .nrow .nnot:focus-visible { background: var(--line); color: var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; } .chip-x { display: inline-flex; gap: 6px; align-items: center; max-width: 100%; padding: 6px 10px; border: 0; border-radius: 99px; background: var(--in-soft); color: var(--ink); font: inherit; font-size: 14px; text-align: left; cursor: pointer; overflow-wrap: anywhere; } .chip-x b { color: var(--muted); }
+.row.link-pick.on { background: var(--in-soft); } .row.link-pick.on .dot { color: var(--in); font-weight: 800; } /* a transaction ticked for the question */
 .msgs { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 16px; } .msg { max-width: 86%; padding: 10px 12px; border-radius: 14px 14px 14px 4px; background: var(--paper); }
 .msg.me { align-self: flex-end; border-radius: 14px 14px 4px 14px; background: var(--in-soft); } .msg p { margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; } .msg small { color: var(--muted); font-size: 12px; }
 .amt .conv, .list .row > .amt .conv { display: block; margin-left: 0; font-weight: 600; text-align: inherit; } /* what an SSP payment comes to in dollars: under its amount */

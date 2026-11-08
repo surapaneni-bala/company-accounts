@@ -62,4 +62,15 @@ assert.ok(!/nails|leaking/.test(body), 'answered ones are not');
 sync(owner, [q('Q-OW1-0005', id('owner'), { re: 'Q-OW1-0004', text: 'Never mind, done', state: 'done' })]);
 assert.ok(!/Count the rebars/.test(mail()), 'a question marked sorted is not chased');
 
+/* ---------- several transactions on one question (owner, 9 Nov 2026) ---------- */
+const link = (n, k = 'E') => ({ k, id: `${k}-OW1-${String(n).padStart(4, '0')}`, what: `Payment ${n} of $10 to Hardware, 1 Nov 2026` });
+assert.deepStrictEqual(sync(owner, [q('Q-OW1-0020', id('owner'), { to: id('mary'), text: 'Which site were these three for?', about: [link(1), link(2), link(3, 'I')] })]).refused, [], 'a question about three transactions');
+assert.deepStrictEqual(sync(mary).pull.find(p => p.id === 'Q-OW1-0020').d.about.map(a => a.id), ['E-OW1-0001', 'E-OW1-0002', 'I-OW1-0003'], 'Mary receives all three');
+assert.deepStrictEqual(sync(owner, [q('Q-OW1-0021', id('owner'), { to: id('mary'), text: 'Too many', about: Array.from({ length: 21 }, (_, i) => link(i + 1)) })]).refused, ['Q-OW1-0021'], 'at most 20');
+assert.deepStrictEqual(sync(owner, [q('Q-OW1-0022', id('owner'), { to: id('mary'), text: 'A bad one', about: [link(1), { k: 'Z', id: 'x' }] })]).refused, ['Q-OW1-0022'], 'each one must be a real kind and id');
+assert.deepStrictEqual(sync(owner, [q('Q-OW1-0023', id('owner'), { to: id('mary'), text: 'Empty', about: [] })]).refused, ['Q-OW1-0023'], 'not an empty list');
+assert.deepStrictEqual(sync(store, [q('Q-ST1-0020', id('store1'), { to: 'admins', text: 'x'.repeat(1900), about: Array.from({ length: 20 }, (_, i) => link(i + 1)) })]).refused, [], 'staff may link 20 to a long question (the bigger size allowance)');
+body = mail();
+assert.ok(/QUESTION from Store One, .*\(about Payment 1 of \$10 to Hardware, 1 Nov 2026 and 19 more\)/.test(body), 'the morning email names the first and how many more');
+
 console.log('Questions: all checks passed');

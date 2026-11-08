@@ -51,7 +51,7 @@ const ACTIONS = {
   signOut: () => signOut(),
   approvals: () => approvalsSheet(),
   bell: () => bellSheet(), pushSheet: () => pushSheet(), pushTest: () => pushTest(), notifyOn: () => notifyOn(), notifyLater: () => notifyLater(), snooze: b => snooze(b.dataset.key), unsnooze: () => unsnooze(), review: () => reviewSheet(), reviewDone: () => reviewDone(),
-  ask: b => askForm(b.dataset.kind, b.dataset.id), askNew: () => askForm('', ''), thread: b => threadSheet(b.dataset.id), qDone: b => qDone(b.dataset.id), messages: () => messagesSheet(),
+  ask: b => askForm(b.dataset.kind, b.dataset.id), askLink: b => askLink(b.dataset.kind, b.dataset.id), askNew: () => askForm('', ''), thread: b => threadSheet(b.dataset.id), qDone: b => qDone(b.dataset.id), messages: () => messagesSheet(),
   moveApp: () => moveApp(),
   decide: b => decide(b.dataset.id, !!b.dataset.ok),
   askDelete: b => askDelete(b.dataset.kind, b.dataset.id),
