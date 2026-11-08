@@ -51,11 +51,11 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 // what a Google Sheet script from before cash/bank moves can store
 const OLD_SERVER_KINDS = ['E', 'R', 'P', 'L', 'S'];
 const OUTDATED_MSG = 'The Google Sheet script needs updating before some new records (employees, files, days not worked …) can reach the sheet. Everything else is syncing; those are kept safe on this device.';
-const NEWEST_SCRIPT = 26; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
+const NEWEST_SCRIPT = 27; // apps-script/Code.gs VERSION: admins are told when their sheet runs an older one
 // What an older script still keeps on the phones: the version that first stores it. From NEEDED_SCRIPT on, everything goes
 // up and a newer script only improves things — said quietly, never as a warning (owner, 23 Oct 2026: the message showed
 // "needed" while everything worked).
-const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [24, 'questions reach your staff and theirs reach you'], [25, 'notifications reach phones'], [26, 'notification checks say what is wrong']];
+const OPTIONAL_GAINS = [[21, 'it is safer when two phones change the same entry'], [24, 'questions reach your staff and theirs reach you'], [25, 'notifications reach phones'], [26, 'notification checks say what is wrong'], [27, 'notifications at any hour']];
 const NEEDED_SCRIPT = 23, SCRIPT_GAINS = [[16, 'regular payments, bank details, documents and invoices'], [19, 'the buying list, suppliers and trips'], [20, 'SSP changes and photos on detail lines'], [22, 'what you let an office manager see'], [23, 'the warehouse — stock, goods received, goods out and delivery notes']];
 // what a record is, in a few words: messages about changes the sheet did not take say which ones
 function recordLabel(id) {

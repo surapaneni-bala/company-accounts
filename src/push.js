@@ -65,7 +65,7 @@ async function pushSheet() {
     </form>`);
   if (p && (S.link.v || 2) >= 26) pushStatusInto();
 }
-// what the sheet knows: this login's registered phones, how many in all, and whether it is quiet time (owner, 9 Nov 2026)
+// what the sheet knows: this login's registered phones, and how many in all (owner, 9 Nov 2026)
 async function pushStatusInto() {
   let st;
   try { st = await callServer(S.link, { op: 'pushStatus' }); } catch (e) { return; } // offline: the screen works without it
@@ -73,7 +73,7 @@ async function pushStatusInto() {
   if (!st || !st.ok || !box) return;
   const mine = st.mine || [];
   box.insertAdjacentHTML('beforebegin', `<p class="note" style="margin-top:12px">${mine.length ? `📲 Your registered ${mine.length === 1 ? 'phone' : 'phones'}: ${esc(mine.map(m => `${m.device || 'phone'} (since ${fmtDate(new Date(m.since).toISOString().slice(0, 10))})`).join(', '))}.` : '📲 <b>None of your phones is registered yet.</b> On your phone: open the app, tap 🔔, then <b>Turn on notifications</b>.'}
-    ${st.all !== undefined ? ` Phones registered in the company: <b>${st.all}</b>.` : ''}${st.quiet ? ` It is quiet time now (9 pm – 7 am, ${esc(st.zone)}): notifications wait for the morning, a test still comes.` : ''}</p>`);
+    ${st.all !== undefined ? ` Phones registered in the company: <b>${st.all}</b>.` : ''}</p>`);
 }
 async function savePushSetup(f) {
   const web = Object.fromEntries([...f.elements.cfg.value.matchAll(/(\w+)\s*:\s*["']([^"']+)["']/g)].map(m => [m[1], m[2]]));

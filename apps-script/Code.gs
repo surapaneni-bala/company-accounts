@@ -165,7 +165,7 @@ const FIX_KINDS_ = ['date', 'amount', 'project', 'payee', 'receipt', 'twice', 'c
 const FIX_TEXT_ = { date: 'wrong date', amount: 'wrong amount', project: 'wrong project or place', payee: 'wrong person paid or reason', receipt: 'receipt missing', twice: 'entered twice', check: 'please check' };
 const MAX_BIG_RECORD = 40000; // a stock count, an invoice or a delivery note may list many items (review, 2 Nov 2026)
 const LOCK_WAIT_MS = 25000;
-const VERSION = 26; // shown when the web app link is opened in a browser
+const VERSION = 27; // shown when the web app link is opened in a browser
 const FMT = {
   USD: '"$"#,##0.00;[Red]-"$"#,##0.00',
   SSP: '"SSP "#,##0.00;[Red]-"SSP "#,##0.00',
@@ -580,11 +580,11 @@ function merge_(rows, push, since, user, uploads, codeOnly, roles) {
 // → Phone notifications); they are kept in this script's properties, never in the app's public code. Phones that allow
 // notifications register (tab _push). Only what needs someone is sent, and only to them: a question or an answer; changes and
 // prices waiting for approval (admins); a decision on what they asked; a delivery received short or goods written off by staff
-// (admins); and at 7 one line for admins saying how many things the morning email lists. Never 9 pm – 7 am (the 🔔 and the
-// morning email have it), at most 6 a day a person, one kind replacing the last on the phone (tag); the lock screen says what
-// kind of thing, never amounts or names. Run allowPush once in the editor so the script may reach Google's notification service.
+// (admins); and at 7 one line for admins saying how many things the morning email lists. At any hour, day or night (owner, 9 Nov
+// 2026: "they should run anytime 24/7"), at most 6 a day a person, one kind replacing the last on the phone (tag); the lock
+// screen says what kind of thing, never amounts or names. Run allowPush once in the editor so the script may reach Google's notification service.
 const PUSH_TAB = '_push', PUSH_COLS = ['token', 'uid', 'device', 'createdAt', 'seen'];
-const PUSH_QUIET = [21, 7], PUSH_DAY_MAX = 6, PUSH_PER_USER = 10;
+const PUSH_DAY_MAX = 6, PUSH_PER_USER = 10;
 const PUSH_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 const KIND_WORD_ = { E: 'a payment', R: 'money received', I: 'an invoice', Y: 'goods received', O: 'goods out', D: 'a delivery note', W: 'an employee' };
 function allowPush() { // run once from the editor: Google asks the owner to allow "connect to an external service"
@@ -641,23 +641,20 @@ function pushTest_(me) {
   if (!r.sent) return { ok: false, error: 'Google did not deliver it: ' + (r.failed[0] || 'no reason given') };
   return { ok: true, sent: r.sent, phones: r.phones };
 }
-// for the set-up screen: is it on, which of my phones are registered, how many in all (admins), and is it quiet time now
+// for the set-up screen: is it on, which of my phones are registered, and how many in all (admins)
 function pushStatus_(me) {
   const rows = rowsOf_(PUSH_TAB, PUSH_COLS);
   return { ok: true, set: !!pushPublic_(), mine: rows.filter(r => String(r.uid) === me.id).map(r => ({ device: String(r.device), since: Number(r.createdAt) })),
-    all: me.role === 'admin' ? rows.length : undefined, quiet: quietNow_(), zone: SpreadsheetApp.getActive().getSpreadsheetTimeZone() };
+    all: me.role === 'admin' ? rows.length : undefined };
 }
-// quiet hours by the company's clock (the sheet's time zone, Africa/Juba), not the script's, which may be another country's
-const quietNow_ = () => { const h = Number(Utilities.formatDate(new Date(), SpreadsheetApp.getActive().getSpreadsheetTimeZone(), 'H')); return h >= PUSH_QUIET[0] || h < PUSH_QUIET[1]; };
 // why Google refused one: its own words when it gives them
 const googleWhy_ = x => { try { return JSON.parse(x.getContentText()).error.message || 'Google answered ' + x.getResponseCode(); } catch (err) { return 'Google answered ' + x.getResponseCode(); } };
-// one notification to each person (by login id), within the rules; force (a test) skips the hours and the daily limit.
+// one notification to each person (by login id), within the daily limit; force (a test) skips it.
 // Says how it went: sent, phones = the registered phones it tried, failed = Google's reasons
 function push_(uids, n, force) {
   const props = PropertiesService.getScriptProperties();
   const none = { sent: 0, phones: 0, failed: [] };
   if (!props.getProperty('PUSH_KEY') || !uids.length) return none;
-  if (!force && quietNow_()) return none;
   let count = {};
   try { count = JSON.parse(props.getProperty('PUSH_COUNT') || '{}'); } catch (err) { /* a new day */ }
   if (count.day !== today_()) count = { day: today_() };

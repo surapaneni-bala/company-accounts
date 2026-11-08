@@ -1,5 +1,5 @@
 // Phone notifications in the real apps-script/Code.gs on fake Google services: the admin's set-up is checked with Google, phones
-// register, only the person who must act hears about a thing, never at night, at most 6 a day, never amounts on the lock
+// register, only the person who must act hears about a thing, at any hour, at most 6 a day, never amounts on the lock
 // screen, and phones that left are forgotten. Usage: node tools/test-push.js
 'use strict';
 const assert = require('assert');
@@ -94,15 +94,17 @@ sync(owner, [rec('Q', id('owner'), { to: id('mary'), text: 'Change the dates', f
 assert.deepStrictEqual(to('tok-mary-11111111111111111').map(d => [d.title, d.body]), [['Please fix', 'Owner asked you to fix 2 entries (wrong date)']], 'a fix says what kind, never amounts');
 gas.props.PUSH_COUNT = dayCount;
 
-/* ---------- never at night; at most 6 a day ---------- */
+/* ---------- at any hour (owner, 9 Nov 2026: "24/7"); at most 6 a day ---------- */
+const keepCount = gas.props.PUSH_COUNT; // the night checks leave the day's counts as they were
 fresh();
 gas.clock.hour = 22;
 sync(owner, [rec('Q', id('owner'), { to: id('mary'), text: 'Late question' })]);
-assert.deepStrictEqual(sends(), [], 'nothing between 9 pm and 7 am');
-gas.clock.hour = 6;
-sync(owner, [rec('Q', id('owner'), { to: id('mary'), text: 'Early question' })]);
-assert.deepStrictEqual(sends(), [], 'nor before 7');
+assert.strictEqual(sends().length, 1, 'sent at 10 pm');
+gas.clock.hour = 3;
+sync(owner, [rec('Q', id('owner'), { to: id('mary'), text: 'Night question' })]);
+assert.strictEqual(sends().length, 2, 'and at 3 am');
 gas.clock.hour = 10;
+gas.props.PUSH_COUNT = keepCount;
 fresh();
 for (let i = 0; i < 8; i += 1) sync(owner, [rec('Q', id('owner'), { to: id('mary'), text: `Question ${i}` })]);
 assert.strictEqual(to('tok-mary-11111111111111111').length, 4, 'Mary had 2 today already: 4 more, then no more (6 a day)');
@@ -117,12 +119,9 @@ assert.deepStrictEqual(post({ op: 'pushTest', token: mary }), { ok: false, error
 assert.ok(tab().some(x => x[0] === 'tok-mary-11111111111111111'), 'and her phone is kept: it was Google, not the phone');
 gas.fetchReply.fn = usual2;
 let st = post({ op: 'pushStatus', token: mary });
-assert.deepStrictEqual([st.set, st.mine.map(m => m.device), st.all, st.zone], [true, ['Android'], undefined, 'Africa/Juba'], 'the status: on, her phones, not the company count (admins only), Juba time');
+assert.deepStrictEqual([st.set, st.mine.map(m => m.device), st.all], [true, ['Android'], undefined], 'the status: on, her phones, not the company count (admins only)');
 st = post({ op: 'pushStatus', token: owner });
-assert.deepStrictEqual([st.mine.length, st.all, st.quiet], [1, 2, false], 'an admin sees how many phones the company has; 10 am is not quiet');
-gas.clock.hour = 23;
-assert.strictEqual(post({ op: 'pushStatus', token: owner }).quiet, true, '11 pm by the sheet\'s clock is quiet');
-gas.clock.hour = 10;
+assert.deepStrictEqual([st.mine.length, st.all], [1, 2], 'an admin sees how many phones the company has');
 assert.strictEqual(post({ op: 'pushStatus', fcm: 'x' }).ok, false, 'only someone signed in asks');
 post({ op: 'pushToken', token: owner, fcm: 'gone-owner-333333333333333', device: 'Old phone' });
 fresh();
